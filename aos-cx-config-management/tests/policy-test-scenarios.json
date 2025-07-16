@@ -1,0 +1,532 @@
+{
+  "test_scenarios": {
+    "basic_acl_operations": {
+      "description": "Test basic ACL CRUD operations",
+      "test_cases": [
+        {
+          "name": "create_security_acl",
+          "description": "Create a basic security ACL using template",
+          "input": {
+            "operation": "create_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "TEST_SECURITY",
+            "acl_type": "ipv4",
+            "template": "security_basic"
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "ACL created with template rules",
+            "Proper DSCP and protocol settings",
+            "Success notification sent"
+          ]
+        },
+        {
+          "name": "list_acls",
+          "description": "List all configured ACLs",
+          "input": {
+            "operation": "list_acls",
+            "switch_ip": "192.168.1.100"
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "Returns JSON list of ACLs",
+            "Includes TEST_SECURITY ACL",
+            "Success notification sent"
+          ]
+        },
+        {
+          "name": "update_acl",
+          "description": "Update existing ACL with new rules",
+          "input": {
+            "operation": "update_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "TEST_SECURITY",
+            "acl_type": "ipv4",
+            "rules": [
+              {
+                "sequence": 5,
+                "action": "permit",
+                "protocol": "tcp",
+                "source": "192.168.10.0/24",
+                "destination": "any",
+                "dst_port": "22",
+                "comment": "Allow SSH from admin subnet"
+              },
+              {
+                "sequence": 10,
+                "action": "deny",
+                "protocol": "tcp",
+                "source": "any",
+                "destination": "any",
+                "dst_port": "22",
+                "comment": "Block SSH from others"
+              }
+            ]
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "ACL updated with new rules",
+            "Rule sequence properly ordered",
+            "Success notification sent"
+          ]
+        },
+        {
+          "name": "delete_acl",
+          "description": "Delete the test ACL",
+          "input": {
+            "operation": "delete_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "TEST_SECURITY"
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "ACL successfully deleted",
+            "No interface references remain",
+            "Success notification sent"
+          ]
+        }
+      ]
+    },
+    "interface_acl_application": {
+      "description": "Test ACL application to interfaces",
+      "test_cases": [
+        {
+          "name": "create_guest_acl",
+          "description": "Create guest network ACL",
+          "input": {
+            "operation": "create_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "GUEST_NETWORK",
+            "acl_type": "ipv4",
+            "template": "guest_network"
+          },
+          "expected_outcome": "success"
+        },
+        {
+          "name": "apply_acl_inbound",
+          "description": "Apply ACL to interface inbound",
+          "input": {
+            "operation": "apply_to_interface",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "GUEST_NETWORK",
+            "acl_type": "ipv4",
+            "interface_name": "1/1/10",
+            "direction": "in"
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "ACL applied to interface 1/1/10",
+            "Direction set to inbound",
+            "Interface configuration updated",
+            "Success notification sent"
+          ]
+        },
+        {
+          "name": "apply_acl_outbound",
+          "description": "Apply ACL to interface outbound",
+          "input": {
+            "operation": "apply_to_interface",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "GUEST_NETWORK",
+            "acl_type": "ipv4",
+            "interface_name": "1/1/11",
+            "direction": "out"
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "ACL applied to interface 1/1/11",
+            "Direction set to outbound",
+            "Interface configuration updated",
+            "Success notification sent"
+          ]
+        }
+      ]
+    },
+    "qos_policy_management": {
+      "description": "Test QoS policy creation and management",
+      "test_cases": [
+        {
+          "name": "get_current_qos",
+          "description": "Get current QoS configuration",
+          "input": {
+            "operation": "get_qos",
+            "switch_ip": "192.168.1.100"
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "QoS configuration retrieved",
+            "JSON structure returned",
+            "Success notification sent"
+          ]
+        },
+        {
+          "name": "create_voice_qos",
+          "description": "Create voice priority QoS policy",
+          "input": {
+            "operation": "create_qos_policy",
+            "switch_ip": "192.168.1.100",
+            "qos_policy_name": "VOICE_PRIORITY",
+            "template": "qos_voice_priority"
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "QoS policy created with voice priority",
+            "Three traffic classes configured",
+            "Bandwidth allocation set properly",
+            "Success notification sent"
+          ]
+        },
+        {
+          "name": "create_custom_qos",
+          "description": "Create custom QoS policy",
+          "input": {
+            "operation": "create_qos_policy",
+            "switch_ip": "192.168.1.100",
+            "qos_policy_name": "CUSTOM_QOS",
+            "qos_rules": {
+              "classes": [
+                {
+                  "name": "critical",
+                  "dscp": 46,
+                  "priority": 7,
+                  "bandwidth_percent": 25
+                },
+                {
+                  "name": "important",
+                  "dscp": 34,
+                  "priority": 5,
+                  "bandwidth_percent": 35
+                },
+                {
+                  "name": "normal",
+                  "dscp": 0,
+                  "priority": 1,
+                  "bandwidth_percent": 40
+                }
+              ],
+              "policies": [
+                {
+                  "class": "critical",
+                  "action": "set_dscp",
+                  "value": 46
+                },
+                {
+                  "class": "important",
+                  "action": "set_dscp",
+                  "value": 34
+                }
+              ]
+            }
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "Custom QoS policy created",
+            "Three traffic classes configured",
+            "DSCP marking policies applied",
+            "Success notification sent"
+          ]
+        }
+      ]
+    },
+    "advanced_policy_scenarios": {
+      "description": "Test advanced policy scenarios",
+      "test_cases": [
+        {
+          "name": "create_iot_security",
+          "description": "Create IoT device security policy",
+          "input": {
+            "operation": "create_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "IOT_SECURITY",
+            "acl_type": "ipv4",
+            "template": "iot_security"
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "IoT security ACL created",
+            "Restrictive rules applied",
+            "Only essential protocols allowed",
+            "Success notification sent"
+          ]
+        },
+        {
+          "name": "create_ipv6_acl",
+          "description": "Create IPv6 ACL",
+          "input": {
+            "operation": "create_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "IPV6_SECURITY",
+            "acl_type": "ipv6",
+            "rules": [
+              {
+                "sequence": 10,
+                "action": "permit",
+                "protocol": "tcp",
+                "source": "2001:db8::/32",
+                "destination": "any",
+                "dst_port": "80",
+                "comment": "Allow HTTP from company network"
+              },
+              {
+                "sequence": 20,
+                "action": "deny",
+                "protocol": "any",
+                "source": "any",
+                "destination": "any",
+                "comment": "Default deny"
+              }
+            ]
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "IPv6 ACL created successfully",
+            "IPv6 addresses properly formatted",
+            "Rules applied in sequence",
+            "Success notification sent"
+          ]
+        },
+        {
+          "name": "create_mac_acl",
+          "description": "Create MAC-based ACL",
+          "input": {
+            "operation": "create_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "MAC_FILTER",
+            "acl_type": "mac",
+            "rules": [
+              {
+                "sequence": 10,
+                "action": "permit",
+                "source": "00:11:22:33:44:55",
+                "destination": "any",
+                "comment": "Allow specific device"
+              },
+              {
+                "sequence": 20,
+                "action": "deny",
+                "source": "any",
+                "destination": "any",
+                "comment": "Deny all others"
+              }
+            ]
+          },
+          "expected_outcome": "success",
+          "validation_points": [
+            "MAC ACL created successfully",
+            "MAC addresses properly formatted",
+            "Layer 2 filtering configured",
+            "Success notification sent"
+          ]
+        }
+      ]
+    },
+    "error_handling_scenarios": {
+      "description": "Test error handling and validation",
+      "test_cases": [
+        {
+          "name": "invalid_operation",
+          "description": "Test invalid operation parameter",
+          "input": {
+            "operation": "invalid_operation",
+            "switch_ip": "192.168.1.100"
+          },
+          "expected_outcome": "validation_error",
+          "validation_points": [
+            "Validation error caught",
+            "Error message describes invalid operation",
+            "Validation error notification sent"
+          ]
+        },
+        {
+          "name": "missing_required_params",
+          "description": "Test missing required parameters",
+          "input": {
+            "operation": "create_acl"
+          },
+          "expected_outcome": "validation_error",
+          "validation_points": [
+            "Validation error for missing switch_ip",
+            "Clear error message provided",
+            "Validation error notification sent"
+          ]
+        },
+        {
+          "name": "invalid_ip_format",
+          "description": "Test invalid IP address format",
+          "input": {
+            "operation": "list_acls",
+            "switch_ip": "192.168.1.999"
+          },
+          "expected_outcome": "validation_error",
+          "validation_points": [
+            "IP format validation error",
+            "Clear error message provided",
+            "Validation error notification sent"
+          ]
+        },
+        {
+          "name": "invalid_acl_name",
+          "description": "Test invalid ACL name format",
+          "input": {
+            "operation": "create_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "invalid@name#with$symbols",
+            "acl_type": "ipv4"
+          },
+          "expected_outcome": "validation_error",
+          "validation_points": [
+            "ACL name validation error",
+            "Character restriction error message",
+            "Validation error notification sent"
+          ]
+        },
+        {
+          "name": "acl_name_too_long",
+          "description": "Test ACL name length validation",
+          "input": {
+            "operation": "create_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "this_is_a_very_long_acl_name_that_exceeds_the_maximum_allowed_length_of_64_characters",
+            "acl_type": "ipv4"
+          },
+          "expected_outcome": "validation_error",
+          "validation_points": [
+            "ACL name length validation error",
+            "Length restriction error message",
+            "Validation error notification sent"
+          ]
+        },
+        {
+          "name": "invalid_rule_action",
+          "description": "Test invalid rule action",
+          "input": {
+            "operation": "create_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "TEST_ACL",
+            "acl_type": "ipv4",
+            "rules": [
+              {
+                "sequence": 10,
+                "action": "invalid_action",
+                "protocol": "tcp",
+                "source": "any",
+                "destination": "any"
+              }
+            ]
+          },
+          "expected_outcome": "validation_error",
+          "validation_points": [
+            "Rule action validation error",
+            "Valid actions listed in error",
+            "Validation error notification sent"
+          ]
+        }
+      ]
+    },
+    "rollback_scenarios": {
+      "description": "Test rollback functionality",
+      "test_cases": [
+        {
+          "name": "create_acl_conflict",
+          "description": "Test ACL creation conflict and rollback",
+          "setup": "Create ACL named 'CONFLICT_TEST' first",
+          "input": {
+            "operation": "create_acl",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "CONFLICT_TEST",
+            "acl_type": "ipv4",
+            "rules": [
+              {
+                "sequence": 10,
+                "action": "permit",
+                "protocol": "any",
+                "source": "any",
+                "destination": "any"
+              }
+            ]
+          },
+          "expected_outcome": "error_with_rollback",
+          "validation_points": [
+            "Conflict error detected",
+            "Rollback procedures identified",
+            "Error notification with rollback steps"
+          ]
+        },
+        {
+          "name": "interface_assignment_failure",
+          "description": "Test interface assignment failure and rollback",
+          "input": {
+            "operation": "apply_to_interface",
+            "switch_ip": "192.168.1.100",
+            "acl_name": "NONEXISTENT_ACL",
+            "acl_type": "ipv4",
+            "interface_name": "1/1/1",
+            "direction": "in"
+          },
+          "expected_outcome": "error_with_rollback",
+          "validation_points": [
+            "ACL not found error",
+            "Interface rollback procedures identified",
+            "Error notification with troubleshooting steps"
+          ]
+        }
+      ]
+    }
+  },
+  "quick_test_examples": {
+    "webhook_test": {
+      "description": "Quick webhook test using curl",
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"list_acls\", \"switch_ip\": \"192.168.1.100\"}'",
+      "expected_response": "Success response with ACL list"
+    },
+    "manual_trigger_test": {
+      "description": "Manual trigger test in n8n interface",
+      "steps": [
+        "Open n8n workflow",
+        "Click Manual Policy Trigger",
+        "Enter test data in webhook body",
+        "Execute workflow",
+        "Check execution results"
+      ]
+    }
+  },
+  "performance_tests": {
+    "bulk_acl_creation": {
+      "description": "Test creating multiple ACLs",
+      "test_count": 10,
+      "concurrent_requests": 5,
+      "expected_completion_time": "< 2 minutes"
+    },
+    "large_rule_set": {
+      "description": "Test ACL with many rules",
+      "rule_count": 100,
+      "expected_creation_time": "< 30 seconds"
+    }
+  },
+  "integration_tests": {
+    "slack_notifications": {
+      "description": "Test Slack notification integration",
+      "validation_points": [
+        "Success notifications sent to #network-automation",
+        "Error notifications sent to #network-alerts",
+        "Proper message formatting and content"
+      ]
+    },
+    "email_notifications": {
+      "description": "Test email notification integration",
+      "validation_points": [
+        "Success emails sent to network team",
+        "Error emails with troubleshooting steps",
+        "Proper subject line formatting"
+      ]
+    },
+    "credential_management": {
+      "description": "Test AOS-CX credential handling",
+      "validation_points": [
+        "Credentials properly loaded from n8n store",
+        "Authentication successful",
+        "No credential exposure in logs"
+      ]
+    }
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "environment": {
+    "description": "Target environment for Central Platform configuration",
+    "default": "production",
+    "options": ["development", "staging", "production"]
+  },
+  "central_platform": {
+    "base_url": {
+      "description": "Aruba Central API base URL",
+      "default": "https://apigw-uswest4.central.arubanetworks.com",
+      "regions": {
+        "US West": "https://apigw-uswest4.central.arubanetworks.com",
+        "US East": "https://apigw-useast1.central.arubanetworks.com",
+        "Europe": "https://apigw-eu-central1.central.arubanetworks.com",
+        "Asia Pacific": "https://apigw-apnortheast1.central.arubanetworks.com"
+      }
+    },
+    "api_version": {
+      "description": "API version to use",
+      "default": "v2"
+    },
+    "timeout": {
+      "description": "API request timeout in milliseconds",
+      "default": 30000,
+      "min": 5000,
+      "max": 120000
+    },
+    "retry_attempts": {
+      "description": "Number of retry attempts for failed requests",
+      "default": 3,
+      "min": 1,
+      "max": 5
+    },
+    "rate_limit": {
+      "description": "Rate limit per minute",
+      "default": 100,
+      "note": "Adjust based on your API plan"
+    }
+  },
+  "template_management": {
+    "batch_size": {
+      "description": "Number of templates to process in a batch",
+      "default": 10,
+      "min": 1,
+      "max": 50
+    },
+    "validation_timeout": {
+      "description": "Template validation timeout in seconds",
+      "default": 30,
+      "min": 10,
+      "max": 300
+    },
+    "backup_retention": {
+      "description": "Number of days to retain template backups",
+      "default": 30,
+      "min": 7,
+      "max": 90
+    }
+  },
+  "device_groups": {
+    "max_devices_per_group": {
+      "description": "Maximum devices per group",
+      "default": 1000,
+      "min": 1,
+      "max": 10000
+    },
+    "group_sync_interval": {
+      "description": "Group synchronization interval in minutes",
+      "default": 15,
+      "min": 5,
+      "max": 1440
+    }
+  },
+  "cloud_services": {
+    "service_discovery_timeout": {
+      "description": "Service discovery timeout in seconds",
+      "default": 60,
+      "min": 30,
+      "max": 300
+    },
+    "health_check_interval": {
+      "description": "Health check interval in minutes",
+      "default": 5,
+      "min": 1,
+      "max": 60
+    }
+  },
+  "policies": {
+    "policy_validation": {
+      "description": "Enable policy validation before deployment",
+      "default": true
+    },
+    "rollback_enabled": {
+      "description": "Enable automatic rollback on policy failure",
+      "default": true
+    },
+    "policy_backup": {
+      "description": "Create backup before policy changes",
+      "default": true
+    }
+  },
+  "notification_settings": {
+    "slack": {
+      "enabled": true,
+      "channel": "#central-platform-automation",
+      "username": "Central Platform Bot",
+      "icon_emoji": ":gear:"
+    },
+    "email": {
+      "enabled": true,
+      "recipients": ["network-team@company.com"],
+      "subject_prefix": "[Central Platform]"
+    },
+    "severity_levels": {
+      "critical": ["slack", "email"],
+      "warning": ["slack"],
+      "info": ["slack"]
+    }
+  },
+  "security": {
+    "credential_rotation_days": {
+      "description": "Days between credential rotation",
+      "default": 90,
+      "min": 30,
+      "max": 365
+    },
+    "audit_logging": {
+      "description": "Enable audit logging for all operations",
+      "default": true
+    },
+    "encryption_at_rest": {
+      "description": "Enable encryption for stored configurations",
+      "default": true
+    }
+  },
+  "performance": {
+    "concurrent_operations": {
+      "description": "Maximum concurrent operations",
+      "default": 5,
+      "min": 1,
+      "max": 20
+    },
+    "operation_timeout": {
+      "description": "Individual operation timeout in seconds",
+      "default": 300,
+      "min": 60,
+      "max": 1800
+    },
+    "cache_duration": {
+      "description": "Cache duration in minutes",
+      "default": 10,
+      "min": 1,
+      "max": 60
+    }
+  }
+}

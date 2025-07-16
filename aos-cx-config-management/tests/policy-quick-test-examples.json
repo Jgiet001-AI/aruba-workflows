@@ -1,0 +1,310 @@
+{
+  "quick_test_examples": {
+    "1_list_acls": {
+      "description": "List all configured ACLs (safest test)",
+      "webhook_payload": {
+        "operation": "list_acls",
+        "switch_ip": "192.168.1.100"
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"list_acls\", \"switch_ip\": \"192.168.1.100\"}'"
+    },
+    "2_get_qos": {
+      "description": "Get current QoS configuration (read-only)",
+      "webhook_payload": {
+        "operation": "get_qos",
+        "switch_ip": "192.168.1.100"
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"get_qos\", \"switch_ip\": \"192.168.1.100\"}'"
+    },
+    "3_create_test_acl": {
+      "description": "Create a simple test ACL",
+      "webhook_payload": {
+        "operation": "create_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "WORKFLOW_TEST",
+        "acl_type": "ipv4",
+        "rules": [
+          {
+            "sequence": 10,
+            "action": "permit",
+            "protocol": "tcp",
+            "source": "any",
+            "destination": "any",
+            "dst_port": "80",
+            "comment": "Allow HTTP"
+          },
+          {
+            "sequence": 20,
+            "action": "deny",
+            "protocol": "any",
+            "source": "any",
+            "destination": "any",
+            "comment": "Deny all others"
+          }
+        ]
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"create_acl\", \"switch_ip\": \"192.168.1.100\", \"acl_name\": \"WORKFLOW_TEST\", \"acl_type\": \"ipv4\", \"rules\": [{\"sequence\": 10, \"action\": \"permit\", \"protocol\": \"tcp\", \"source\": \"any\", \"destination\": \"any\", \"dst_port\": \"80\", \"comment\": \"Allow HTTP\"}, {\"sequence\": 20, \"action\": \"deny\", \"protocol\": \"any\", \"source\": \"any\", \"destination\": \"any\", \"comment\": \"Deny all others\"}]}'"
+    },
+    "4_create_security_template": {
+      "description": "Create ACL using security template",
+      "webhook_payload": {
+        "operation": "create_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "SECURITY_TEMPLATE_TEST",
+        "acl_type": "ipv4",
+        "template": "security_basic"
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"create_acl\", \"switch_ip\": \"192.168.1.100\", \"acl_name\": \"SECURITY_TEMPLATE_TEST\", \"acl_type\": \"ipv4\", \"template\": \"security_basic\"}'"
+    },
+    "5_create_guest_template": {
+      "description": "Create guest network ACL using template",
+      "webhook_payload": {
+        "operation": "create_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "GUEST_TEMPLATE_TEST",
+        "acl_type": "ipv4",
+        "template": "guest_network"
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"create_acl\", \"switch_ip\": \"192.168.1.100\", \"acl_name\": \"GUEST_TEMPLATE_TEST\", \"acl_type\": \"ipv4\", \"template\": \"guest_network\"}'"
+    },
+    "6_create_iot_template": {
+      "description": "Create IoT security ACL using template",
+      "webhook_payload": {
+        "operation": "create_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "IOT_TEMPLATE_TEST",
+        "acl_type": "ipv4",
+        "template": "iot_security"
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"create_acl\", \"switch_ip\": \"192.168.1.100\", \"acl_name\": \"IOT_TEMPLATE_TEST\", \"acl_type\": \"ipv4\", \"template\": \"iot_security\"}'"
+    },
+    "7_apply_acl_to_interface": {
+      "description": "Apply ACL to interface (requires existing ACL)",
+      "prerequisite": "Run test 3 or 4 first to create an ACL",
+      "webhook_payload": {
+        "operation": "apply_to_interface",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "WORKFLOW_TEST",
+        "acl_type": "ipv4",
+        "interface_name": "1/1/10",
+        "direction": "in"
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"apply_to_interface\", \"switch_ip\": \"192.168.1.100\", \"acl_name\": \"WORKFLOW_TEST\", \"acl_type\": \"ipv4\", \"interface_name\": \"1/1/10\", \"direction\": \"in\"}'"
+    },
+    "8_create_qos_template": {
+      "description": "Create QoS policy using voice priority template",
+      "webhook_payload": {
+        "operation": "create_qos_policy",
+        "switch_ip": "192.168.1.100",
+        "qos_policy_name": "VOICE_PRIORITY_TEST",
+        "template": "qos_voice_priority"
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"create_qos_policy\", \"switch_ip\": \"192.168.1.100\", \"qos_policy_name\": \"VOICE_PRIORITY_TEST\", \"template\": \"qos_voice_priority\"}'"
+    },
+    "9_update_acl": {
+      "description": "Update existing ACL (requires existing ACL)",
+      "prerequisite": "Run test 3 first to create WORKFLOW_TEST ACL",
+      "webhook_payload": {
+        "operation": "update_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "WORKFLOW_TEST",
+        "acl_type": "ipv4",
+        "rules": [
+          {
+            "sequence": 5,
+            "action": "permit",
+            "protocol": "tcp",
+            "source": "192.168.10.0/24",
+            "destination": "any",
+            "dst_port": "22",
+            "comment": "Allow SSH from admin subnet"
+          },
+          {
+            "sequence": 10,
+            "action": "permit",
+            "protocol": "tcp",
+            "source": "any",
+            "destination": "any",
+            "dst_port": "80",
+            "comment": "Allow HTTP"
+          },
+          {
+            "sequence": 15,
+            "action": "permit",
+            "protocol": "tcp",
+            "source": "any",
+            "destination": "any",
+            "dst_port": "443",
+            "comment": "Allow HTTPS"
+          },
+          {
+            "sequence": 20,
+            "action": "deny",
+            "protocol": "any",
+            "source": "any",
+            "destination": "any",
+            "comment": "Deny all others"
+          }
+        ]
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"update_acl\", \"switch_ip\": \"192.168.1.100\", \"acl_name\": \"WORKFLOW_TEST\", \"acl_type\": \"ipv4\", \"rules\": [{\"sequence\": 5, \"action\": \"permit\", \"protocol\": \"tcp\", \"source\": \"192.168.10.0/24\", \"destination\": \"any\", \"dst_port\": \"22\", \"comment\": \"Allow SSH from admin subnet\"}, {\"sequence\": 10, \"action\": \"permit\", \"protocol\": \"tcp\", \"source\": \"any\", \"destination\": \"any\", \"dst_port\": \"80\", \"comment\": \"Allow HTTP\"}, {\"sequence\": 15, \"action\": \"permit\", \"protocol\": \"tcp\", \"source\": \"any\", \"destination\": \"any\", \"dst_port\": \"443\", \"comment\": \"Allow HTTPS\"}, {\"sequence\": 20, \"action\": \"deny\", \"protocol\": \"any\", \"source\": \"any\", \"destination\": \"any\", \"comment\": \"Deny all others\"}]}'"
+    },
+    "10_delete_test_acl": {
+      "description": "Delete test ACL (cleanup)",
+      "prerequisite": "Should be run after other tests to clean up",
+      "webhook_payload": {
+        "operation": "delete_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "WORKFLOW_TEST"
+      },
+      "curl_command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-policy -H 'Content-Type: application/json' -d '{\"operation\": \"delete_acl\", \"switch_ip\": \"192.168.1.100\", \"acl_name\": \"WORKFLOW_TEST\"}'"
+    }
+  },
+  "validation_tests": {
+    "invalid_operation": {
+      "description": "Test validation error handling",
+      "webhook_payload": {
+        "operation": "invalid_operation",
+        "switch_ip": "192.168.1.100"
+      },
+      "expected_result": "Validation error with clear error message"
+    },
+    "missing_switch_ip": {
+      "description": "Test missing required parameter",
+      "webhook_payload": {
+        "operation": "list_acls"
+      },
+      "expected_result": "Validation error for missing switch_ip"
+    },
+    "invalid_ip_format": {
+      "description": "Test invalid IP address format",
+      "webhook_payload": {
+        "operation": "list_acls",
+        "switch_ip": "192.168.1.999"
+      },
+      "expected_result": "Validation error for invalid IP format"
+    },
+    "invalid_acl_name": {
+      "description": "Test invalid ACL name with special characters",
+      "webhook_payload": {
+        "operation": "create_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "invalid@name#",
+        "acl_type": "ipv4"
+      },
+      "expected_result": "Validation error for invalid ACL name format"
+    },
+    "invalid_rule_action": {
+      "description": "Test invalid rule action",
+      "webhook_payload": {
+        "operation": "create_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "INVALID_RULE_TEST",
+        "acl_type": "ipv4",
+        "rules": [
+          {
+            "sequence": 10,
+            "action": "invalid_action",
+            "protocol": "tcp",
+            "source": "any",
+            "destination": "any"
+          }
+        ]
+      },
+      "expected_result": "Validation error for invalid rule action"
+    }
+  },
+  "template_showcase": {
+    "security_basic_demo": {
+      "description": "Showcase basic security template features",
+      "webhook_payload": {
+        "operation": "create_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "SECURITY_DEMO",
+        "acl_type": "ipv4",
+        "template": "security_basic"
+      },
+      "features_demonstrated": [
+        "SSH blocking from external sources",
+        "Telnet blocking",
+        "RPC service blocking",
+        "HTTP/HTTPS allowance",
+        "Default deny policy"
+      ]
+    },
+    "guest_network_demo": {
+      "description": "Showcase guest network isolation",
+      "webhook_payload": {
+        "operation": "create_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "GUEST_DEMO",
+        "acl_type": "ipv4",
+        "template": "guest_network"
+      },
+      "features_demonstrated": [
+        "DNS resolution allowed",
+        "Internet access permitted",
+        "Private network blocking",
+        "Internal resource isolation"
+      ]
+    },
+    "iot_security_demo": {
+      "description": "Showcase IoT device restrictions",
+      "webhook_payload": {
+        "operation": "create_acl",
+        "switch_ip": "192.168.1.100",
+        "acl_name": "IOT_DEMO",
+        "acl_type": "ipv4",
+        "template": "iot_security"
+      },
+      "features_demonstrated": [
+        "HTTPS for device updates",
+        "NTP for time synchronization",
+        "DNS resolution",
+        "SSH/Telnet blocking",
+        "Minimal connectivity principle"
+      ]
+    },
+    "qos_voice_demo": {
+      "description": "Showcase voice priority QoS",
+      "webhook_payload": {
+        "operation": "create_qos_policy",
+        "switch_ip": "192.168.1.100",
+        "qos_policy_name": "QOS_DEMO",
+        "template": "qos_voice_priority"
+      },
+      "features_demonstrated": [
+        "Voice traffic prioritization (DSCP 46)",
+        "Video traffic handling (DSCP 34)",
+        "Data traffic management (DSCP 0)",
+        "Bandwidth allocation (30%/40%/30%)",
+        "Priority queuing"
+      ]
+    }
+  },
+  "testing_guidelines": {
+    "recommended_order": [
+      "1. Start with read-only operations (list_acls, get_qos)",
+      "2. Test validation errors to ensure error handling works",
+      "3. Create simple test ACLs",
+      "4. Test template functionality",
+      "5. Test interface application",
+      "6. Test QoS policies",
+      "7. Clean up test resources"
+    ],
+    "safety_notes": [
+      "Always test on non-production switches first",
+      "Verify switch IP address before testing",
+      "Keep a backup of existing configurations",
+      "Test rollback procedures",
+      "Monitor switch performance during testing"
+    ],
+    "troubleshooting_steps": [
+      "Check n8n workflow execution logs",
+      "Verify switch API connectivity",
+      "Confirm credentials are properly configured",
+      "Review switch logs for additional details",
+      "Test API endpoints manually if needed"
+    ]
+  }
+}

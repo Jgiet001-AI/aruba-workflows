@@ -1,0 +1,394 @@
+{
+  "name": "Central Platform Cloud Services Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "central-cloud-services",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Cloud Services Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "webhookId": "cloud-services-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Central Platform Cloud Services Management\n// Parse and validate incoming request\n\nconst operation = items[0].json.operation;\nconst serviceData = items[0].json.service_data || {};\nconst options = items[0].json.options || {};\n\n// Validate required fields\nif (!operation) {\n  throw new Error('Operation is required');\n}\n\n// Supported operations\nconst supportedOps = [\n  'configure_service',\n  'update_service',\n  'delete_service',\n  'list_services',\n  'service_status',\n  'service_health',\n  'service_logs',\n  'service_metrics',\n  'service_backup',\n  'service_restore',\n  'service_scaling',\n  'service_discovery'\n];\n\nif (!supportedOps.includes(operation)) {\n  throw new Error(`Unsupported operation: ${operation}. Supported: ${supportedOps.join(', ')}`);\n}\n\n// Operation-specific validation\nif (['configure_service', 'update_service'].includes(operation)) {\n  if (!serviceData.service_type) {\n    throw new Error('Service type is required');\n  }\n  if (!serviceData.service_name) {\n    throw new Error('Service name is required');\n  }\n}\n\nif (operation === 'update_service' && !serviceData.service_id) {\n  throw new Error('Service ID is required for update operations');\n}\n\n// Add timestamp and execution ID\nconst executionData = {\n  operation,\n  service_data: serviceData,\n  options,\n  timestamp: new Date().toISOString(),\n  execution_id: `cloud-service-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`\n};\n\nconsole.log(`Cloud Services Management: ${operation} - ${executionData.execution_id}`);\n\nreturn [{ json: executionData }];"
+      },
+      "name": "Parse Service Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "value2": "configure_service"
+            }
+          ]
+        }
+      },
+      "name": "Check Configure Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Configure Cloud Service Operation\nconst data = items[0].json;\nconst serviceData = data.service_data;\n\n// Service configuration payload\nconst configPayload = {\n  service_name: serviceData.service_name,\n  service_type: serviceData.service_type,\n  description: serviceData.description || `Cloud service configured via automation - ${data.timestamp}`,\n  configuration: serviceData.configuration || {},\n  settings: serviceData.settings || {},\n  metadata: {\n    created_by: 'Central Platform Automation',\n    created_at: data.timestamp,\n    execution_id: data.execution_id,\n    source: 'n8n-workflow'\n  }\n};\n\n// Service type-specific configuration\nswitch (serviceData.service_type) {\n  case 'identity_service':\n    configPayload.auth_settings = {\n      auth_method: serviceData.auth_method || 'radius',\n      radius_servers: serviceData.radius_servers || [],\n      ldap_settings: serviceData.ldap_settings || {},\n      certificate_authority: serviceData.certificate_authority || ''\n    };\n    configPayload.user_roles = serviceData.user_roles || [];\n    break;\n  case 'location_service':\n    configPayload.location_settings = {\n      positioning_mode: serviceData.positioning_mode || 'hybrid',\n      accuracy_level: serviceData.accuracy_level || 'high',\n      retention_period: serviceData.retention_period || 30,\n      analytics_enabled: serviceData.analytics_enabled !== false\n    };\n    break;\n  case 'analytics_service':\n    configPayload.analytics_settings = {\n      data_collection: serviceData.data_collection || 'enabled',\n      reporting_frequency: serviceData.reporting_frequency || 'daily',\n      custom_metrics: serviceData.custom_metrics || [],\n      data_retention: serviceData.data_retention || 90\n    };\n    break;\n  case 'backup_service':\n    configPayload.backup_settings = {\n      backup_schedule: serviceData.backup_schedule || 'daily',\n      retention_policy: serviceData.retention_policy || 30,\n      encryption_enabled: serviceData.encryption_enabled !== false,\n      storage_location: serviceData.storage_location || 'cloud'\n    };\n    break;\n  case 'monitoring_service':\n    configPayload.monitoring_settings = {\n      metrics_collection: serviceData.metrics_collection || 'enabled',\n      alert_thresholds: serviceData.alert_thresholds || {},\n      notification_channels: serviceData.notification_channels || [],\n      dashboard_config: serviceData.dashboard_config || {}\n    };\n    break;\n  case 'security_service':\n    configPayload.security_settings = {\n      threat_detection: serviceData.threat_detection || 'enabled',\n      intrusion_prevention: serviceData.intrusion_prevention || 'enabled',\n      security_policies: serviceData.security_policies || [],\n      incident_response: serviceData.incident_response || {}\n    };\n    break;\n}\n\n// Add service dependencies\nif (serviceData.dependencies) {\n  configPayload.dependencies = serviceData.dependencies;\n}\n\n// Add scaling configuration\nif (serviceData.scaling) {\n  configPayload.scaling = {\n    auto_scaling: serviceData.scaling.auto_scaling || false,\n    min_instances: serviceData.scaling.min_instances || 1,\n    max_instances: serviceData.scaling.max_instances || 10,\n    cpu_threshold: serviceData.scaling.cpu_threshold || 80,\n    memory_threshold: serviceData.scaling.memory_threshold || 85\n  };\n}\n\n// Add networking configuration\nif (serviceData.networking) {\n  configPayload.networking = {\n    vpc_config: serviceData.networking.vpc_config || {},\n    security_groups: serviceData.networking.security_groups || [],\n    load_balancer: serviceData.networking.load_balancer || false\n  };\n}\n\n// Return API request data\nreturn [{ \n  json: {\n    ...data,\n    api_payload: configPayload,\n    api_endpoint: '/api/v2/cloud-services',\n    api_method: 'POST'\n  }\n}];"
+      },
+      "name": "Configure Service",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "value2": "update_service"
+            }
+          ]
+        }
+      },
+      "name": "Check Update Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Update Cloud Service Operation\nconst data = items[0].json;\nconst serviceData = data.service_data;\n\n// Update payload\nconst updatePayload = {\n  service_name: serviceData.service_name,\n  description: serviceData.description,\n  configuration: serviceData.configuration,\n  settings: serviceData.settings,\n  metadata: {\n    updated_by: 'Central Platform Automation',\n    updated_at: data.timestamp,\n    execution_id: data.execution_id,\n    previous_version: serviceData.current_version\n  }\n};\n\n// Service type-specific updates\nif (serviceData.service_type === 'identity_service' && serviceData.auth_settings) {\n  updatePayload.auth_settings = serviceData.auth_settings;\n}\nif (serviceData.service_type === 'location_service' && serviceData.location_settings) {\n  updatePayload.location_settings = serviceData.location_settings;\n}\nif (serviceData.service_type === 'analytics_service' && serviceData.analytics_settings) {\n  updatePayload.analytics_settings = serviceData.analytics_settings;\n}\nif (serviceData.service_type === 'backup_service' && serviceData.backup_settings) {\n  updatePayload.backup_settings = serviceData.backup_settings;\n}\nif (serviceData.service_type === 'monitoring_service' && serviceData.monitoring_settings) {\n  updatePayload.monitoring_settings = serviceData.monitoring_settings;\n}\nif (serviceData.service_type === 'security_service' && serviceData.security_settings) {\n  updatePayload.security_settings = serviceData.security_settings;\n}\n\n// Update scaling configuration\nif (serviceData.scaling) {\n  updatePayload.scaling = serviceData.scaling;\n}\n\n// Update networking configuration\nif (serviceData.networking) {\n  updatePayload.networking = serviceData.networking;\n}\n\n// Remove undefined fields\nObject.keys(updatePayload).forEach(key => {\n  if (updatePayload[key] === undefined) {\n    delete updatePayload[key];\n  }\n});\n\nreturn [{ \n  json: {\n    ...data,\n    api_payload: updatePayload,\n    api_endpoint: `/api/v2/cloud-services/${serviceData.service_id}`,\n    api_method: 'PUT',\n    service_id: serviceData.service_id\n  }\n}];"
+      },
+      "name": "Update Service",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "value2": "service_status"
+            }
+          ]
+        }
+      },
+      "name": "Check Status Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [800, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Service Status Operation\nconst data = items[0].json;\nconst serviceData = data.service_data;\n\n// Status check payload\nconst statusPayload = {\n  service_id: serviceData.service_id,\n  include_health: data.options.include_health !== false,\n  include_metrics: data.options.include_metrics !== false,\n  include_logs: data.options.include_logs || false,\n  metrics_duration: data.options.metrics_duration || '1h'\n};\n\n// Build query string\nconst queryParams = Object.keys(statusPayload)\n  .filter(key => statusPayload[key] !== undefined)\n  .map(key => `${key}=${encodeURIComponent(statusPayload[key])}`)\n  .join('&');\n\nreturn [{ \n  json: {\n    ...data,\n    api_payload: null,\n    api_endpoint: `/api/v2/cloud-services/${serviceData.service_id}/status?${queryParams}`,\n    api_method: 'GET',\n    service_id: serviceData.service_id\n  }\n}];"
+      },
+      "name": "Get Service Status",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "value2": "service_scaling"
+            }
+          ]
+        }
+      },
+      "name": "Check Scaling Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [800, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Service Scaling Operation\nconst data = items[0].json;\nconst serviceData = data.service_data;\n\n// Scaling configuration\nconst scalingPayload = {\n  service_id: serviceData.service_id,\n  scaling_action: serviceData.scaling_action || 'auto', // auto, scale_up, scale_down, set_capacity\n  target_capacity: serviceData.target_capacity,\n  scaling_settings: {\n    auto_scaling: serviceData.auto_scaling !== false,\n    min_instances: serviceData.min_instances || 1,\n    max_instances: serviceData.max_instances || 10,\n    cpu_threshold: serviceData.cpu_threshold || 80,\n    memory_threshold: serviceData.memory_threshold || 85,\n    scale_up_cooldown: serviceData.scale_up_cooldown || 300,\n    scale_down_cooldown: serviceData.scale_down_cooldown || 300\n  },\n  notifications: {\n    notify_on_scale: data.options.notify_on_scale !== false,\n    notification_channels: data.options.notification_channels || ['slack']\n  }\n};\n\n// Validate scaling action\nconst validActions = ['auto', 'scale_up', 'scale_down', 'set_capacity'];\nif (!validActions.includes(scalingPayload.scaling_action)) {\n  throw new Error(`Invalid scaling action: ${scalingPayload.scaling_action}`);\n}\n\n// Validate target capacity for set_capacity action\nif (scalingPayload.scaling_action === 'set_capacity' && !scalingPayload.target_capacity) {\n  throw new Error('Target capacity is required for set_capacity action');\n}\n\nreturn [{ \n  json: {\n    ...data,\n    api_payload: scalingPayload,\n    api_endpoint: `/api/v2/cloud-services/${serviceData.service_id}/scaling`,\n    api_method: 'POST',\n    service_id: serviceData.service_id\n  }\n}];"
+      },
+      "name": "Scale Service",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle other cloud service operations\nconst data = items[0].json;\nconst operation = data.operation;\nconst serviceData = data.service_data;\n\nlet apiEndpoint = '';\nlet apiMethod = 'GET';\nlet apiPayload = null;\n\nswitch (operation) {\n  case 'delete_service':\n    apiEndpoint = `/api/v2/cloud-services/${serviceData.service_id}`;\n    apiMethod = 'DELETE';\n    break;\n  case 'list_services':\n    const queryParams = {\n      limit: data.options.limit || 50,\n      offset: data.options.offset || 0,\n      service_type: data.options.service_type,\n      status: data.options.status,\n      sort_by: data.options.sort_by || 'created_at'\n    };\n    const queryString = Object.keys(queryParams)\n      .filter(key => queryParams[key] !== undefined)\n      .map(key => `${key}=${encodeURIComponent(queryParams[key])}`)\n      .join('&');\n    apiEndpoint = `/api/v2/cloud-services?${queryString}`;\n    break;\n  case 'service_health':\n    apiEndpoint = `/api/v2/cloud-services/${serviceData.service_id}/health`;\n    break;\n  case 'service_logs':\n    const logParams = {\n      limit: data.options.limit || 100,\n      start_time: data.options.start_time,\n      end_time: data.options.end_time,\n      log_level: data.options.log_level || 'info'\n    };\n    const logQueryString = Object.keys(logParams)\n      .filter(key => logParams[key] !== undefined)\n      .map(key => `${key}=${encodeURIComponent(logParams[key])}`)\n      .join('&');\n    apiEndpoint = `/api/v2/cloud-services/${serviceData.service_id}/logs?${logQueryString}`;\n    break;\n  case 'service_metrics':\n    const metricParams = {\n      duration: data.options.duration || '1h',\n      metrics: data.options.metrics || 'cpu,memory,network',\n      aggregation: data.options.aggregation || 'avg'\n    };\n    const metricQueryString = Object.keys(metricParams)\n      .map(key => `${key}=${encodeURIComponent(metricParams[key])}`)\n      .join('&');\n    apiEndpoint = `/api/v2/cloud-services/${serviceData.service_id}/metrics?${metricQueryString}`;\n    break;\n  case 'service_backup':\n    apiEndpoint = `/api/v2/cloud-services/${serviceData.service_id}/backup`;\n    apiMethod = 'POST';\n    apiPayload = {\n      backup_name: data.options.backup_name || `backup-${Date.now()}`,\n      backup_type: data.options.backup_type || 'full',\n      include_data: data.options.include_data !== false\n    };\n    break;\n  case 'service_restore':\n    apiEndpoint = `/api/v2/cloud-services/${serviceData.service_id}/restore`;\n    apiMethod = 'POST';\n    apiPayload = {\n      backup_id: serviceData.backup_id,\n      restore_point: data.options.restore_point,\n      restore_type: data.options.restore_type || 'full'\n    };\n    break;\n  case 'service_discovery':\n    apiEndpoint = '/api/v2/cloud-services/discovery';\n    apiMethod = 'POST';\n    apiPayload = {\n      discovery_type: data.options.discovery_type || 'auto',\n      scan_networks: data.options.scan_networks || [],\n      discovery_timeout: data.options.discovery_timeout || 300\n    };\n    break;\n  default:\n    throw new Error(`Unsupported operation: ${operation}`);\n}\n\nreturn [{ \n  json: {\n    ...data,\n    api_payload: apiPayload,\n    api_endpoint: apiEndpoint,\n    api_method: apiMethod\n  }\n}];"
+      },
+      "name": "Handle Other Operations",
+      "type": "n8n-nodes-base.function",\n      "typeVersion": 1,\n      "position": [1000, 600]\n    },\n    {\n      "parameters": {\n        "url": "={{$json.api_endpoint}}",\n        "authentication": "predefinedCredentialType",\n        "nodeCredentialType": "arubaApi",\n        "sendHeaders": true,\n        "headerParameters": {\n          "parameters": [\n            {\n              "name": "Content-Type",\n              "value": "application/json"\n            },\n            {\n              "name": "Authorization",\n              "value": "Bearer {{$credentials.arubaApi.accessToken}}"\n            }\n          ]\n        },\n        "sendBody": true,\n        "bodyParameters": {\n          "parameters": [\n            {\n              "name": "data",\n              "value": "={{JSON.stringify($json.api_payload)}}"\n            }\n          ]\n        },\n        "options": {\n          "timeout": 60000,\n          "retry": {\n            "maxTries": 3,\n            "waitBetweenTries": 5000\n          }\n        }\n      },\n      "name": "Execute API Request",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 1,\n      "position": [1200, 400]\n    },\n    {\n      "parameters": {\n        "functionCode": "// Process API Success Response\nconst data = items[0].json;\nconst originalRequest = data.originalRequest || {};\n\n// Extract response data\nconst responseData = data.response || data;\nconst statusCode = data.statusCode || 200;\nconst operation = originalRequest.operation;\n\n// Success response processing\nlet processedResponse = {\n  success: true,\n  operation: operation,\n  timestamp: new Date().toISOString(),\n  execution_id: originalRequest.execution_id,\n  status_code: statusCode,\n  data: responseData\n};\n\n// Operation-specific response processing\nswitch (operation) {\n  case 'configure_service':\n    processedResponse.service_id = responseData.service_id || responseData.id;\n    processedResponse.service_name = responseData.service_name;\n    processedResponse.service_type = responseData.service_type;\n    processedResponse.message = `Cloud service '${responseData.service_name}' configured successfully`;\n    break;\n  case 'update_service':\n    processedResponse.service_id = responseData.service_id || responseData.id;\n    processedResponse.service_name = responseData.service_name;\n    processedResponse.message = `Cloud service '${responseData.service_name}' updated successfully`;\n    break;\n  case 'service_status':\n    processedResponse.service_id = responseData.service_id;\n    processedResponse.service_status = responseData.status;\n    processedResponse.health_status = responseData.health;\n    processedResponse.message = `Service status: ${responseData.status}`;\n    break;\n  case 'service_scaling':\n    processedResponse.service_id = responseData.service_id;\n    processedResponse.scaling_action = responseData.scaling_action;\n    processedResponse.current_capacity = responseData.current_capacity;\n    processedResponse.target_capacity = responseData.target_capacity;\n    processedResponse.message = `Service scaling ${responseData.scaling_action} initiated`;\n    break;\n  case 'list_services':\n    processedResponse.total_count = responseData.total_count || responseData.length;\n    processedResponse.services = responseData.services || responseData;\n    processedResponse.message = `Retrieved ${processedResponse.total_count} cloud services`;\n    break;\n  case 'delete_service':\n    processedResponse.message = 'Cloud service deleted successfully';\n    break;\n  case 'service_health':\n    processedResponse.service_id = responseData.service_id;\n    processedResponse.health_status = responseData.health_status;\n    processedResponse.health_details = responseData.health_details;\n    processedResponse.message = `Service health: ${responseData.health_status}`;\n    break;\n  case 'service_logs':\n    processedResponse.service_id = responseData.service_id;\n    processedResponse.log_entries = responseData.logs || responseData;\n    processedResponse.message = `Retrieved ${responseData.logs?.length || 0} log entries`;\n    break;\n  case 'service_metrics':\n    processedResponse.service_id = responseData.service_id;\n    processedResponse.metrics = responseData.metrics;\n    processedResponse.time_range = responseData.time_range;\n    processedResponse.message = `Retrieved metrics for ${responseData.time_range}`;\n    break;\n  case 'service_backup':\n    processedResponse.service_id = responseData.service_id;\n    processedResponse.backup_id = responseData.backup_id;\n    processedResponse.message = `Service backup created: ${responseData.backup_id}`;\n    break;\n  case 'service_restore':\n    processedResponse.service_id = responseData.service_id;\n    processedResponse.restore_status = responseData.restore_status;\n    processedResponse.message = `Service restore initiated: ${responseData.restore_status}`;\n    break;\n  case 'service_discovery':\n    processedResponse.discovered_services = responseData.discovered_services || [];\n    processedResponse.discovery_status = responseData.discovery_status;\n    processedResponse.message = `Service discovery completed: ${responseData.discovered_services?.length || 0} services found`;\n    break;\n}\n\n// Add performance metrics\nprocessedResponse.metrics = {\n  response_time: data.response_time || 'N/A',\n  api_calls: 1,\n  success_rate: '100%'\n};\n\nconsole.log(`Cloud Services Success: ${operation} - ${processedResponse.execution_id}`);\n\nreturn [{ json: processedResponse }];"
+      },
+      "name": "Process Success Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1400, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process Error Response\nconst error = items[0].json.error || items[0].json;\nconst originalRequest = items[0].json.originalRequest || {};\n\n// Extract error details\nconst errorResponse = {\n  success: false,\n  operation: originalRequest.operation,\n  timestamp: new Date().toISOString(),\n  execution_id: originalRequest.execution_id,\n  error: {\n    code: error.code || error.statusCode || 'UNKNOWN_ERROR',\n    message: error.message || 'Unknown error occurred',\n    details: error.details || error.response || {},\n    stack: error.stack\n  }\n};\n\n// Error categorization\nconst errorCode = errorResponse.error.code;\nif (errorCode >= 400 && errorCode < 500) {\n  errorResponse.error.category = 'CLIENT_ERROR';\n  errorResponse.error.retry_recommended = false;\n} else if (errorCode >= 500) {\n  errorResponse.error.category = 'SERVER_ERROR';\n  errorResponse.error.retry_recommended = true;\n} else {\n  errorResponse.error.category = 'UNKNOWN_ERROR';\n  errorResponse.error.retry_recommended = false;\n}\n\n// Operation-specific error handling\nswitch (originalRequest.operation) {\n  case 'configure_service':\n    if (errorCode === 409) {\n      errorResponse.error.message = 'Service with this name already exists';\n    } else if (errorCode === 400) {\n      errorResponse.error.message = 'Invalid service configuration';\n    }\n    break;\n  case 'update_service':\n    if (errorCode === 404) {\n      errorResponse.error.message = 'Service not found';\n    } else if (errorCode === 409) {\n      errorResponse.error.message = 'Service update conflict';\n    }\n    break;\n  case 'service_scaling':\n    if (errorCode === 422) {\n      errorResponse.error.message = 'Invalid scaling configuration';\n    } else if (errorCode === 429) {\n      errorResponse.error.message = 'Scaling rate limit exceeded';\n    }\n    break;\n  case 'delete_service':\n    if (errorCode === 404) {\n      errorResponse.error.message = 'Service not found';\n    } else if (errorCode === 409) {\n      errorResponse.error.message = 'Service has active dependencies';\n    }\n    break;\n}\n\nconsole.error(`Cloud Services Error: ${originalRequest.operation} - ${errorResponse.execution_id}`, errorResponse.error);\n\nreturn [{ json: errorResponse }];"
+      },
+      "name": "Process Error Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1400, 600]
+    },
+    {
+      "parameters": {
+        "channel": "={{$json.notification_settings?.slack?.channel || '#central-platform-automation'}}",
+        "text": "☁️ **Central Platform Cloud Services**\\n\\n**Operation**: {{$json.operation}}\\n**Status**: {{$json.success ? '✅ Success' : '❌ Failed'}}\\n**Service**: {{$json.service_name || $json.service_id}}\\n**Execution ID**: {{$json.execution_id}}\\n**Message**: {{$json.message || $json.error?.message}}\\n**Timestamp**: {{$json.timestamp}}\\n\\n{{$json.success ? '**Service Status**: ' + ($json.service_status || 'N/A') : '**Error Code**: ' + $json.error?.code}}",
+        "username": "Cloud Services Bot",
+        "iconEmoji": ":cloud:"
+      },
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1600, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Final Response Formatter\nconst data = items[0].json;\n\n// Format final response\nconst finalResponse = {\n  success: data.success,\n  operation: data.operation,\n  execution_id: data.execution_id,\n  timestamp: data.timestamp,\n  message: data.message\n};\n\n// Add operation-specific data\nif (data.success) {\n  finalResponse.data = data.data;\n  finalResponse.metrics = data.metrics;\n  \n  // Add specific fields based on operation\n  if (data.service_id) finalResponse.service_id = data.service_id;\n  if (data.service_name) finalResponse.service_name = data.service_name;\n  if (data.service_status) finalResponse.service_status = data.service_status;\n  if (data.health_status) finalResponse.health_status = data.health_status;\n  if (data.backup_id) finalResponse.backup_id = data.backup_id;\n  if (data.total_count) finalResponse.total_count = data.total_count;\n  if (data.scaling_action) finalResponse.scaling_action = data.scaling_action;\n} else {\n  finalResponse.error = data.error;\n  finalResponse.retry_recommended = data.error?.retry_recommended;\n}\n\n// Add execution summary\nfinalResponse.execution_summary = {\n  workflow: 'Central Platform Cloud Services Management',\n  version: '1.0.0',\n  executed_at: data.timestamp,\n  duration: 'N/A' // Could be calculated if needed\n};\n\nreturn [{ json: finalResponse }];"
+      },
+      "name": "Format Final Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1800, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json, null, 2)}}"
+      },
+      "name": "Return Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 400]
+    }
+  ],
+  "connections": {
+    "Cloud Services Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Service Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Service Request": {
+      "main": [
+        [
+          {
+            "node": "Check Configure Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Configure Operation": {
+      "main": [
+        [
+          {
+            "node": "Configure Service",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Update Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure Service": {
+      "main": [
+        [
+          {
+            "node": "Execute API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Update Operation": {
+      "main": [
+        [
+          {
+            "node": "Update Service",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Status Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Service": {
+      "main": [
+        [
+          {
+            "node": "Execute API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Status Operation": {
+      "main": [
+        [
+          {
+            "node": "Get Service Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Scaling Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Service Status": {
+      "main": [
+        [
+          {
+            "node": "Execute API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Scaling Operation": {
+      "main": [
+        [
+          {
+            "node": "Scale Service",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Other Operations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scale Service": {
+      "main": [
+        [
+          {
+            "node": "Execute API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Other Operations": {
+      "main": [
+        [
+          {
+            "node": "Execute API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute API Request": {
+      "main": [
+        [
+          {
+            "node": "Process Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Process Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Success Response": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Error Response": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Notification": {
+      "main": [
+        [
+          {
+            "node": "Format Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Final Response": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

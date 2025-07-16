@@ -1,0 +1,122 @@
+{
+  "name": "Configuration Backup Workflow",
+  "nodes": [
+    {
+      "name": "Daily Backup Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        },
+        "triggerAtDateTime": "2024-01-01T02:00:00.000Z"
+      }
+    },
+    {
+      "name": "Get Device List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [400, 300],
+      "parameters": {
+        "url": "https://{{$credentials.region}}.central.arubanetworks.com/api/v2/devices",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApi"
+      }
+    },
+    {
+      "name": "Process Each Device",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [600, 300],
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      }
+    },
+    {
+      "name": "Create Backup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [800, 300],
+      "parameters": {
+        "url": "https://{{$credentials.region}}.central.arubanetworks.com/api/v2/configuration/devices/{{$json.serial}}/backup",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "backup_name",
+              "value": "{{$json.hostname}}_{{$now.format('YYYY-MM-DD_HH-mm-ss')}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Store Backup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1000, 300],
+      "parameters": {
+        "url": "{{$parameter.backup_storage_url}}/{{$json.backup_name}}.json",
+        "method": "PUT",
+        "sendBody": true,
+        "body": "={{$json}}"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Backup Schedule": {
+      "main": [
+        [
+          {
+            "node": "Get Device List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Device List": {
+      "main": [
+        [
+          {
+            "node": "Process Each Device",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Each Device": {
+      "main": [
+        [
+          {
+            "node": "Create Backup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Backup": {
+      "main": [
+        [
+          {
+            "node": "Store Backup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

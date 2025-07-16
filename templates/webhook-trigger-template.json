@@ -1,0 +1,17 @@
+{
+  "name": "Webhook Trigger",
+  "type": "n8n-nodes-base.webhook",
+  "typeVersion": 1.1,
+  "position": [200, 300], 
+  "parameters": {
+    "httpMethod": "POST",
+    "path": "aruba-alert",
+    "responseMode": "responseNode",
+    "options": {
+      "noResponseBody": false,
+      "rawBody": false
+    }
+  },
+  "webhookId": "{{$parameter.webhook_id}}",
+  "description": "Webhook trigger template for event-driven workflows from Aruba systems"
+}

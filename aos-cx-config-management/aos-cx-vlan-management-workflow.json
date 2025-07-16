@@ -1,0 +1,814 @@
+{
+  "meta": {
+    "instanceId": "aruba-vlan-management"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "trigger-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AOS-CX VLAN Management - Input Validation\nconst input = items[0].json;\n\n// Required parameters\nconst operation = input.operation || 'list';\nconst switch_ip = input.switch_ip;\nconst vlan_id = input.vlan_id;\nconst vlan_name = input.vlan_name;\nconst description = input.description || '';\nconst admin_state = input.admin_state || 'up';\n\n// Validation errors\nlet errors = [];\n\n// Validate switch IP\nif (!switch_ip) {\n  errors.push('switch_ip is required');\n} else if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(switch_ip)) {\n  errors.push('switch_ip must be a valid IP address');\n}\n\n// Validate operation\nconst validOperations = ['create', 'read', 'update', 'delete', 'list'];\nif (!validOperations.includes(operation)) {\n  errors.push(`operation must be one of: ${validOperations.join(', ')}`);\n}\n\n// Validate VLAN ID for operations that require it\nif (['create', 'read', 'update', 'delete'].includes(operation)) {\n  if (!vlan_id) {\n    errors.push('vlan_id is required for ' + operation + ' operation');\n  } else if (isNaN(vlan_id) || vlan_id < 1 || vlan_id > 4094) {\n    errors.push('vlan_id must be a number between 1 and 4094');\n  }\n}\n\n// Validate VLAN name for create/update operations\nif (['create', 'update'].includes(operation)) {\n  if (!vlan_name) {\n    errors.push('vlan_name is required for ' + operation + ' operation');\n  } else if (vlan_name.length > 32) {\n    errors.push('vlan_name must be 32 characters or less');\n  } else if (!/^[a-zA-Z0-9_-]+$/.test(vlan_name)) {\n    errors.push('vlan_name can only contain letters, numbers, underscores, and hyphens');\n  }\n}\n\n// Validate admin state\nif (!['up', 'down'].includes(admin_state)) {\n  errors.push('admin_state must be \"up\" or \"down\"');\n}\n\n// Return validation result\nif (errors.length > 0) {\n  return [{\n    json: {\n      validation_status: 'failed',\n      errors: errors,\n      input: input\n    }\n  }];\n} else {\n  return [{\n    json: {\n      validation_status: 'passed',\n      operation: operation,\n      switch_ip: switch_ip,\n      vlan_id: vlan_id,\n      vlan_name: vlan_name,\n      description: description,\n      admin_state: admin_state,\n      api_base_url: `https://${switch_ip}:443/rest/v10.08/system`,\n      errors: []\n    }\n  }];\n}"
+      },
+      "id": "input-validation",
+      "name": "Input Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validation-check",
+              "leftValue": "={{ $json.validation_status }}",
+              "rightValue": "passed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validation-branch",
+      "name": "Validation Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "operation-list",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "list",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "operation-router",
+      "name": "Operation Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        840,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.api_base_url }}/vlans",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaOsCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "list-vlans",
+      "name": "List All VLANs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "operation-read",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "read",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "read-branch",
+      "name": "Read Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.api_base_url }}/vlans/{{ $json.vlan_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaOsCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "read-vlan",
+      "name": "Read Specific VLAN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "operation-create",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "create-branch",
+      "name": "Create Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.api_base_url }}/vlans",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaOsCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $json.vlan_id }}"
+            },
+            {
+              "name": "name",
+              "value": "={{ $json.vlan_name }}"
+            },
+            {
+              "name": "description",
+              "value": "={{ $json.description }}"
+            },
+            {
+              "name": "admin",
+              "value": "={{ $json.admin_state }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "create-vlan",
+      "name": "Create New VLAN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "operation-update",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "update-branch",
+      "name": "Update Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.api_base_url }}/vlans/{{ $json.vlan_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaOsCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ $json.vlan_name }}"
+            },
+            {
+              "name": "description",
+              "value": "={{ $json.description }}"
+            },
+            {
+              "name": "admin",
+              "value": "={{ $json.admin_state }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "update-vlan",
+      "name": "Update VLAN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "operation-delete",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "delete",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "delete-branch",
+      "name": "Delete Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.api_base_url }}/vlans/{{ $json.vlan_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaOsCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "delete-vlan",
+      "name": "Delete VLAN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process API Response and Handle Errors\nconst items_in = items[0].json;\n\n// Extract HTTP response details\nconst statusCode = items_in.statusCode || 0;\nconst responseBody = items_in.body || items_in;\n\n// Determine success based on status code\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\n// Get operation from previous nodes\nconst operation = items_in.operation || $('Input Validation').first().json.operation;\n\n// Prepare response object\nlet result = {\n  operation: operation,\n  success: isSuccess,\n  status_code: statusCode,\n  timestamp: new Date().toISOString(),\n  switch_ip: items_in.switch_ip || $('Input Validation').first().json.switch_ip\n};\n\nif (isSuccess) {\n  result.message = `VLAN ${operation} operation completed successfully`;\n  result.data = responseBody;\n  \n  // Add operation-specific success details\n  switch(operation) {\n    case 'list':\n      result.vlan_count = Object.keys(responseBody).length;\n      result.message = `Found ${result.vlan_count} VLANs`;\n      break;\n    case 'read':\n      result.vlan_id = responseBody.id || $('Input Validation').first().json.vlan_id;\n      result.vlan_name = responseBody.name;\n      result.message = `VLAN ${result.vlan_id} retrieved successfully`;\n      break;\n    case 'create':\n      result.vlan_id = $('Input Validation').first().json.vlan_id;\n      result.vlan_name = $('Input Validation').first().json.vlan_name;\n      result.message = `VLAN ${result.vlan_id} (${result.vlan_name}) created successfully`;\n      break;\n    case 'update':\n      result.vlan_id = $('Input Validation').first().json.vlan_id;\n      result.vlan_name = $('Input Validation').first().json.vlan_name;\n      result.message = `VLAN ${result.vlan_id} updated successfully`;\n      break;\n    case 'delete':\n      result.vlan_id = $('Input Validation').first().json.vlan_id;\n      result.message = `VLAN ${result.vlan_id} deleted successfully`;\n      break;\n  }\n} else {\n  // Handle error cases\n  result.error_type = 'api_error';\n  result.error_message = responseBody.message || responseBody.error || 'Unknown API error';\n  result.message = `VLAN ${operation} operation failed: ${result.error_message}`;\n  \n  // Add specific error handling\n  if (statusCode === 404) {\n    result.error_type = 'not_found';\n    result.message = `VLAN not found or switch unreachable`;\n  } else if (statusCode === 401 || statusCode === 403) {\n    result.error_type = 'authentication_error';\n    result.message = `Authentication failed - check credentials`;\n  } else if (statusCode === 409) {\n    result.error_type = 'conflict';\n    result.message = `VLAN already exists or configuration conflict`;\n  } else if (statusCode === 400) {\n    result.error_type = 'bad_request';\n    result.message = `Invalid request parameters`;\n  } else if (statusCode === 0 || statusCode >= 500) {\n    result.error_type = 'network_error';\n    result.message = `Network error or switch unreachable`;\n  }\n  \n  result.raw_error = responseBody;\n}\n\n// Add input parameters for reference\nconst inputValidation = $('Input Validation').first().json;\nresult.input_parameters = {\n  operation: inputValidation.operation,\n  switch_ip: inputValidation.switch_ip,\n  vlan_id: inputValidation.vlan_id,\n  vlan_name: inputValidation.vlan_name,\n  description: inputValidation.description,\n  admin_state: inputValidation.admin_state\n};\n\nreturn [{ json: result }];"
+      },
+      "id": "response-processor",
+      "name": "Response Processor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success-check",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "success-branch",
+      "name": "Success/Failure Branch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "message": ":white_check_mark: *VLAN Operation Successful*\\n\\n*Operation:* {{ $json.operation }}\\n*Switch:* {{ $json.switch_ip }}\\n*Status:* {{ $json.message }}\\n*VLAN ID:* {{ $json.vlan_id || 'N/A' }}\\n*VLAN Name:* {{ $json.vlan_name || 'N/A' }}\\n*Timestamp:* {{ $json.timestamp }}\\n\\n```json\\n{{ JSON.stringify($json.data, null, 2) }}\\n```",
+        "channel": "#network-automation",
+        "username": "n8n-aruba-bot"
+      },
+      "id": "success-notification",
+      "name": "Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error Rollback Logic\nconst errorData = items[0].json;\nconst operation = errorData.operation;\nconst inputParams = errorData.input_parameters;\n\n// Determine if rollback is needed and possible\nlet rollbackNeeded = false;\nlet rollbackAction = null;\nlet rollbackMessage = 'No rollback required';\n\n// Only certain operations need rollback\nif (operation === 'create' && errorData.error_type !== 'conflict') {\n  // If VLAN creation failed, no rollback needed (VLAN wasn't created)\n  rollbackNeeded = false;\n  rollbackMessage = 'VLAN creation failed - no rollback needed';\n} else if (operation === 'update') {\n  // For update failures, we could restore previous configuration\n  // This would require storing the previous state first\n  rollbackNeeded = false; // Simplified for now\n  rollbackMessage = 'Update failed - manual verification recommended';\n} else if (operation === 'delete') {\n  // If delete failed, VLAN still exists - no rollback needed\n  rollbackNeeded = false;\n  rollbackMessage = 'Delete failed - VLAN still exists';\n}\n\n// Prepare rollback result\nlet result = {\n  ...errorData,\n  rollback_attempted: rollbackNeeded,\n  rollback_action: rollbackAction,\n  rollback_message: rollbackMessage,\n  requires_manual_intervention: true,\n  recommended_actions: []\n};\n\n// Add recommended manual actions based on error type\nswitch(errorData.error_type) {\n  case 'authentication_error':\n    result.recommended_actions = [\n      'Verify switch credentials',\n      'Check if API is enabled on switch',\n      'Verify network connectivity to switch'\n    ];\n    break;\n  case 'not_found':\n    if (operation === 'read' || operation === 'update' || operation === 'delete') {\n      result.recommended_actions = [\n        `Verify VLAN ${inputParams.vlan_id} exists`,\n        'Check switch connectivity',\n        'Verify VLAN ID is correct'\n      ];\n    }\n    break;\n  case 'conflict':\n    if (operation === 'create') {\n      result.recommended_actions = [\n        `VLAN ${inputParams.vlan_id} already exists`,\n        'Use update operation instead',\n        'Or choose a different VLAN ID'\n      ];\n    }\n    break;\n  case 'network_error':\n    result.recommended_actions = [\n      'Check network connectivity to switch',\n      'Verify switch is powered on and accessible',\n      'Check if switch API service is running'\n    ];\n    break;\n  case 'bad_request':\n    result.recommended_actions = [\n      'Verify input parameters are correct',\n      'Check VLAN ID is in valid range (1-4094)',\n      'Verify VLAN name follows naming conventions'\n    ];\n    break;\n  default:\n    result.recommended_actions = [\n      'Review error details',\n      'Check switch logs',\n      'Contact network administrator'\n    ];\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "error-rollback",
+      "name": "Error Rollback Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "message": ":x: *VLAN Operation Failed*\\n\\n*Operation:* {{ $json.operation }}\\n*Switch:* {{ $json.switch_ip }}\\n*Error:* {{ $json.error_type }}\\n*Message:* {{ $json.message }}\\n*VLAN ID:* {{ $json.input_parameters.vlan_id || 'N/A' }}\\n*Timestamp:* {{ $json.timestamp }}\\n\\n*Rollback Status:* {{ $json.rollback_message }}\\n\\n*Recommended Actions:*\\n{{#each $json.recommended_actions}}• {{this}}\\n{{/each}}\\n\\n```json\\n{{ JSON.stringify($json.raw_error, null, 2) }}\\n```",
+        "channel": "#network-alerts",
+        "username": "n8n-aruba-bot"
+      },
+      "id": "error-notification",
+      "name": "Error Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        2040,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "message": ":warning: *Input Validation Failed*\\n\\n*Errors:*\\n{{#each $json.errors}}• {{this}}\\n{{/each}}\\n\\n*Input Received:*\\n```json\\n{{ JSON.stringify($json.input, null, 2) }}\\n```\\n\\n*Required Parameters:*\\n• operation: create, read, update, delete, list\\n• switch_ip: Valid IP address\\n• vlan_id: Number 1-4094 (required for create/read/update/delete)\\n• vlan_name: String (required for create/update)\\n• description: String (optional)\\n• admin_state: up or down (optional, default: up)",
+        "channel": "#network-alerts",
+        "username": "n8n-aruba-bot"
+      },
+      "id": "validation-error-notification",
+      "name": "Validation Error",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        840,
+        460
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Validation": {
+      "main": [
+        [
+          {
+            "node": "Validation Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Check": {
+      "main": [
+        [
+          {
+            "node": "Operation Router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Operation Router": {
+      "main": [
+        [
+          {
+            "node": "List All VLANs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List All VLANs": {
+      "main": [
+        [
+          {
+            "node": "Response Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Operation": {
+      "main": [
+        [
+          {
+            "node": "Read Specific VLAN",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Specific VLAN": {
+      "main": [
+        [
+          {
+            "node": "Response Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Operation": {
+      "main": [
+        [
+          {
+            "node": "Create New VLAN",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create New VLAN": {
+      "main": [
+        [
+          {
+            "node": "Response Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Operation": {
+      "main": [
+        [
+          {
+            "node": "Update VLAN",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update VLAN": {
+      "main": [
+        [
+          {
+            "node": "Response Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Operation": {
+      "main": [
+        [
+          {
+            "node": "Delete VLAN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete VLAN": {
+      "main": [
+        [
+          {
+            "node": "Response Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Processor": {
+      "main": [
+        [
+          {
+            "node": "Success/Failure Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success/Failure Branch": {
+      "main": [
+        [
+          {
+            "node": "Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Rollback Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Rollback Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-16T20:00:00.000Z",
+      "updatedAt": "2025-01-16T20:00:00.000Z",
+      "id": "aruba-network-automation",
+      "name": "Aruba Network Automation"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-16T20:00:00.000Z",
+  "versionId": "1"
+}

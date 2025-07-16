@@ -1,0 +1,955 @@
+{
+  "name": "EdgeConnect Performance Optimization",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "edgeconnect-performance-optimization",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "e1d1c5a8-8b4e-4b5a-9c8d-1e2f3a4b5c6d",
+      "name": "Performance Optimization Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "performance-optimization-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// EdgeConnect Performance Optimization Workflow\n// Operations: analyze_performance, optimize_wan, tune_qos, compress_traffic, balance_load, generate_report\n\nconst operation = $input.item(0).json.operation;\nconst optimizationData = $input.item(0).json.optimization_data || {};\nconst orchestratorUrl = $input.item(0).json.orchestrator_url;\nconst applianceId = $input.item(0).json.appliance_id;\nconst optimizationType = $input.item(0).json.optimization_type || 'balanced';\n\n// Validate required parameters\nif (!operation) {\n  throw new Error('Operation is required. Valid operations: analyze_performance, optimize_wan, tune_qos, compress_traffic, balance_load, generate_report');\n}\n\nif (!orchestratorUrl) {\n  throw new Error('Orchestrator URL is required');\n}\n\nif (['optimize_wan', 'tune_qos', 'compress_traffic', 'balance_load'].includes(operation) && !applianceId) {\n  throw new Error('Appliance ID is required for optimization operations');\n}\n\n// Performance optimization templates\nconst optimizationTemplates = {\n  'latency_focused': {\n    name: 'Latency Optimization',\n    priority: 'minimize_latency',\n    wan_optimization: {\n      tcp_acceleration: true,\n      compression: 'adaptive',\n      deduplication: true,\n      caching: 'aggressive',\n      packet_coalescing: false\n    },\n    qos_settings: {\n      voice_priority: 'highest',\n      video_priority: 'high',\n      data_priority: 'medium',\n      background_priority: 'low',\n      latency_threshold: '50ms'\n    },\n    traffic_shaping: {\n      burst_handling: 'immediate',\n      queue_management: 'priority_based',\n      bandwidth_allocation: 'dynamic'\n    }\n  },\n  'bandwidth_focused': {\n    name: 'Bandwidth Optimization',\n    priority: 'maximize_throughput',\n    wan_optimization: {\n      tcp_acceleration: true,\n      compression: 'maximum',\n      deduplication: true,\n      caching: 'maximum',\n      packet_coalescing: true\n    },\n    qos_settings: {\n      voice_priority: 'high',\n      video_priority: 'medium',\n      data_priority: 'high',\n      background_priority: 'low',\n      bandwidth_guarantee: '80%'\n    },\n    traffic_shaping: {\n      burst_handling: 'buffer',\n      queue_management: 'bandwidth_based',\n      bandwidth_allocation: 'static'\n    }\n  },\n  'balanced': {\n    name: 'Balanced Performance',\n    priority: 'balanced_optimization',\n    wan_optimization: {\n      tcp_acceleration: true,\n      compression: 'adaptive',\n      deduplication: true,\n      caching: 'moderate',\n      packet_coalescing: false\n    },\n    qos_settings: {\n      voice_priority: 'highest',\n      video_priority: 'high',\n      data_priority: 'medium',\n      background_priority: 'low',\n      latency_threshold: '100ms',\n      bandwidth_guarantee: '60%'\n    },\n    traffic_shaping: {\n      burst_handling: 'adaptive',\n      queue_management: 'hybrid',\n      bandwidth_allocation: 'dynamic'\n    }\n  },\n  'application_aware': {\n    name: 'Application-Aware Optimization',\n    priority: 'application_performance',\n    wan_optimization: {\n      tcp_acceleration: true,\n      compression: 'application_specific',\n      deduplication: true,\n      caching: 'application_aware',\n      packet_coalescing: false\n    },\n    qos_settings: {\n      office365_priority: 'highest',\n      salesforce_priority: 'high',\n      web_browsing_priority: 'medium',\n      file_transfer_priority: 'low',\n      application_recognition: true\n    },\n    traffic_shaping: {\n      burst_handling: 'application_based',\n      queue_management: 'application_aware',\n      bandwidth_allocation: 'application_driven'\n    }\n  },\n  'cost_optimized': {\n    name: 'Cost-Optimized Performance',\n    priority: 'minimize_wan_cost',\n    wan_optimization: {\n      tcp_acceleration: true,\n      compression: 'maximum',\n      deduplication: true,\n      caching: 'aggressive',\n      packet_coalescing: true\n    },\n    qos_settings: {\n      voice_priority: 'high',\n      video_priority: 'medium',\n      data_priority: 'medium',\n      background_priority: 'lowest',\n      cost_awareness: true\n    },\n    traffic_shaping: {\n      burst_handling: 'cost_aware',\n      queue_management: 'cost_based',\n      bandwidth_allocation: 'cost_optimized',\n      offload_to_cheaper_links: true\n    }\n  },\n  'security_focused': {\n    name: 'Security-First Optimization',\n    priority: 'secure_performance',\n    wan_optimization: {\n      tcp_acceleration: true,\n      compression: 'encrypted_only',\n      deduplication: false,\n      caching: 'secure_only',\n      packet_coalescing: false\n    },\n    qos_settings: {\n      encrypted_traffic_priority: 'highest',\n      voice_priority: 'high',\n      video_priority: 'medium',\n      data_priority: 'medium',\n      security_scanning: true\n    },\n    traffic_shaping: {\n      burst_handling: 'security_first',\n      queue_management: 'security_aware',\n      bandwidth_allocation: 'secure_priority'\n    }\n  }\n};\n\n// Generate optimization configuration based on type\nlet optimizationConfig = optimizationData;\nif (optimizationType && optimizationTemplates[optimizationType]) {\n  optimizationConfig = { ...optimizationTemplates[optimizationType], ...optimizationData };\n}\n\n// Prepare output data\nconst outputData = {\n  operation,\n  appliance_id: applianceId,\n  optimization_config: optimizationConfig,\n  orchestrator_url: orchestratorUrl,\n  optimization_type: optimizationType,\n  timestamp: new Date().toISOString(),\n  validation_rules: {\n    appliance_id_required: ['optimize_wan', 'tune_qos', 'compress_traffic', 'balance_load'].includes(operation),\n    config_required: ['optimize_wan', 'tune_qos', 'compress_traffic'].includes(operation),\n    metrics_required: ['analyze_performance', 'generate_report'].includes(operation)\n  }\n};\n\n// Add operation-specific data\nif (operation === 'analyze_performance') {\n  outputData.analysis_config = {\n    duration: optimizationData.duration || '24h',\n    metrics: optimizationData.metrics || ['latency', 'throughput', 'packet_loss', 'jitter', 'utilization'],\n    granularity: optimizationData.granularity || '5m',\n    include_applications: optimizationData.include_applications !== false,\n    baseline_comparison: optimizationData.baseline_comparison !== false\n  };\n}\n\nif (operation === 'optimize_wan') {\n  outputData.wan_config = {\n    tcp_acceleration: optimizationConfig.wan_optimization?.tcp_acceleration || true,\n    compression_level: optimizationConfig.wan_optimization?.compression || 'adaptive',\n    deduplication: optimizationConfig.wan_optimization?.deduplication || true,\n    caching_policy: optimizationConfig.wan_optimization?.caching || 'moderate',\n    packet_coalescing: optimizationConfig.wan_optimization?.packet_coalescing || false,\n    auto_tune: optimizationData.auto_tune !== false\n  };\n}\n\nif (operation === 'tune_qos') {\n  outputData.qos_config = {\n    voice_priority: optimizationConfig.qos_settings?.voice_priority || 'highest',\n    video_priority: optimizationConfig.qos_settings?.video_priority || 'high',\n    data_priority: optimizationConfig.qos_settings?.data_priority || 'medium',\n    background_priority: optimizationConfig.qos_settings?.background_priority || 'low',\n    latency_threshold: optimizationConfig.qos_settings?.latency_threshold || '100ms',\n    bandwidth_guarantee: optimizationConfig.qos_settings?.bandwidth_guarantee || '60%'\n  };\n}\n\nif (operation === 'compress_traffic') {\n  outputData.compression_config = {\n    algorithm: optimizationData.algorithm || 'lz4',\n    level: optimizationData.level || 'medium',\n    exclude_types: optimizationData.exclude_types || ['encrypted', 'compressed'],\n    cpu_threshold: optimizationData.cpu_threshold || '80%',\n    adaptive_compression: optimizationData.adaptive_compression !== false\n  };\n}\n\nif (operation === 'balance_load') {\n  outputData.load_balance_config = {\n    algorithm: optimizationData.algorithm || 'weighted_round_robin',\n    health_check_interval: optimizationData.health_check_interval || '30s',\n    failover_threshold: optimizationData.failover_threshold || '3',\n    sticky_sessions: optimizationData.sticky_sessions || false,\n    weight_adjustment: optimizationData.weight_adjustment || 'automatic'\n  };\n}\n\nif (operation === 'generate_report') {\n  outputData.report_config = {\n    time_period: optimizationData.time_period || '7d',\n    report_type: optimizationData.report_type || 'comprehensive',\n    include_recommendations: optimizationData.include_recommendations !== false,\n    format: optimizationData.format || 'pdf',\n    email_recipients: optimizationData.email_recipients || []\n  };\n}\n\nreturn [{ json: outputData }];"
+      },
+      "id": "f2e3d6c9-9c5f-5c6a-ad9e-2f3a4b5c6d7e",
+      "name": "Prepare Optimization Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "analyze_performance",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a3b4c5d6-ad5f-6d7a-be8f-3a4b5c6d7e8f",
+      "name": "Route Analyze",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "edgeConnectApi",
+        "url": "={{$json.orchestrator_url}}/api/v1/appliances/={{$json.appliance_id}}/performance/analyze",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Version",
+              "value": "1.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "duration",
+              "value": "={{$json.analysis_config.duration}}"
+            },
+            {
+              "name": "metrics",
+              "value": "={{JSON.stringify($json.analysis_config.metrics)}}"
+            },
+            {
+              "name": "granularity",
+              "value": "={{$json.analysis_config.granularity}}"
+            },
+            {
+              "name": "include_applications",
+              "value": "={{$json.analysis_config.include_applications}}"
+            },
+            {
+              "name": "baseline_comparison",
+              "value": "={{$json.analysis_config.baseline_comparison}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 5000
+          }
+        }
+      },
+      "id": "b4c5d6e7-be8f-7e8f-cf9a-4b5c6d7e8f9a",
+      "name": "Analyze Performance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "edgeConnectApi",
+        "url": "={{$json.orchestrator_url}}/api/v1/appliances/={{$json.appliance_id}}/wan/optimize",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Version",
+              "value": "1.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "tcp_acceleration",
+              "value": "={{$json.wan_config.tcp_acceleration}}"
+            },
+            {
+              "name": "compression_level",
+              "value": "={{$json.wan_config.compression_level}}"
+            },
+            {
+              "name": "deduplication",
+              "value": "={{$json.wan_config.deduplication}}"
+            },
+            {
+              "name": "caching_policy",
+              "value": "={{$json.wan_config.caching_policy}}"
+            },
+            {
+              "name": "packet_coalescing",
+              "value": "={{$json.wan_config.packet_coalescing}}"
+            },
+            {
+              "name": "auto_tune",
+              "value": "={{$json.wan_config.auto_tune}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 90000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 5000
+          }
+        }
+      },
+      "id": "c5d6e7f8-cf9a-8f9a-da0b-5c6d7e8f9a0b",
+      "name": "Optimize WAN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "edgeConnectApi",
+        "url": "={{$json.orchestrator_url}}/api/v1/appliances/={{$json.appliance_id}}/qos/tune",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Version",
+              "value": "1.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "voice_priority",
+              "value": "={{$json.qos_config.voice_priority}}"
+            },
+            {
+              "name": "video_priority",
+              "value": "={{$json.qos_config.video_priority}}"
+            },
+            {
+              "name": "data_priority",
+              "value": "={{$json.qos_config.data_priority}}"
+            },
+            {
+              "name": "background_priority",
+              "value": "={{$json.qos_config.background_priority}}"
+            },
+            {
+              "name": "latency_threshold",
+              "value": "={{$json.qos_config.latency_threshold}}"
+            },
+            {
+              "name": "bandwidth_guarantee",
+              "value": "={{$json.qos_config.bandwidth_guarantee}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 5000
+          }
+        }
+      },
+      "id": "d6e7f8a9-da0b-9a0b-eb1c-6d7e8f9a0b1c",
+      "name": "Tune QoS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "edgeConnectApi",
+        "url": "={{$json.orchestrator_url}}/api/v1/appliances/={{$json.appliance_id}}/compression/configure",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Version",
+              "value": "1.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "algorithm",
+              "value": "={{$json.compression_config.algorithm}}"
+            },
+            {
+              "name": "level",
+              "value": "={{$json.compression_config.level}}"
+            },
+            {
+              "name": "exclude_types",
+              "value": "={{JSON.stringify($json.compression_config.exclude_types)}}"
+            },
+            {
+              "name": "cpu_threshold",
+              "value": "={{$json.compression_config.cpu_threshold}}"
+            },
+            {
+              "name": "adaptive_compression",
+              "value": "={{$json.compression_config.adaptive_compression}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 5000
+          }
+        }
+      },
+      "id": "e7f8a9b0-eb1c-a0b1-fc2d-7e8f9a0b1c2d",
+      "name": "Compress Traffic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "edgeConnectApi",
+        "url": "={{$json.orchestrator_url}}/api/v1/appliances/={{$json.appliance_id}}/loadbalance/configure",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Version",
+              "value": "1.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "algorithm",
+              "value": "={{$json.load_balance_config.algorithm}}"
+            },
+            {
+              "name": "health_check_interval",
+              "value": "={{$json.load_balance_config.health_check_interval}}"
+            },
+            {
+              "name": "failover_threshold",
+              "value": "={{$json.load_balance_config.failover_threshold}}"
+            },
+            {
+              "name": "sticky_sessions",
+              "value": "={{$json.load_balance_config.sticky_sessions}}"
+            },
+            {
+              "name": "weight_adjustment",
+              "value": "={{$json.load_balance_config.weight_adjustment}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 5000
+          }
+        }
+      },
+      "id": "f8a9b0c1-fc2d-b1c2-ad3e-8f9a0b1c2d3e",
+      "name": "Balance Load",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "edgeConnectApi",
+        "url": "={{$json.orchestrator_url}}/api/v1/reports/performance/generate",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Version",
+              "value": "1.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "appliance_id",
+              "value": "={{$json.appliance_id}}"
+            },
+            {
+              "name": "time_period",
+              "value": "={{$json.report_config.time_period}}"
+            },
+            {
+              "name": "report_type",
+              "value": "={{$json.report_config.report_type}}"
+            },
+            {
+              "name": "include_recommendations",
+              "value": "={{$json.report_config.include_recommendations}}"
+            },
+            {
+              "name": "format",
+              "value": "={{$json.report_config.format}}"
+            },
+            {
+              "name": "email_recipients",
+              "value": "={{JSON.stringify($json.report_config.email_recipients)}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000,
+          "retry": {
+            "maxTries": 2,
+            "waitBetweenTries": 10000
+          }
+        }
+      },
+      "id": "a9b0c1d2-ad3e-c2d3-be4f-9a0b1c2d3e4f",
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process EdgeConnect Performance Optimization response and handle errors\nconst responseData = $input.item(0).json;\nconst operation = $input.item(0).json.operation || 'unknown';\nconst timestamp = new Date().toISOString();\n\n// Determine success based on HTTP status code\nconst isSuccess = responseData.status_code ? \n  (responseData.status_code >= 200 && responseData.status_code < 300) : \n  (!responseData.error && responseData.success !== false);\n\n// Categorize errors\nlet errorCategory = 'none';\nlet errorMessage = null;\n\nif (!isSuccess) {\n  const statusCode = responseData.status_code || 0;\n  const errorText = responseData.error || responseData.message || 'Unknown error';\n  \n  if (statusCode === 400) {\n    errorCategory = 'validation_error';\n    errorMessage = `Invalid optimization configuration: ${errorText}`;\n  } else if (statusCode === 401) {\n    errorCategory = 'authentication_error';\n    errorMessage = `Authentication failed: ${errorText}`;\n  } else if (statusCode === 403) {\n    errorCategory = 'authorization_error';\n    errorMessage = `Authorization failed: ${errorText}`;\n  } else if (statusCode === 404) {\n    errorCategory = 'appliance_not_found';\n    errorMessage = `Appliance not found: ${errorText}`;\n  } else if (statusCode === 409) {\n    errorCategory = 'optimization_conflict';\n    errorMessage = `Optimization conflict: ${errorText}`;\n  } else if (statusCode === 422) {\n    errorCategory = 'resource_unavailable';\n    errorMessage = `Resource unavailable: ${errorText}`;\n  } else if (statusCode === 429) {\n    errorCategory = 'rate_limit_error';\n    errorMessage = `Rate limit exceeded: ${errorText}`;\n  } else if (statusCode >= 500) {\n    errorCategory = 'orchestrator_error';\n    errorMessage = `Orchestrator error: ${errorText}`;\n  } else {\n    errorCategory = 'unknown_error';\n    errorMessage = `Unexpected error: ${errorText}`;\n  }\n}\n\n// Format success response\nlet result = {\n  operation,\n  success: isSuccess,\n  timestamp,\n  error_category: errorCategory,\n  error_message: errorMessage\n};\n\n// Add operation-specific success data\nif (isSuccess) {\n  switch (operation) {\n    case 'analyze_performance':\n      result.analysis_id = responseData.analysis_id;\n      result.baseline_metrics = responseData.baseline_metrics || {};\n      result.current_metrics = responseData.current_metrics || {};\n      result.performance_score = responseData.performance_score || 0;\n      result.bottlenecks = responseData.bottlenecks || [];\n      result.recommendations = responseData.recommendations || [];\n      result.message = `Performance analysis completed - Score: ${result.performance_score}/100`;\n      break;\n      \n    case 'optimize_wan':\n      result.optimization_id = responseData.optimization_id;\n      result.wan_improvements = responseData.wan_improvements || {};\n      result.throughput_increase = responseData.throughput_increase || '0%';\n      result.latency_reduction = responseData.latency_reduction || '0%';\n      result.message = `WAN optimization applied - Throughput: +${result.throughput_increase}, Latency: -${result.latency_reduction}`;\n      break;\n      \n    case 'tune_qos':\n      result.qos_policy_id = responseData.qos_policy_id;\n      result.priority_changes = responseData.priority_changes || [];\n      result.bandwidth_allocation = responseData.bandwidth_allocation || {};\n      result.message = `QoS tuning applied - ${result.priority_changes.length} priority changes made`;\n      break;\n      \n    case 'compress_traffic':\n      result.compression_id = responseData.compression_id;\n      result.compression_ratio = responseData.compression_ratio || '0%';\n      result.bandwidth_savings = responseData.bandwidth_savings || '0%';\n      result.cpu_usage_increase = responseData.cpu_usage_increase || '0%';\n      result.message = `Traffic compression enabled - ${result.compression_ratio} compression, ${result.bandwidth_savings} bandwidth saved`;\n      break;\n      \n    case 'balance_load':\n      result.load_balancer_id = responseData.load_balancer_id;\n      result.balanced_links = responseData.balanced_links || [];\n      result.load_distribution = responseData.load_distribution || {};\n      result.message = `Load balancing configured - ${result.balanced_links.length} links balanced`;\n      break;\n      \n    case 'generate_report':\n      result.report_id = responseData.report_id;\n      result.report_url = responseData.report_url;\n      result.report_format = responseData.format || 'pdf';\n      result.email_sent = responseData.email_sent || false;\n      result.message = `Performance report generated - ${result.report_format.toUpperCase()}`;\n      break;\n      \n    default:\n      result.message = 'Performance optimization operation completed successfully';\n  }\n  \n  // Add raw response data for debugging\n  result.raw_response = responseData;\n}\n\n// Determine notification level\nresult.notification_level = isSuccess ? 'success' : \n  (['authentication_error', 'authorization_error', 'orchestrator_error'].includes(errorCategory) ? 'critical' : 'warning');\n\n// Add rollback requirement for critical failures\nif (!isSuccess && ['optimize_wan', 'tune_qos', 'compress_traffic', 'balance_load'].includes(operation)) {\n  result.requires_rollback = ['optimization_conflict', 'orchestrator_error'].includes(errorCategory);\n}\n\n// Add performance improvement metrics\nif (operation === 'analyze_performance' && isSuccess) {\n  result.improvement_potential = {\n    wan_optimization: responseData.wan_optimization_potential || 0,\n    qos_tuning: responseData.qos_tuning_potential || 0,\n    compression: responseData.compression_potential || 0,\n    load_balancing: responseData.load_balancing_potential || 0\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "b0c1d2e3-be4f-d3e4-cf5a-0b1c2d3e4f5a",
+      "name": "Process Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{$json.success}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c1d2e3f4-cf5a-e4f5-da6b-1c2d3e4f5a6b",
+      "name": "Check Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C06TQSQMKQM",
+          "mode": "id"
+        },
+        "text": "✅ **EdgeConnect Performance Optimization Success**\\n\\n**Operation:** {{$json.operation}}\\n**Appliance:** {{$json.appliance_id}}\\n**Message:** {{$json.message}}\\n**Timestamp:** {{$json.timestamp}}\\n\\n**Performance Metrics:**\\n{{$json.throughput_increase ? '• Throughput: +' + $json.throughput_increase : ''}}\\n{{$json.latency_reduction ? '• Latency: -' + $json.latency_reduction : ''}}\\n{{$json.compression_ratio ? '• Compression: ' + $json.compression_ratio : ''}}\\n{{$json.bandwidth_savings ? '• Bandwidth Saved: ' + $json.bandwidth_savings : ''}}\\n{{$json.performance_score ? '• Performance Score: ' + $json.performance_score + '/100' : ''}}",
+        "otherOptions": {
+          "mrkdwn": true,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "id": "d2e3f4a5-da6b-f5a6-eb7c-2d3e4f5a6b7c",
+      "name": "Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C06TQSQMKQM",
+          "mode": "id"
+        },
+        "text": "❌ **EdgeConnect Performance Optimization Failed**\\n\\n**Operation:** {{$json.operation}}\\n**Appliance:** {{$json.appliance_id}}\\n**Error Category:** {{$json.error_category}}\\n**Error Message:** {{$json.error_message}}\\n**Timestamp:** {{$json.timestamp}}\\n\\n**Notification Level:** {{$json.notification_level}}\\n{{$json.requires_rollback ? '🔄 **Rollback Required**' : ''}}\\n\\n**Troubleshooting:**\\n• Check EdgeConnect Orchestrator connectivity\\n• Verify appliance resource availability\\n• Review optimization configuration syntax\\n• Ensure sufficient CPU/memory resources\\n• Validate network connectivity and policies",
+        "otherOptions": {
+          "mrkdwn": true,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "id": "e3f4a5b6-eb7c-a6b7-fc8d-3e4f5a6b7c8d",
+      "name": "Error Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "f4a5b6c7-fc8d-b7c8-ad9e-4f5a6b7c8d9e",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "optimize_wan",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a5b6c7d8-ad9e-c8d9-be0f-5a6b7c8d9e0f",
+      "name": "Route WAN",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "tune_qos",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b6c7d8e9-be0f-d9e0-cf1a-6b7c8d9e0f1a",
+      "name": "Route QoS",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "compress_traffic",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c7d8e9f0-cf1a-e0f1-da2b-7c8d9e0f1a2b",
+      "name": "Route Compression",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "balance_load",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d8e9f0a1-da2b-f1a2-eb3c-8d9e0f1a2b3c",
+      "name": "Route Load Balance",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "generate_report",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e9f0a1b2-eb3c-a2b3-fc4d-9e0f1a2b3c4d",
+      "name": "Route Report",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Performance Optimization Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Optimization Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Optimization Data": {
+      "main": [
+        [
+          {
+            "node": "Route Analyze",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route WAN",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route QoS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Compression",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Load Balance",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Analyze": {
+      "main": [
+        [
+          {
+            "node": "Analyze Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route WAN": {
+      "main": [
+        [
+          {
+            "node": "Optimize WAN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route QoS": {
+      "main": [
+        [
+          {
+            "node": "Tune QoS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Compression": {
+      "main": [
+        [
+          {
+            "node": "Compress Traffic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Load Balance": {
+      "main": [
+        [
+          {
+            "node": "Balance Load",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Report": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Performance": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Optimize WAN": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tune QoS": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compress Traffic": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Balance Load": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Response": {
+      "main": [
+        [
+          {
+            "node": "Check Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Success": {
+      "main": [
+        [
+          {
+            "node": "Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Notification": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCreatedBy": "Claude Code",
+    "description": "Comprehensive EdgeConnect Performance Optimization workflow with support for WAN optimization, QoS tuning, traffic compression, load balancing, and performance analysis. Includes multiple optimization templates for different use cases.",
+    "tags": ["edgeconnect", "sd-wan", "performance", "optimization", "qos", "compression", "load-balancing"]
+  }
+}

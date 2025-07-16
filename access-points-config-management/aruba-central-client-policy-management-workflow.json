@@ -1,0 +1,1074 @@
+{
+  "meta": {
+    "templateCreatedBy": "{\\"name\\":\\"Claude Code\\",\\"id\\":1,\\"email\\":\\"claude@anthropic.com\\"}",
+    "instanceId": "12345678901234567890123456789012"
+  },
+  "name": "Aruba Central Client Policy Management",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e4b8c123-4567-89ab-cdef-123456789abc",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "operation",
+              "value": "={{ $json.operation || 'create_user' }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id || '' }}"
+            },
+            {
+              "name": "username",
+              "value": "={{ $json.username || '' }}"
+            },
+            {
+              "name": "user_email",
+              "value": "={{ $json.user_email || '' }}"
+            },
+            {
+              "name": "user_role",
+              "value": "={{ $json.user_role || 'guest' }}"
+            },
+            {
+              "name": "client_mac",
+              "value": "={{ $json.client_mac || '' }}"
+            },
+            {
+              "name": "device_type",
+              "value": "={{ $json.device_type || 'guest' }}"
+            },
+            {
+              "name": "policy_name",
+              "value": "={{ $json.policy_name || 'default_policy' }}"
+            },
+            {
+              "name": "bandwidth_limit",
+              "value": "={{ $json.bandwidth_limit || '10' }}"
+            },
+            {
+              "name": "session_timeout",
+              "value": "={{ $json.session_timeout || '480' }}"
+            },
+            {
+              "name": "time_restrictions",
+              "value": "={{ $json.time_restrictions || '{}' }}"
+            },
+            {
+              "name": "vlan_assignment",
+              "value": "={{ $json.vlan_assignment || '100' }}"
+            },
+            {
+              "name": "portal_id",
+              "value": "={{ $json.portal_id || '' }}"
+            },
+            {
+              "name": "guest_duration",
+              "value": "={{ $json.guest_duration || '24' }}"
+            },
+            {
+              "name": "guest_sponsor",
+              "value": "={{ $json.guest_sponsor || '' }}"
+            },
+            {
+              "name": "certificate_type",
+              "value": "={{ $json.certificate_type || 'user' }}"
+            },
+            {
+              "name": "authentication_method",
+              "value": "={{ $json.authentication_method || 'captive_portal' }}"
+            },
+            {
+              "name": "central_base_url",
+              "value": "={{ $json.central_base_url || 'https://apigw-uswest4.central.arubanetworks.com' }}"
+            },
+            {
+              "name": "customer_id",
+              "value": "={{ $json.customer_id || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c345-6789-0123-4567-890123456789",
+      "name": "Parse Input Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1a2b3c4d-5e6f-7890-1234-567890123456",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create_user",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2c3d456-7890-1234-5678-901234567890",
+      "name": "Route Operation - Create User",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "2b3c4d5e-6f78-9012-3456-789012345678",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update_user",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3d4e567-8901-2345-6789-012345678901",
+      "name": "Route Operation - Update User",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "3c4d5e6f-7890-1234-5678-901234567890",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create_guest",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f678-9012-3456-7890-123456789012",
+      "name": "Route Operation - Create Guest",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 440]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "4d5e6f78-9012-3456-7890-123456789012",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "apply_policy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5f6g789-0123-4567-8901-234567890123",
+      "name": "Route Operation - Apply Policy",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 560]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.central_base_url }}/platform/authz/v1/users",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApiAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Customer-Id",
+              "value": "={{ $json.customer_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $json.username }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.user_email }}"
+            },
+            {
+              "name": "role",
+              "value": "={{ $json.user_role }}"
+            },
+            {
+              "name": "password",
+              "value": "TempPassword123!"
+            },
+            {
+              "name": "enabled",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "f6g7h890-1234-5678-9012-345678901234",
+      "name": "Create User API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.central_base_url }}/platform/authz/v1/users/{{ $json.user_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApiAuth",
+        "method": "PUT",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Customer-Id",
+              "value": "={{ $json.customer_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $json.username }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.user_email }}"
+            },
+            {
+              "name": "role",
+              "value": "={{ $json.user_role }}"
+            },
+            {
+              "name": "enabled",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "g7h8i901-2345-6789-0123-456789012345",
+      "name": "Update User API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.central_base_url }}/guest/v1/visitors",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApiAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Customer-Id",
+              "value": "={{ $json.customer_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ $json.username }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.user_email }}"
+            },
+            {
+              "name": "company",
+              "value": "Guest"
+            },
+            {
+              "name": "valid_duration",
+              "value": "={{ parseInt($json.guest_duration) }}"
+            },
+            {
+              "name": "valid_duration_unit",
+              "value": "hours"
+            },
+            {
+              "name": "sponsor_email",
+              "value": "={{ $json.guest_sponsor }}"
+            },
+            {
+              "name": "notify_sponsor",
+              "value": "true"
+            },
+            {
+              "name": "portal_id",
+              "value": "={{ $json.portal_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "h8i9j012-3456-7890-1234-567890123456",
+      "name": "Create Guest User API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 440]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate policy configuration based on device type and user role\nconst deviceType = $input.first().json.device_type;\nconst userRole = $input.first().json.user_role;\nconst bandwidthLimit = parseInt($input.first().json.bandwidth_limit);\nconst sessionTimeout = parseInt($input.first().json.session_timeout);\nconst vlanAssignment = parseInt($input.first().json.vlan_assignment);\nconst authMethod = $input.first().json.authentication_method;\n\n// Policy templates based on device type and user role\nconst policyTemplates = {\n  corporate: {\n    network_access: 'full',\n    bandwidth_down: bandwidthLimit || 100,\n    bandwidth_up: (bandwidthLimit || 100) / 2,\n    session_timeout: sessionTimeout || 0, // No timeout for corporate\n    vlan_id: vlanAssignment || 10,\n    firewall_rules: [\n      { action: 'allow', destination: 'any', service: 'any' }\n    ],\n    application_policies: [\n      { category: 'productivity', action: 'allow' },\n      { category: 'business', action: 'allow' },\n      { category: 'collaboration', action: 'allow' }\n    ]\n  },\n  contractors: {\n    network_access: 'limited',\n    bandwidth_down: Math.min(bandwidthLimit || 50, 50),\n    bandwidth_up: Math.min((bandwidthLimit || 50) / 2, 25),\n    session_timeout: sessionTimeout || 480, // 8 hours\n    vlan_id: vlanAssignment || 20,\n    firewall_rules: [\n      { action: 'allow', destination: 'internet', service: 'http' },\n      { action: 'allow', destination: 'internet', service: 'https' },\n      { action: 'deny', destination: 'internal', service: 'any' }\n    ],\n    time_restrictions: {\n      allowed_hours: '08:00-18:00',\n      allowed_days: 'Mon-Fri'\n    }\n  },\n  guest: {\n    network_access: 'internet_only',\n    bandwidth_down: Math.min(bandwidthLimit || 10, 20),\n    bandwidth_up: Math.min((bandwidthLimit || 10) / 2, 10),\n    session_timeout: sessionTimeout || 240, // 4 hours\n    vlan_id: vlanAssignment || 100,\n    firewall_rules: [\n      { action: 'allow', destination: 'internet', service: 'http' },\n      { action: 'allow', destination: 'internet', service: 'https' },\n      { action: 'deny', destination: 'internal', service: 'any' }\n    ],\n    captive_portal: true,\n    terms_acceptance_required: true\n  },\n  byod: {\n    network_access: 'segregated',\n    bandwidth_down: Math.min(bandwidthLimit || 30, 50),\n    bandwidth_up: Math.min((bandwidthLimit || 30) / 2, 25),\n    session_timeout: sessionTimeout || 720, // 12 hours\n    vlan_id: vlanAssignment || 30,\n    firewall_rules: [\n      { action: 'allow', destination: 'internet', service: 'any' },\n      { action: 'allow', destination: 'internal', service: 'email' },\n      { action: 'allow', destination: 'internal', service: 'web' },\n      { action: 'deny', destination: 'internal', service: 'file_share' }\n    ],\n    device_compliance_required: true,\n    certificate_auth: authMethod === '802.1x'\n  },\n  iot: {\n    network_access: 'restricted',\n    bandwidth_down: Math.min(bandwidthLimit || 5, 10),\n    bandwidth_up: Math.min((bandwidthLimit || 5) / 2, 5),\n    session_timeout: 0, // No timeout for IoT\n    vlan_id: vlanAssignment || 200,\n    firewall_rules: [\n      { action: 'allow', destination: 'specific_servers', service: 'https' },\n      { action: 'deny', destination: 'any', service: 'any' }\n    ],\n    device_specific_policies: true\n  }\n};\n\n// Role-based enhancements\nconst roleEnhancements = {\n  executive: {\n    priority_bandwidth: true,\n    qos_class: 'platinum',\n    additional_bandwidth: 50\n  },\n  manager: {\n    priority_bandwidth: true,\n    qos_class: 'gold',\n    additional_bandwidth: 25\n  },\n  employee: {\n    qos_class: 'silver'\n  },\n  guest: {\n    qos_class: 'bronze'\n  }\n};\n\n// Generate final policy\nlet policy = policyTemplates[deviceType] || policyTemplates.guest;\nconst roleEnhancement = roleEnhancements[userRole] || roleEnhancements.guest;\n\n// Apply role enhancements\nif (roleEnhancement.additional_bandwidth) {\n  policy.bandwidth_down += roleEnhancement.additional_bandwidth;\n  policy.bandwidth_up += roleEnhancement.additional_bandwidth / 2;\n}\n\npolicy.qos_class = roleEnhancement.qos_class;\npolicy.priority_bandwidth = roleEnhancement.priority_bandwidth || false;\n\n// Add authentication method\npolicy.authentication = {\n  method: authMethod,\n  require_cert: authMethod === '802.1x',\n  captive_portal: authMethod === 'captive_portal',\n  mac_auth: authMethod === 'mac_auth',\n  psk: authMethod === 'psk'\n};\n\n// Add compliance requirements\npolicy.compliance = {\n  antivirus_required: deviceType === 'byod' || deviceType === 'corporate',\n  os_updates_required: deviceType === 'corporate',\n  encryption_required: deviceType === 'corporate' || deviceType === 'byod'\n};\n\nreturn [{\n  json: {\n    ...policy,\n    policy_name: $input.first().json.policy_name,\n    client_mac: $input.first().json.client_mac,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "i9j0k123-4567-8901-2345-678901234567",
+      "name": "Generate Policy Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 560]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.central_base_url }}/configuration/v1/clients/{{ $json.client_mac }}/policy",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApiAuth",
+        "method": "PUT",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Customer-Id",
+              "value": "={{ $('Parse Input Parameters').first().json.customer_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "j0k1l234-5678-9012-3456-789012345678",
+      "name": "Apply Client Policy API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 560]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "5e6f7890-1234-5678-9012-345678901234",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "configure_byod",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "k1l2m345-6789-0123-4567-890123456789",
+      "name": "Route Operation - Configure BYOD",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 680]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate BYOD configuration\nconst deviceType = $input.first().json.device_type;\nconst authMethod = $input.first().json.authentication_method;\nconst certificateType = $input.first().json.certificate_type;\n\n// BYOD configuration template\nconst byodConfig = {\n  enabled: true,\n  device_registration: {\n    self_registration: true,\n    admin_approval_required: deviceType === 'corporate',\n    sponsor_approval_required: deviceType === 'contractor'\n  },\n  authentication: {\n    method: authMethod,\n    certificate_based: authMethod === '802.1x',\n    multi_factor: deviceType === 'corporate'\n  },\n  device_compliance: {\n    antivirus_check: true,\n    os_version_check: true,\n    jailbreak_detection: true,\n    device_encryption_required: true\n  },\n  onboarding: {\n    automatic_profile_install: true,\n    wifi_profile_install: true,\n    certificate_install: authMethod === '802.1x',\n    vpn_profile_install: deviceType === 'corporate'\n  },\n  policies: {\n    container_mode: deviceType === 'corporate',\n    app_wrapping: true,\n    data_loss_prevention: true,\n    remote_wipe_enabled: true\n  },\n  certificates: {\n    type: certificateType,\n    auto_renewal: true,\n    validity_period: 365, // days\n    ca_validation: true\n  },\n  network_access: {\n    vlan_assignment: 'dynamic',\n    quarantine_vlan: 999,\n    compliant_vlan: 30,\n    non_compliant_action: 'quarantine'\n  }\n};\n\nreturn [{\n  json: {\n    ...byodConfig,\n    timestamp: new Date().toISOString(),\n    configured_by: 'n8n_automation'\n  }\n}];"
+      },
+      "id": "l2m3n456-7890-1234-5678-901234567890",
+      "name": "Generate BYOD Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 680]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Parse Input Parameters').first().json.central_base_url }}/device/v1/byod",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApiAuth",
+        "method": "PUT",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Customer-Id",
+              "value": "={{ $('Parse Input Parameters').first().json.customer_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "m3n4o567-8901-2345-6789-012345678901",
+      "name": "Configure BYOD API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 680]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "6f789012-3456-7890-1234-567890123456",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "troubleshoot_client",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n4o5p678-9012-3456-7890-123456789012",
+      "name": "Route Operation - Troubleshoot Client",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Client troubleshooting automation\nconst clientMac = $input.first().json.client_mac;\nconst baseUrl = $input.first().json.central_base_url;\nconst customerId = $input.first().json.customer_id;\n\n// Troubleshooting steps to perform\nconst troubleshootingSteps = [\n  {\n    name: 'Get Client Information',\n    url: `${baseUrl}/monitoring/v1/clients`,\n    method: 'GET',\n    params: { macaddr: clientMac }\n  },\n  {\n    name: 'Check Authentication Status',\n    url: `${baseUrl}/monitoring/v1/clients/${clientMac}/authentication`,\n    method: 'GET'\n  },\n  {\n    name: 'Get Client Health',\n    url: `${baseUrl}/monitoring/v1/clients/${clientMac}/health`,\n    method: 'GET'\n  },\n  {\n    name: 'Check Policy Assignment',\n    url: `${baseUrl}/configuration/v1/clients/${clientMac}/policy`,\n    method: 'GET'\n  },\n  {\n    name: 'Get Audit Trail',\n    url: `${baseUrl}/monitoring/v1/audit_trail`,\n    method: 'GET',\n    params: { client_mac: clientMac, limit: 50 }\n  }\n];\n\nreturn troubleshootingSteps.map(step => {\n  return {\n    json: {\n      ...step,\n      customer_id: customerId,\n      timestamp: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "id": "o5p6q789-0123-4567-8901-234567890123",
+      "name": "Generate Troubleshooting Steps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 800]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApiAuth",
+        "method": "={{ $json.method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Customer-Id",
+              "value": "={{ $json.customer_id }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "macaddr",
+              "value": "={{ $json.params && $json.params.macaddr ? $json.params.macaddr : '' }}"
+            },
+            {
+              "name": "client_mac",
+              "value": "={{ $json.params && $json.params.client_mac ? $json.params.client_mac : '' }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $json.params && $json.params.limit ? $json.params.limit : '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "p6q7r890-1234-5678-9012-345678901234",
+      "name": "Execute Troubleshooting API Calls",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate troubleshooting results\nconst allResults = $input.all();\nconst clientMac = $('Parse Input Parameters').first().json.client_mac;\n\n// Analyze results and generate diagnosis\nconst diagnosis = {\n  client_mac: clientMac,\n  timestamp: new Date().toISOString(),\n  overall_status: 'healthy',\n  issues_found: [],\n  recommendations: [],\n  detailed_results: {}\n};\n\nallResults.forEach((result, index) => {\n  const stepName = result.json.name || `Step ${index + 1}`;\n  diagnosis.detailed_results[stepName] = {\n    status: result.json.statusCode || 'unknown',\n    data: result.json.data || result.json,\n    timestamp: result.json.timestamp\n  };\n  \n  // Analyze for common issues\n  if (result.json.statusCode >= 400) {\n    diagnosis.overall_status = 'issues_detected';\n    diagnosis.issues_found.push({\n      step: stepName,\n      issue: `API call failed with status ${result.json.statusCode}`,\n      severity: 'high'\n    });\n  }\n  \n  // Check for authentication issues\n  if (stepName === 'Check Authentication Status' && result.json.data) {\n    const authData = result.json.data;\n    if (authData.auth_status === 'failed') {\n      diagnosis.issues_found.push({\n        step: stepName,\n        issue: 'Client authentication failed',\n        severity: 'high',\n        details: authData\n      });\n      diagnosis.recommendations.push('Check client credentials and authentication method');\n    }\n  }\n  \n  // Check for policy issues\n  if (stepName === 'Check Policy Assignment' && result.json.data) {\n    const policyData = result.json.data;\n    if (!policyData.policy_assigned) {\n      diagnosis.issues_found.push({\n        step: stepName,\n        issue: 'No policy assigned to client',\n        severity: 'medium'\n      });\n      diagnosis.recommendations.push('Assign appropriate policy based on device type and user role');\n    }\n  }\n  \n  // Check client health\n  if (stepName === 'Get Client Health' && result.json.data) {\n    const healthData = result.json.data;\n    if (healthData.signal_strength < -70) {\n      diagnosis.issues_found.push({\n        step: stepName,\n        issue: 'Poor signal strength detected',\n        severity: 'medium',\n        details: { signal_strength: healthData.signal_strength }\n      });\n      diagnosis.recommendations.push('Consider relocating access point or checking for interference');\n    }\n  }\n});\n\n// Set overall status based on issues\nif (diagnosis.issues_found.length === 0) {\n  diagnosis.overall_status = 'healthy';\n} else if (diagnosis.issues_found.some(issue => issue.severity === 'high')) {\n  diagnosis.overall_status = 'critical';\n} else {\n  diagnosis.overall_status = 'issues_detected';\n}\n\nreturn [{ json: diagnosis }];"
+      },
+      "id": "q7r8s901-2345-6789-0123-456789012345",
+      "name": "Analyze Troubleshooting Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 800]
+    },
+    {
+      "parameters": {},
+      "id": "r8s9t012-3456-7890-1234-567890123456",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 1000]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced error handling with policy rollback\nconst error = $input.first().json;\nconst operation = $('Parse Input Parameters').first()?.json?.operation || 'unknown';\nconst clientMac = $('Parse Input Parameters').first()?.json?.client_mac;\nconst userId = $('Parse Input Parameters').first()?.json?.user_id;\n\n// Categorize error types\nlet errorCategory = 'unknown';\nlet rollbackRequired = false;\nlet rollbackSteps = [];\n\nif (error.message?.includes('authentication') || error.message?.includes('401')) {\n  errorCategory = 'authentication';\n} else if (error.message?.includes('authorization') || error.message?.includes('403')) {\n  errorCategory = 'authorization';\n} else if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {\n  errorCategory = 'timeout';\n} else if (error.message?.includes('network') || error.message?.includes('ECONNREFUSED')) {\n  errorCategory = 'network';\n} else if (error.message?.includes('rate limit') || error.message?.includes('429')) {\n  errorCategory = 'rate_limit';\n} else if (error.statusCode >= 500) {\n  errorCategory = 'server_error';\n} else if (error.statusCode >= 400) {\n  errorCategory = 'client_error';\n}\n\n// Determine rollback requirements\nif (['apply_policy', 'create_user', 'configure_byod'].includes(operation)) {\n  rollbackRequired = true;\n  \n  if (operation === 'apply_policy' && clientMac) {\n    rollbackSteps.push({\n      action: 'remove_policy',\n      target: clientMac,\n      api_call: `/configuration/v1/clients/${clientMac}/policy`,\n      method: 'DELETE'\n    });\n  }\n  \n  if (operation === 'create_user' && userId) {\n    rollbackSteps.push({\n      action: 'delete_user',\n      target: userId,\n      api_call: `/platform/authz/v1/users/${userId}`,\n      method: 'DELETE'\n    });\n  }\n  \n  if (operation === 'configure_byod') {\n    rollbackSteps.push({\n      action: 'reset_byod_config',\n      api_call: '/device/v1/byod',\n      method: 'PUT',\n      body: { enabled: false }\n    });\n  }\n}\n\n// Generate recovery recommendations\nconst recoveryRecommendations = {\n  authentication: [\n    'Verify API credentials are valid and not expired',\n    'Check token permissions and scopes',\n    'Regenerate access token if necessary'\n  ],\n  authorization: [\n    'Verify user has required permissions for this operation',\n    'Check customer ID is correct',\n    'Review role assignments'\n  ],\n  timeout: [\n    'Retry the operation with exponential backoff',\n    'Check network connectivity to Aruba Central',\n    'Consider splitting bulk operations into smaller batches'\n  ],\n  network: [\n    'Verify network connectivity',\n    'Check firewall rules and proxy settings',\n    'Test with different network connection'\n  ],\n  rate_limit: [\n    'Implement rate limiting in workflow',\n    'Add delays between API calls',\n    'Consider using bulk operations where available'\n  ],\n  server_error: [\n    'Retry after short delay',\n    'Check Aruba Central service status',\n    'Contact Aruba support if persistent'\n  ],\n  client_error: [\n    'Review request parameters for validity',\n    'Check API documentation for required fields',\n    'Validate input data format'\n  ]\n};\n\nconst errorResponse = {\n  error_id: `error_${Date.now()}`,\n  timestamp: new Date().toISOString(),\n  operation_failed: operation,\n  error_category: errorCategory,\n  error_details: {\n    message: error.message,\n    status_code: error.statusCode,\n    node_name: error.node?.name,\n    stack_trace: error.stack\n  },\n  rollback_required: rollbackRequired,\n  rollback_steps: rollbackSteps,\n  recovery_recommendations: recoveryRecommendations[errorCategory] || recoveryRecommendations.unknown,\n  next_actions: [\n    'Review error details and implement recommended fixes',\n    'Execute rollback steps if necessary',\n    'Test with corrected parameters',\n    'Monitor for recurring issues'\n  ]\n};\n\nreturn [{ json: errorResponse }];"
+      },
+      "id": "s9t0u123-4567-8901-2345-678901234567",
+      "name": "Process Error and Generate Rollback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 1000]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "7890123456789012345678901234567890",
+              "leftValue": "={{ $json.rollback_required }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "t0u1v234-5678-9012-3456-789012345678",
+      "name": "Check Rollback Required",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 1000]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.api_call }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApiAuth",
+        "method": "={{ $json.method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Customer-Id",
+              "value": "={{ $('Parse Input Parameters').first().json.customer_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "body": "={{ $json.body ? JSON.stringify($json.body) : '{}' }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 2,
+            "waitBetweenTries": 1000
+          },
+          "ignoreHttpStatusErrors": true
+        }
+      },
+      "id": "u1v2w345-6789-0123-4567-890123456789",
+      "name": "Execute Rollback Steps",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 1000]
+    },
+    {
+      "parameters": {
+        "channel": "#network-alerts",
+        "text": "🚨 Aruba Central Client Policy Management Alert\n\n**Operation**: {{ $('Parse Input Parameters').first().json.operation }}\n**Status**: {{ $json.overall_status || 'Error' }}\n**Client MAC**: {{ $('Parse Input Parameters').first().json.client_mac || 'N/A' }}\n**Timestamp**: {{ $json.timestamp }}\n\n{% if $json.error_category %}**Error Category**: {{ $json.error_category }}{% endif %}\n{% if $json.issues_found %}**Issues Found**: {{ $json.issues_found.length }}{% endif %}\n{% if $json.rollback_required %}**Rollback**: {{ $json.rollback_required ? 'Required' : 'Not Required' }}{% endif %}\n\n**Details**: Check n8n workflow execution for full details.",
+        "otherOptions": {}
+      },
+      "id": "v2w3x456-7890-1234-5678-901234567890",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare final response with comprehensive results\nconst inputParams = $('Parse Input Parameters').first().json;\nconst operation = inputParams.operation;\n\n// Collect results from different operation paths\nlet operationResult = {};\nlet success = true;\nlet message = '';\n\n// Determine which operation was executed and collect results\nswitch(operation) {\n  case 'create_user':\n    const createUserResult = $('Create User API Call').first()?.json;\n    if (createUserResult) {\n      operationResult = createUserResult;\n      success = createUserResult.statusCode < 400;\n      message = success ? 'User created successfully' : 'Failed to create user';\n    }\n    break;\n    \n  case 'update_user':\n    const updateUserResult = $('Update User API Call').first()?.json;\n    if (updateUserResult) {\n      operationResult = updateUserResult;\n      success = updateUserResult.statusCode < 400;\n      message = success ? 'User updated successfully' : 'Failed to update user';\n    }\n    break;\n    \n  case 'create_guest':\n    const createGuestResult = $('Create Guest User API Call').first()?.json;\n    if (createGuestResult) {\n      operationResult = createGuestResult;\n      success = createGuestResult.statusCode < 400;\n      message = success ? 'Guest user created successfully' : 'Failed to create guest user';\n    }\n    break;\n    \n  case 'apply_policy':\n    const policyResult = $('Apply Client Policy API Call').first()?.json;\n    if (policyResult) {\n      operationResult = policyResult;\n      success = policyResult.statusCode < 400;\n      message = success ? 'Policy applied successfully' : 'Failed to apply policy';\n    }\n    break;\n    \n  case 'configure_byod':\n    const byodResult = $('Configure BYOD API Call').first()?.json;\n    if (byodResult) {\n      operationResult = byodResult;\n      success = byodResult.statusCode < 400;\n      message = success ? 'BYOD configured successfully' : 'Failed to configure BYOD';\n    }\n    break;\n    \n  case 'troubleshoot_client':\n    const troubleshootResult = $('Analyze Troubleshooting Results').first()?.json;\n    if (troubleshootResult) {\n      operationResult = troubleshootResult;\n      success = troubleshootResult.overall_status !== 'critical';\n      message = `Client troubleshooting completed - Status: ${troubleshootResult.overall_status}`;\n    }\n    break;\n    \n  default:\n    message = `Unknown operation: ${operation}`;\n    success = false;\n}\n\n// Check for error handling results\nconst errorResult = $('Process Error and Generate Rollback').first()?.json;\nif (errorResult) {\n  success = false;\n  message = `Operation failed: ${errorResult.error_category}`;\n  operationResult = errorResult;\n}\n\n// Generate comprehensive response\nconst response = {\n  workflow_name: 'Aruba Central Client Policy Management',\n  execution_id: $execution.id,\n  timestamp: new Date().toISOString(),\n  operation: operation,\n  success: success,\n  message: message,\n  input_parameters: inputParams,\n  operation_result: operationResult,\n  execution_summary: {\n    duration_ms: Date.now() - new Date($execution.startedAt).getTime(),\n    nodes_executed: $workflow.nodes.length,\n    api_calls_made: Object.keys(operationResult).length > 0 ? 1 : 0\n  }\n};\n\n// Add policy details for policy operations\nif (operation === 'apply_policy') {\n  const policyConfig = $('Generate Policy Configuration').first()?.json;\n  if (policyConfig) {\n    response.policy_details = {\n      device_type: inputParams.device_type,\n      user_role: inputParams.user_role,\n      bandwidth_limit: policyConfig.bandwidth_down,\n      session_timeout: policyConfig.session_timeout,\n      vlan_assignment: policyConfig.vlan_id,\n      authentication_method: policyConfig.authentication?.method\n    };\n  }\n}\n\n// Add troubleshooting details for troubleshoot operations\nif (operation === 'troubleshoot_client') {\n  const troubleshootResult = $('Analyze Troubleshooting Results').first()?.json;\n  if (troubleshootResult) {\n    response.troubleshooting_summary = {\n      overall_status: troubleshootResult.overall_status,\n      issues_found: troubleshootResult.issues_found?.length || 0,\n      recommendations: troubleshootResult.recommendations?.length || 0,\n      steps_executed: Object.keys(troubleshootResult.detailed_results || {}).length\n    };\n  }\n}\n\nreturn [{ json: response }];"
+      },
+      "id": "w3x4y567-8901-2345-6789-012345678901",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 400]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Input Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input Parameters": {
+      "main": [
+        [
+          {
+            "node": "Route Operation - Create User",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Operation - Update User",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Operation - Create Guest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Operation - Apply Policy",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Operation - Configure BYOD",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Operation - Troubleshoot Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Operation - Create User": {
+      "main": [
+        [
+          {
+            "node": "Create User API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Operation - Update User": {
+      "main": [
+        [
+          {
+            "node": "Update User API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Operation - Create Guest": {
+      "main": [
+        [
+          {
+            "node": "Create Guest User API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Operation - Apply Policy": {
+      "main": [
+        [
+          {
+            "node": "Generate Policy Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Policy Configuration": {
+      "main": [
+        [
+          {
+            "node": "Apply Client Policy API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Operation - Configure BYOD": {
+      "main": [
+        [
+          {
+            "node": "Generate BYOD Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate BYOD Configuration": {
+      "main": [
+        [
+          {
+            "node": "Configure BYOD API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Operation - Troubleshoot Client": {
+      "main": [
+        [
+          {
+            "node": "Generate Troubleshooting Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Troubleshooting Steps": {
+      "main": [
+        [
+          {
+            "node": "Execute Troubleshooting API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Troubleshooting API Calls": {
+      "main": [
+        [
+          {
+            "node": "Analyze Troubleshooting Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Process Error and Generate Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Error and Generate Rollback": {
+      "main": [
+        [
+          {
+            "node": "Check Rollback Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Rollback Required": {
+      "main": [
+        [
+          {
+            "node": "Execute Rollback Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create User API Call": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update User API Call": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Guest User API Call": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Client Policy API Call": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure BYOD API Call": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Troubleshooting Results": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Rollback Steps": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-16T10:00:00.000Z",
+      "updatedAt": "2025-01-16T10:00:00.000Z",
+      "id": "aruba-client-policy",
+      "name": "Aruba Client Policy"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-16T10:00:00.000Z",
+  "versionId": "12345678-1234-5678-9012-123456789012"
+}

@@ -1,0 +1,917 @@
+{
+  "Aruba Central (Platform)": {
+    "workflow_name": "aruba_central_(platform)_configuration_management",
+    "description": "Configuration management workflow for Aruba Central (Platform)",
+    "total_config_endpoints": 208,
+    "available_operations": {
+      "GET": 84,
+      "POST": 53,
+      "PUT": 31,
+      "PATCH": 6,
+      "DELETE": 34
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application",
+      "Configuration Updates",
+      "Policy Changes",
+      "Incremental Updates",
+      "Configuration Cleanup",
+      "Policy Removal"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "Get temporal data about AirGroup based on the parameter passed",
+          "url": "{{base_url}}/airgroup/v1/trend?start_time=<long>&end_time=<long>&trend_type=<string>&label=<string>",
+          "description": ""
+        },
+        {
+          "name": "Returns all device (AP) running configuration for a customer",
+          "url": "{{base_url}}/receiver/v1/devices_config_all?tenant_id=<string>",
+          "description": ""
+        },
+        {
+          "name": "Returns all device (AP) running configuration for a customer",
+          "url": "{{base_url}}/feasibility/v1/device_config?tenant_id=<string>",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "RMQ message triggers a recompute of the schedule due to change in tenant timezone/deploy hour details",
+          "url": "{{base_url}}/scheduler/v1/svc-config-update?tenant_id=<string>",
+          "description": ""
+        },
+        {
+          "name": "Create Custom cloud provider endpoint config",
+          "url": "{{base_url}}/cloud-connect/v1/node_list/:node_id/config/custom",
+          "description": ""
+        },
+        {
+          "name": "Create Zscaler cloud provider endpoint config",
+          "url": "{{base_url}}/cloud-connect/v1/node_list/:node_id/config/zscaler",
+          "description": ""
+        }
+      ],
+      "PUT": [
+        {
+          "name": "Update Custom cloud provider endpoint config",
+          "url": "{{base_url}}/cloud-connect/v1/node_list/:node_id/config/custom",
+          "description": ""
+        },
+        {
+          "name": "Update Zscaler cloud provider endpoint config",
+          "url": "{{base_url}}/cloud-connect/v1/node_list/:node_id/config/zscaler",
+          "description": ""
+        },
+        {
+          "name": "Update AWS cloud provider endpoint config",
+          "url": "{{base_url}}/cloud-connect/v1/node_list/:node_id/config/aws",
+          "description": ""
+        }
+      ],
+      "DELETE": [
+        {
+          "name": "Delete Custom cloud provider endpoint config",
+          "url": "{{base_url}}/cloud-connect/v1/node_list/:node_id/config/custom",
+          "description": ""
+        },
+        {
+          "name": "Delete Zscaler cloud provider endpoint config",
+          "url": "{{base_url}}/cloud-connect/v1/node_list/:node_id/config/zscaler",
+          "description": ""
+        },
+        {
+          "name": "Delete AWS cloud provider endpoint config",
+          "url": "{{base_url}}/cloud-connect/v1/node_list/:node_id/config/aws",
+          "description": ""
+        }
+      ],
+      "PATCH": [
+        {
+          "name": "Update properties for the given group.",
+          "url": "{{base_url}}/configuration/v2/groups/:group/properties",
+          "description": ""
+        },
+        {
+          "name": "Update template variables for a device.",
+          "url": "{{base_url}}/configuration/v1/devices/:device_serial/template_variables",
+          "description": ""
+        },
+        {
+          "name": "Update template variables for all devices (Only JSON Payload).",
+          "url": "{{base_url}}/configuration/v1/devices/template_variables",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "HIGH"
+  },
+  "Location Services": {
+    "workflow_name": "location_services_configuration_management",
+    "description": "Configuration management workflow for Location Services",
+    "total_config_endpoints": 11,
+    "available_operations": {
+      "GET": 6,
+      "POST": 3,
+      "PUT": 0,
+      "PATCH": 0,
+      "DELETE": 2
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application",
+      "Configuration Cleanup",
+      "Policy Removal"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "(Deprecated) Get the services which are auto enabled.",
+          "url": "{{base_url}}/customer/settings/autolicense",
+          "description": ""
+        },
+        {
+          "name": "A filterable paginated response of a list of devices and licenses under the customer account based on the provided limit and offset parameters",
+          "url": "{{base_url}}/platform/device_inventory/v1/msp/:customer_id/devices?offset=0&limit=20&device_type=<string>",
+          "description": ""
+        },
+        {
+          "name": "A filterable paginated response of a list of devices and licenses under the MSP account based on the provided limit and offset parameters.",
+          "url": "{{base_url}}/platform/device_inventory/v1/msp/devices?offset=0&limit=20&device_type=<string>&customer_name=<string>&device_allocation_status=0",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "(Deprecated) Standalone Customer API:- Assign licenses to all devices and enable auto licensing for given services.",
+          "url": "{{base_url}}/customer/settings/autolicense",
+          "description": ""
+        },
+        {
+          "name": "Standalone Customer API:- Assign licenses to all devices and enable auto licensing for given services.",
+          "url": "{{base_url}}/platform/licensing/v1/customer/settings/autolicense",
+          "description": ""
+        },
+        {
+          "name": "Initiate Running Config Backup For A Single Device",
+          "url": "{{base_url}}/troubleshooting/v1/running-config-backup/serial/:serial/prefix/:prefix",
+          "description": ""
+        }
+      ],
+      "DELETE": [
+        {
+          "name": "(Deprecated) Standalone Customer API:- Disable auto licensing for given services.",
+          "url": "{{base_url}}/customer/settings/autolicense",
+          "description": ""
+        },
+        {
+          "name": "Standalone Customer API:- Disable auto licensing for given services.",
+          "url": "{{base_url}}/platform/licensing/v1/customer/settings/autolicense",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "LOW"
+  },
+  "AOS-CX Switches": {
+    "workflow_name": "aos-cx_switches_configuration_management",
+    "description": "Configuration management workflow for AOS-CX Switches",
+    "total_config_endpoints": 81,
+    "available_operations": {
+      "GET": 41,
+      "POST": 11,
+      "PUT": 19,
+      "PATCH": 3,
+      "DELETE": 7
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application",
+      "Configuration Updates",
+      "Policy Changes",
+      "Incremental Updates",
+      "Configuration Cleanup",
+      "Policy Removal"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "Fetch network access policy for registered clients.",
+          "url": "{{base_url}}/cloudAuth/api/v1/client_policy",
+          "description": ""
+        },
+        {
+          "name": "Fetch policy that allows wireless network access for users.",
+          "url": "{{base_url}}/cloudAuth/api/v1/user_policy",
+          "description": ""
+        },
+        {
+          "name": "Get configured vlan list for each cloud connect endpoint.",
+          "url": "{{base_url}}/cloud-connect/vlan-cfg?group=<string>",
+          "description": ""
+        }
+      ],
+      "PUT": [
+        {
+          "name": "Configure or update network access policy for registered clients.",
+          "url": "{{base_url}}/cloudAuth/api/v1/client_policy",
+          "description": ""
+        },
+        {
+          "name": "Configure policy to allow wireless network access for users.",
+          "url": "{{base_url}}/cloudAuth/api/v1/user_policy",
+          "description": ""
+        },
+        {
+          "name": "Set country code at group level (For UI groups only, not supported for template groups).\n\nNote: IAP's need to be rebooted for changes to take effect.\n",
+          "url": "{{base_url}}/configuration/v1/country",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "(Deprecated) Set Username, password required for establishing SSH connection to switch.",
+          "url": "{{base_url}}/configuration/v1/devices/:device_serial/ssh_connection",
+          "description": ""
+        },
+        {
+          "name": "Set configuration mode as either Monitor or Manage for given devices.",
+          "url": "{{base_url}}/configuration/v1/mode/device",
+          "description": ""
+        },
+        {
+          "name": "Update ssh credential in device level.",
+          "url": "{{base_url}}/configuration/v1/device/ssh_credential/:serial_number_or_guid",
+          "description": ""
+        }
+      ],
+      "PATCH": [
+        {
+          "name": "Update existing template.",
+          "url": "{{base_url}}/configuration/v1/groups/:group/templates?name=<string>&device_type=ArubaSwitch&version=<string>&model=<string>",
+          "description": ""
+        },
+        {
+          "name": "(Deprecated) Update an existing WLAN and clean up unsupported fields.",
+          "url": "{{base_url}}/configuration/v1/wlan/:group_name_or_guid_or_serial_number/:wlan_name",
+          "description": ""
+        },
+        {
+          "name": "Update an existing WLAN and clean up unsupported fields.",
+          "url": "{{base_url}}/configuration/v2/wlan/:group_name_or_guid_or_serial_number/:wlan_name",
+          "description": ""
+        }
+      ],
+      "DELETE": [
+        {
+          "name": "Delete existing captive portal logo.",
+          "url": "{{base_url}}/configuration/v1/cplogo/:checksum",
+          "description": ""
+        },
+        {
+          "name": "Delete guest portal profile",
+          "url": "{{base_url}}/guest/v1/portals/:portal_id",
+          "description": ""
+        },
+        {
+          "name": "Delete a transport profile by id",
+          "url": "{{base_url}}/v1/transport_profiles/:transportProfileId",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "HIGH"
+  },
+  "Cloud Services & APIs": {
+    "workflow_name": "cloud_services_&_apis_configuration_management",
+    "description": "Configuration management workflow for Cloud Services & APIs",
+    "total_config_endpoints": 2,
+    "available_operations": {
+      "GET": 2,
+      "POST": 0,
+      "PUT": 0,
+      "PATCH": 0,
+      "DELETE": 0
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "(Deprecated) Get services licensing config",
+          "url": "{{base_url}}/services/config?service_category=<string>&device_type=<string>",
+          "description": ""
+        },
+        {
+          "name": "Get services licensing config",
+          "url": "{{base_url}}/platform/licensing/v1/services/config?service_category=<string>&device_type=<string>",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "VERY_LOW"
+  },
+  "EdgeConnect (SD-WAN)": {
+    "workflow_name": "edgeconnect_(sd-wan)_configuration_management",
+    "description": "Configuration management workflow for EdgeConnect (SD-WAN)",
+    "total_config_endpoints": 125,
+    "available_operations": {
+      "GET": 45,
+      "POST": 24,
+      "PUT": 25,
+      "PATCH": 1,
+      "DELETE": 30
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application",
+      "Configuration Updates",
+      "Policy Changes",
+      "Incremental Updates",
+      "Configuration Cleanup",
+      "Policy Removal"
+    ],
+    "sample_endpoints": {
+      "DELETE": [
+        {
+          "name": "Delete existing User Policy.",
+          "url": "{{base_url}}/cloudAuth/api/v1/user_policy",
+          "description": ""
+        },
+        {
+          "name": "Delete an MPSK network configuration.",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk/:mpsk_id",
+          "description": ""
+        },
+        {
+          "name": "Delete a Named MPSK Config",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk/:mpsk_id/namedMPSK/:named_mpsk_id",
+          "description": ""
+        }
+      ],
+      "PUT": [
+        {
+          "name": "Reset User Policy.",
+          "url": "{{base_url}}/cloudauth/api/v3/user_policy/reset?deleteMPSK=<boolean>",
+          "description": ""
+        },
+        {
+          "name": "Edit an MPSK network config",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk/:mpsk_id",
+          "description": ""
+        },
+        {
+          "name": "Edit a Named MPSK Config",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk/:mpsk_id/namedMPSK/:named_mpsk_id?resetMPSK=false",
+          "description": ""
+        }
+      ],
+      "GET": [
+        {
+          "name": "Read all configured MPSK networks.",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk",
+          "description": ""
+        },
+        {
+          "name": "Read one MPSK network config.",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk/:mpsk_id",
+          "description": ""
+        },
+        {
+          "name": "Read a named MPSK config",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk/:mpsk_id/namedMPSK/:named_mpsk_id",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "Create an MPSK network config",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk",
+          "description": ""
+        },
+        {
+          "name": "Add a named MPSK config",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk/:mpsk_id/namedMPSK",
+          "description": ""
+        },
+        {
+          "name": "Creates a new Tunnel Policy with name as policy_name",
+          "url": "{{base_url}}/cloud-connect/v1/tunnel-policy-config/:policy_name",
+          "description": ""
+        }
+      ],
+      "PATCH": [
+        {
+          "name": "Partially Edit a Named MPSK Config",
+          "url": "{{base_url}}/cloudAuth/api/v2/mpsk/:mpsk_id/namedMPSK/:named_mpsk_id?resetMPSK=false",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "MEDIUM"
+  },
+  "Access Points (APs)": {
+    "workflow_name": "access_points_(aps)_configuration_management",
+    "description": "Configuration management workflow for Access Points (APs)",
+    "total_config_endpoints": 141,
+    "available_operations": {
+      "GET": 59,
+      "POST": 33,
+      "PUT": 23,
+      "PATCH": 0,
+      "DELETE": 26
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application",
+      "Configuration Updates",
+      "Policy Changes",
+      "Configuration Cleanup",
+      "Policy Removal"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "Returns device (AP) running configuration",
+          "url": "{{base_url}}/receiver/v1/device_config/:ap_serial?tenant_id=<string>",
+          "description": ""
+        },
+        {
+          "name": "Returns device (AP) running configuration",
+          "url": "{{base_url}}/feasibility/v1/device_config/:ap_serial?tenant_id=<string>",
+          "description": ""
+        },
+        {
+          "name": "Retrieve ble configured beacons",
+          "url": "{{base_url}}/ble_cfg_beacons/:group_name?profile_id=<string>&ap_mac=<string>&iot_radio_mac=<string>&limit=50&offset=0",
+          "description": ""
+        }
+      ],
+      "PUT": [
+        {
+          "name": "Change a device running config",
+          "url": "{{base_url}}/receiver/v1/device_config_set/:ap_serial?tenant_id=<string>",
+          "description": ""
+        },
+        {
+          "name": "Change a device running config",
+          "url": "{{base_url}}/feasibility/v1/device_config/:ap_serial?tenant_id=<string>",
+          "description": ""
+        },
+        {
+          "name": "Reset Client Policy.",
+          "url": "{{base_url}}/cloudauth/api/v3/client_policy/reset?deleteMAC=<boolean>",
+          "description": ""
+        }
+      ],
+      "DELETE": [
+        {
+          "name": "Delete existing Client Policy.",
+          "url": "{{base_url}}/cloudAuth/api/v1/client_policy",
+          "description": ""
+        },
+        {
+          "name": "Delete ble beacon profile",
+          "url": "{{base_url}}/delete_beacon_profiles/:group_name/:profile_id",
+          "description": ""
+        },
+        {
+          "name": "Delete one device beacon config",
+          "url": "{{base_url}}/ble_beacon/:iot_radio_mac/:profile_id",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "Config ble beacon profile",
+          "url": "{{base_url}}/cfg_beacon_profiles/:group_name?profile_name=<string>&config_method=auto_generate&adv_format=openlocate&radio_instance=internal&interval=<integer>&major_start=<integer>&major_end=<integer>&minor_start=<integer>&minor_end=<integer>&UUID=<string>&payload=<string>",
+          "description": ""
+        },
+        {
+          "name": "Edit ble beacon profile",
+          "url": "{{base_url}}/edit_beacon_profiles/:group_name/:profile_id?adv_format=openlocate&interval=<integer>&major_start=<integer>&major_end=<integer>&minor_start=<integer>&minor_end=<integer>&UUID=<string>&payload=<string>",
+          "description": ""
+        },
+        {
+          "name": "Update one device beacon config",
+          "url": "{{base_url}}/ble_beacon/:iot_radio_mac/:profile_id",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "HIGH"
+  },
+  "Security & Compliance": {
+    "workflow_name": "security_&_compliance_configuration_management",
+    "description": "Configuration management workflow for Security & Compliance",
+    "total_config_endpoints": 3,
+    "available_operations": {
+      "GET": 1,
+      "POST": 1,
+      "PUT": 0,
+      "PATCH": 0,
+      "DELETE": 1
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application",
+      "Configuration Cleanup",
+      "Policy Removal"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "Get whitelisted variables in Variables Firewall.",
+          "url": "{{base_url}}/configuration/v1/variables_firewall/variables",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "Add variables to Variables Firewall whitelist.",
+          "url": "{{base_url}}/configuration/v1/variables_firewall/variables",
+          "description": ""
+        }
+      ],
+      "DELETE": [
+        {
+          "name": "Delete variable from Variables Firewall whitelist.",
+          "url": "{{base_url}}/configuration/v1/variables_firewall/variables/:variable",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "LOW"
+  },
+  "UXI (User Experience)": {
+    "workflow_name": "uxi_(user_experience)_configuration_management",
+    "description": "Configuration management workflow for UXI (User Experience)",
+    "total_config_endpoints": 1,
+    "available_operations": {
+      "GET": 0,
+      "POST": 1,
+      "PUT": 0,
+      "PATCH": 0,
+      "DELETE": 0
+    },
+    "workflow_capabilities": [
+      "Configuration Deployment",
+      "Template Application"
+    ],
+    "sample_endpoints": {
+      "POST": [
+        {
+          "name": "Trigger test-config update",
+          "url": "{{base_url}}/deployer/v1/test_config_update?tenant_id=<string>&disallow_action_msg=<boolean>",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "LOW"
+  },
+  "Network Analytics & AI": {
+    "workflow_name": "network_analytics_&_ai_configuration_management",
+    "description": "Configuration management workflow for Network Analytics & AI",
+    "total_config_endpoints": 11,
+    "available_operations": {
+      "GET": 5,
+      "POST": 2,
+      "PUT": 2,
+      "PATCH": 0,
+      "DELETE": 2
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application",
+      "Configuration Updates",
+      "Policy Changes",
+      "Configuration Cleanup",
+      "Policy Removal"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "Returns all device (AP) running configuration for all customers",
+          "url": "{{base_url}}/receiver/v1/service_config_all",
+          "description": ""
+        },
+        {
+          "name": "Retrieve system",
+          "url": "{{base_url}}/airmatch-config/v1/node_list/:node_type/:node_id/config/system/",
+          "description": ""
+        },
+        {
+          "name": "Retrieve config",
+          "url": "{{base_url}}/airmatch-config/v1/node_list/:node_type/:node_id/config/",
+          "description": ""
+        }
+      ],
+      "PUT": [
+        {
+          "name": "Create/Update system",
+          "url": "{{base_url}}/airmatch-config/v1/node_list/:node_type/:node_id/config/system/",
+          "description": ""
+        },
+        {
+          "name": "Create/Update config",
+          "url": "{{base_url}}/airmatch-config/v1/node_list/:node_type/:node_id/config/",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "Create system",
+          "url": "{{base_url}}/airmatch-config/v1/node_list/:node_type/:node_id/config/system/",
+          "description": ""
+        },
+        {
+          "name": "Create config",
+          "url": "{{base_url}}/airmatch-config/v1/node_list/:node_type/:node_id/config/",
+          "description": ""
+        }
+      ],
+      "DELETE": [
+        {
+          "name": "Delete system",
+          "url": "{{base_url}}/airmatch-config/v1/node_list/:node_type/:node_id/config/system/",
+          "description": ""
+        },
+        {
+          "name": "Delete config",
+          "url": "{{base_url}}/airmatch-config/v1/node_list/:node_type/:node_id/config/",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "LOW"
+  },
+  "General/Uncategorized": {
+    "workflow_name": "general/uncategorized_configuration_management",
+    "description": "Configuration management workflow for General/Uncategorized",
+    "total_config_endpoints": 6,
+    "available_operations": {
+      "GET": 3,
+      "POST": 3,
+      "PUT": 0,
+      "PATCH": 0,
+      "DELETE": 0
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "Get configuration mode as either Monitor or Managed mode at customer level.",
+          "url": "{{base_url}}/configuration/v1/mode",
+          "description": ""
+        },
+        {
+          "name": "(Deprecated) Get an existing swarm config.",
+          "url": "{{base_url}}/configuration/v1/swarm_config/:guid",
+          "description": ""
+        },
+        {
+          "name": "Get an existing swarm config.",
+          "url": "{{base_url}}/configuration/v2/swarm_config/:guid",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "Set configuration mode as either Monitor or Manage at customer level.",
+          "url": "{{base_url}}/configuration/v1/mode",
+          "description": ""
+        },
+        {
+          "name": "(Deprecated) Update an existing swarm config.",
+          "url": "{{base_url}}/configuration/v1/swarm_config/:guid",
+          "description": ""
+        },
+        {
+          "name": "Update an existing swarm config.",
+          "url": "{{base_url}}/configuration/v2/swarm_config/:guid",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "LOW"
+  },
+  "Mobility Controllers": {
+    "workflow_name": "mobility_controllers_configuration_management",
+    "description": "Configuration management workflow for Mobility Controllers",
+    "total_config_endpoints": 4,
+    "available_operations": {
+      "GET": 1,
+      "POST": 3,
+      "PUT": 0,
+      "PATCH": 0,
+      "DELETE": 0
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "Get auto commit state as either On or Off for device serials.",
+          "url": "{{base_url}}/configuration/v1/auto_commit_state/devices?device_serials=<string>,<string>",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "Set auto commit state as either On or Off for given devices.",
+          "url": "{{base_url}}/configuration/v1/auto_commit_state/devices",
+          "description": ""
+        },
+        {
+          "name": "Commit configurations for given devices.",
+          "url": "{{base_url}}/configuration/v1/commit/devices",
+          "description": ""
+        },
+        {
+          "name": "Trigger Mobility Device recovery by resetting (delete and add) Device configuration.",
+          "url": "{{base_url}}/configuration/v1/devices/:device_serial/recover_device",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "LOW"
+  },
+  "ClearPass (NAC)": {
+    "workflow_name": "clearpass_(nac)_configuration_management",
+    "description": "Configuration management workflow for ClearPass (NAC)",
+    "total_config_endpoints": 5,
+    "available_operations": {
+      "GET": 1,
+      "POST": 1,
+      "PUT": 2,
+      "PATCH": 0,
+      "DELETE": 1
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application",
+      "Configuration Updates",
+      "Policy Changes",
+      "Configuration Cleanup",
+      "Policy Removal"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "Get Certificates details uploaded.",
+          "url": "{{base_url}}/configuration/v1/certificates?limit=20&offset=0&q=<string>",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "Upload a certificate.",
+          "url": "{{base_url}}/configuration/v1/certificates",
+          "description": ""
+        }
+      ],
+      "DELETE": [
+        {
+          "name": "Delete existing certificate.",
+          "url": "{{base_url}}/configuration/v1/certificates/:certificate",
+          "description": ""
+        }
+      ],
+      "PUT": [
+        {
+          "name": "Update a certificate.",
+          "url": "{{base_url}}/configuration/v1/msp/certificate",
+          "description": ""
+        },
+        {
+          "name": "Update a certificate for non msp customer.",
+          "url": "{{base_url}}/configuration/v1/non_msp/certificate",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "LOW"
+  },
+  "Network Services": {
+    "workflow_name": "network_services_configuration_management",
+    "description": "Configuration management workflow for Network Services",
+    "total_config_endpoints": 111,
+    "available_operations": {
+      "GET": 37,
+      "POST": 25,
+      "PUT": 25,
+      "PATCH": 0,
+      "DELETE": 24
+    },
+    "workflow_capabilities": [
+      "Configuration Retrieval",
+      "Status Monitoring",
+      "Configuration Deployment",
+      "Template Application",
+      "Configuration Updates",
+      "Policy Changes",
+      "Configuration Cleanup",
+      "Policy Removal"
+    ],
+    "sample_endpoints": {
+      "GET": [
+        {
+          "name": "Retrieve SIEM server config for given siem_server_name",
+          "url": "{{base_url}}/ids-ips-config/v1/node_list/:node_type/:node_id/config/siem_servers_list/:siem_server_name/",
+          "description": ""
+        },
+        {
+          "name": "Retrieve config for all SIEM servers",
+          "url": "{{base_url}}/ids-ips-config/v1/node_list/:node_type/:node_id/config/siem_servers_list/",
+          "description": ""
+        },
+        {
+          "name": "Retrieve complete config for IDS/IPS",
+          "url": "{{base_url}}/ids-ips-config/v1/node_list/:node_type/:node_id/config/",
+          "description": ""
+        }
+      ],
+      "PUT": [
+        {
+          "name": "Create/Update SIEM server config for given siem_server_name",
+          "url": "{{base_url}}/ids-ips-config/v1/node_list/:node_type/:node_id/config/siem_servers_list/:siem_server_name/",
+          "description": ""
+        },
+        {
+          "name": "Create/Update complete config for IDS/IPS",
+          "url": "{{base_url}}/ids-ips-config/v1/node_list/:node_type/:node_id/config/",
+          "description": ""
+        },
+        {
+          "name": "Create/Update IP range by range_id for given address pool_name",
+          "url": "{{base_url}}/ipms-config/v1/node_list/:node_type/:node_id/config/address_pool/:pool_name/ip_range/:range_id/",
+          "description": ""
+        }
+      ],
+      "POST": [
+        {
+          "name": "Create SIEM server config for given siem_server_name",
+          "url": "{{base_url}}/ids-ips-config/v1/node_list/:node_type/:node_id/config/siem_servers_list/:siem_server_name/",
+          "description": ""
+        },
+        {
+          "name": "Create complete config for IDS/IPS",
+          "url": "{{base_url}}/ids-ips-config/v1/node_list/:node_type/:node_id/config/",
+          "description": ""
+        },
+        {
+          "name": "Create IP range by range_id for given address pool_name",
+          "url": "{{base_url}}/ipms-config/v1/node_list/:node_type/:node_id/config/address_pool/:pool_name/ip_range/:range_id/",
+          "description": ""
+        }
+      ],
+      "DELETE": [
+        {
+          "name": "Delete SIEM server config for given siem_server_name",
+          "url": "{{base_url}}/ids-ips-config/v1/node_list/:node_type/:node_id/config/siem_servers_list/:siem_server_name/",
+          "description": ""
+        },
+        {
+          "name": "Delete complete config for IDS/IPS",
+          "url": "{{base_url}}/ids-ips-config/v1/node_list/:node_type/:node_id/config/",
+          "description": ""
+        },
+        {
+          "name": "Delete IP address pool for given pool_name",
+          "url": "{{base_url}}/ipms-config/v1/node_list/:node_type/:node_id/config/address_pool/:pool_name/",
+          "description": ""
+        }
+      ]
+    },
+    "priority": "LOW"
+  }
+}

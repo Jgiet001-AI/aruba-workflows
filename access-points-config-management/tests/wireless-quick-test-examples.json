@@ -1,0 +1,302 @@
+{
+  "wireless_configuration_test_examples": {
+    "description": "Quick test examples for Aruba Central Wireless Configuration Workflow",
+    "webhook_endpoint": "http://192.168.40.100:8006/webhook/aruba-wireless-config",
+    "required_setup": {
+      "credentials": "Configure 'arubaApi' credentials in n8n",
+      "slack": "Configure Slack webhook for notifications",
+      "central_access": "Valid Aruba Central API access required"
+    },
+    "test_scenarios": {
+      "1_create_corporate_ssid": {
+        "description": "Create WPA3 Enterprise SSID for corporate users",
+        "method": "POST",
+        "payload": {
+          "operation": "create_ssid",
+          "ssid_name": "TEST-CORP-WIFI",
+          "essid": "Test Corporate WiFi",
+          "security_type": "wpa3_enterprise",
+          "network_type": "corporate",
+          "vlan_id": 100,
+          "radius_server": "192.168.1.100",
+          "radius_secret": "test-radius-secret",
+          "broadcast_ssid": true,
+          "max_clients": 150,
+          "band_steering": true,
+          "fast_transition": true,
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "success",
+          "operation": "create_ssid",
+          "ssid_name": "TEST-CORP-WIFI"
+        }
+      },
+      "2_create_guest_network": {
+        "description": "Create open guest network with captive portal",
+        "method": "POST",
+        "payload": {
+          "operation": "create_ssid",
+          "ssid_name": "TEST-GUEST-WIFI",
+          "essid": "Test Guest Network",
+          "security_type": "open",
+          "network_type": "guest",
+          "vlan_id": 200,
+          "session_timeout": 3600,
+          "bandwidth_limit": 5000,
+          "broadcast_ssid": true,
+          "max_clients": 50,
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "success",
+          "operation": "create_ssid",
+          "ssid_name": "TEST-GUEST-WIFI"
+        }
+      },
+      "3_create_iot_network": {
+        "description": "Create WPA2 Personal SSID for IoT devices",
+        "method": "POST",
+        "payload": {
+          "operation": "create_ssid",
+          "ssid_name": "TEST-IOT-DEVICES",
+          "essid": "Test IoT Network",
+          "security_type": "wpa2_personal",
+          "passphrase": "SecureIoTPassword123",
+          "network_type": "iot",
+          "vlan_id": 300,
+          "max_clients": 64,
+          "broadcast_ssid": false,
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "success",
+          "operation": "create_ssid",
+          "ssid_name": "TEST-IOT-DEVICES"
+        }
+      },
+      "4_configure_radio_dual_band": {
+        "description": "Configure dual-band radio settings for AP group",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_radio",
+          "ap_group": "TEST-AP-GROUP",
+          "radio_band": "dual_band",
+          "channel_width": "80MHz",
+          "power_level": "auto",
+          "max_clients": 100,
+          "band_steering": true,
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "success",
+          "operation": "configure_radio"
+        }
+      },
+      "5_configure_radio_5ghz_high_density": {
+        "description": "Configure 5GHz radio for high-density environment",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_radio",
+          "ap_group": "HIGH-DENSITY-APS",
+          "radio_band": "5GHz",
+          "channel_width": "40MHz",
+          "power_level": "medium",
+          "max_clients": 50,
+          "band_steering": false,
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "success",
+          "operation": "configure_radio"
+        }
+      },
+      "6_list_all_ssids": {
+        "description": "List all configured SSIDs",
+        "method": "POST",
+        "payload": {
+          "operation": "list_ssids",
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "success",
+          "operation": "list_ssids"
+        }
+      },
+      "7_update_ssid_security": {
+        "description": "Update SSID to use WPA3 Personal",
+        "method": "POST",
+        "payload": {
+          "operation": "update_ssid",
+          "ssid_name": "TEST-CORP-WIFI",
+          "essid": "Test Corporate WiFi Updated",
+          "security_type": "wpa3_personal",
+          "passphrase": "NewSecurePassword2025",
+          "vlan_id": 100,
+          "broadcast_ssid": true,
+          "max_clients": 200,
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "success",
+          "operation": "update_ssid",
+          "ssid_name": "TEST-CORP-WIFI"
+        }
+      },
+      "8_delete_test_ssid": {
+        "description": "Delete test SSID",
+        "method": "POST",
+        "payload": {
+          "operation": "delete_ssid",
+          "ssid_name": "TEST-GUEST-WIFI",
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "success",
+          "operation": "delete_ssid",
+          "ssid_name": "TEST-GUEST-WIFI"
+        }
+      }
+    },
+    "error_test_scenarios": {
+      "validation_error_missing_operation": {
+        "description": "Test validation error for missing operation",
+        "method": "POST",
+        "payload": {
+          "ssid_name": "TEST-SSID",
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "error",
+          "error_category": "validation"
+        }
+      },
+      "validation_error_invalid_security_type": {
+        "description": "Test validation error for invalid security type",
+        "method": "POST",
+        "payload": {
+          "operation": "create_ssid",
+          "ssid_name": "TEST-INVALID-SECURITY",
+          "essid": "Test Invalid Security",
+          "security_type": "invalid_security_type",
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "error",
+          "error_category": "validation"
+        }
+      },
+      "validation_error_missing_passphrase": {
+        "description": "Test validation error for missing passphrase with personal security",
+        "method": "POST",
+        "payload": {
+          "operation": "create_ssid",
+          "ssid_name": "TEST-NO-PASSPHRASE",
+          "essid": "Test No Passphrase",
+          "security_type": "wpa2_personal",
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "error",
+          "error_category": "validation"
+        }
+      },
+      "validation_error_invalid_vlan": {
+        "description": "Test validation error for invalid VLAN ID",
+        "method": "POST",
+        "payload": {
+          "operation": "create_ssid",
+          "ssid_name": "TEST-INVALID-VLAN",
+          "essid": "Test Invalid VLAN",
+          "security_type": "open",
+          "vlan_id": 5000,
+          "central_base_url": "REPLACE_WITH_YOUR_CENTRAL_URL",
+          "customer_id": "REPLACE_WITH_YOUR_CUSTOMER_ID"
+        },
+        "expected_response": {
+          "result": "error",
+          "error_category": "validation"
+        }
+      }
+    },
+    "curl_commands": {
+      "create_corporate_ssid": "curl -X POST http://192.168.40.100:8006/webhook/aruba-wireless-config -H 'Content-Type: application/json' -d '{\"operation\":\"create_ssid\",\"ssid_name\":\"TEST-CORP-WIFI\",\"essid\":\"Test Corporate WiFi\",\"security_type\":\"wpa3_enterprise\",\"network_type\":\"corporate\",\"vlan_id\":100,\"radius_server\":\"192.168.1.100\",\"radius_secret\":\"test-radius-secret\",\"central_base_url\":\"REPLACE_WITH_YOUR_CENTRAL_URL\",\"customer_id\":\"REPLACE_WITH_YOUR_CUSTOMER_ID\"}'",
+      "create_guest_network": "curl -X POST http://192.168.40.100:8006/webhook/aruba-wireless-config -H 'Content-Type: application/json' -d '{\"operation\":\"create_ssid\",\"ssid_name\":\"TEST-GUEST-WIFI\",\"essid\":\"Test Guest Network\",\"security_type\":\"open\",\"network_type\":\"guest\",\"vlan_id\":200,\"session_timeout\":3600,\"bandwidth_limit\":5000,\"central_base_url\":\"REPLACE_WITH_YOUR_CENTRAL_URL\",\"customer_id\":\"REPLACE_WITH_YOUR_CUSTOMER_ID\"}'",
+      "configure_radio": "curl -X POST http://192.168.40.100:8006/webhook/aruba-wireless-config -H 'Content-Type: application/json' -d '{\"operation\":\"configure_radio\",\"ap_group\":\"TEST-AP-GROUP\",\"radio_band\":\"dual_band\",\"channel_width\":\"80MHz\",\"power_level\":\"auto\",\"max_clients\":100,\"band_steering\":true,\"central_base_url\":\"REPLACE_WITH_YOUR_CENTRAL_URL\",\"customer_id\":\"REPLACE_WITH_YOUR_CUSTOMER_ID\"}'",
+      "list_ssids": "curl -X POST http://192.168.40.100:8006/webhook/aruba-wireless-config -H 'Content-Type: application/json' -d '{\"operation\":\"list_ssids\",\"central_base_url\":\"REPLACE_WITH_YOUR_CENTRAL_URL\",\"customer_id\":\"REPLACE_WITH_YOUR_CUSTOMER_ID\"}'",
+      "delete_ssid": "curl -X POST http://192.168.40.100:8006/webhook/aruba-wireless-config -H 'Content-Type: application/json' -d '{\"operation\":\"delete_ssid\",\"ssid_name\":\"TEST-GUEST-WIFI\",\"central_base_url\":\"REPLACE_WITH_YOUR_CENTRAL_URL\",\"customer_id\":\"REPLACE_WITH_YOUR_CUSTOMER_ID\"}'"
+    },
+    "setup_instructions": {
+      "1_credentials": {
+        "step": "Configure Aruba Central API credentials in n8n",
+        "details": [
+          "Go to n8n Settings > Credentials",
+          "Create new credential of type 'HTTP Header Auth'",
+          "Set Name: 'arubaApi'",
+          "Add header 'Authorization' with value 'Bearer YOUR_ACCESS_TOKEN'",
+          "Save credential"
+        ]
+      },
+      "2_slack": {
+        "step": "Configure Slack notifications",
+        "details": [
+          "Create Slack incoming webhook",
+          "Configure Slack node in workflow with webhook URL",
+          "Set channel to #network-alerts",
+          "Test notification delivery"
+        ]
+      },
+      "3_central_setup": {
+        "step": "Prepare Aruba Central environment",
+        "details": [
+          "Obtain Central API base URL for your region",
+          "Get customer ID from Central dashboard",
+          "Ensure API access is enabled",
+          "Create test AP group if needed"
+        ]
+      },
+      "4_testing": {
+        "step": "Execute test scenarios",
+        "details": [
+          "Replace placeholder values in test payloads",
+          "Start with list_ssids to verify connectivity",
+          "Create test SSIDs in non-production environment",
+          "Monitor Slack notifications",
+          "Clean up test configurations after testing"
+        ]
+      }
+    },
+    "common_replacements": {
+      "central_base_url_examples": [
+        "https://apigw-uswest4.central.arubanetworks.com",
+        "https://apigw-useast1.central.arubanetworks.com",
+        "https://apigw-eu-west2.central.arubanetworks.com",
+        "https://apigw-ap-south1.central.arubanetworks.com"
+      ],
+      "customer_id_format": "12-character alphanumeric string",
+      "ap_group_examples": [
+        "Building-A-APs",
+        "Floor-1-Conference-Rooms",
+        "Warehouse-APs",
+        "Guest-Network-APs"
+      ]
+    },
+    "monitoring": {
+      "workflow_execution": "Monitor workflow executions in n8n",
+      "slack_notifications": "Check #network-alerts channel for real-time updates",
+      "central_ui": "Verify configurations in Central dashboard",
+      "api_logs": "Review API response logs for troubleshooting"
+    }
+  }
+}"

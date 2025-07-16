@@ -1,0 +1,686 @@
+{
+  "name": "EdgeConnect Appliance Provisioning",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "/edgeconnect-provisioning",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+      "name": "Webhook: EdgeConnect Provisioning",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "edgeconnect-provisioning-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// EdgeConnect Appliance Provisioning Workflow\n// Validates input and prepares provisioning operation\n\nconst input = $input.all()[0].json;\n\n// Validate required parameters\nif (!input.operation) {\n  $node.error('Missing required parameter: operation');\n}\n\nif (!input.orchestrator_host) {\n  $node.error('Missing required parameter: orchestrator_host');\n}\n\nif (!input.auth_token) {\n  $node.error('Missing required parameter: auth_token');\n}\n\n// Supported operations\nconst validOperations = [\n  'create_branch_config',\n  'update_branch_config',\n  'delete_branch_config',\n  'list_branch_configs',\n  'create_hub_config',\n  'update_hub_config', \n  'delete_hub_config',\n  'list_hub_configs',\n  'create_hub_cluster',\n  'update_hub_cluster',\n  'delete_hub_cluster',\n  'list_hub_clusters',\n  'create_microbranch_dc',\n  'update_microbranch_dc',\n  'delete_microbranch_dc',\n  'get_admin_status',\n  'set_admin_status',\n  'get_topology',\n  'update_topology'\n];\n\nif (!validOperations.includes(input.operation)) {\n  $node.error(`Invalid operation: ${input.operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Set defaults\nconst nodeType = input.node_type || 'group';\nconst nodeId = input.node_id || input.group_name || 'Default';\nconst baseUrl = `https://${input.orchestrator_host}/gms/rest`;\n\n// Validate operation-specific requirements\nif (input.operation.includes('cluster') && !input.cluster_name) {\n  $node.error('cluster_name required for cluster operations');\n}\n\nif (input.operation.includes('cluster') && !input.cluster_group) {\n  $node.error('cluster_group required for cluster operations');\n}\n\n// Prepare output for routing\nconst output = {\n  operation: input.operation,\n  baseUrl: baseUrl,\n  authToken: input.auth_token,\n  nodeType: nodeType,\n  nodeId: nodeId,\n  clusterName: input.cluster_name,\n  clusterGroup: input.cluster_group,\n  configData: input.config_data || {},\n  originalInput: input\n};\n\nreturn { json: output };"
+      },
+      "id": "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e",
+      "name": "Validate Provisioning Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create_branch_config",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update_branch_config",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "3",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "delete_branch_config",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "4",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "list_branch_configs",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f",
+      "name": "Route: Branch Config",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create_hub_config",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update_hub_config",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "3",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "delete_hub_config",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "4",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "list_hub_configs",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a",
+      "name": "Route: Hub Config",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create_hub_cluster",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update_hub_cluster",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "3",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "delete_hub_cluster",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "4",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "list_hub_clusters",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+      "name": "Route: Hub Clusters",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create_microbranch_dc",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update_microbranch_dc",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "3",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "delete_microbranch_dc",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "4",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "get_admin_status",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "5",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "set_admin_status",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "6",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "get_topology",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "7",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update_topology",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "f6a7b8c9-d0e1-2f3a-4b5c-6d7e8f9a0b1c",
+      "name": "Route: Admin & Topology",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Branch Configuration Operations\nconst data = $input.all()[0].json;\nconst operation = data.operation;\n\n// Determine HTTP method and URL path\nlet method = 'GET';\nlet urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/branch-config/`;\nlet body = null;\n\nswitch (operation) {\n  case 'create_branch_config':\n    method = 'POST';\n    body = data.configData;\n    break;\n    \n  case 'update_branch_config':\n    method = 'PUT';\n    body = data.configData;\n    break;\n    \n  case 'delete_branch_config':\n    method = 'DELETE';\n    break;\n    \n  case 'list_branch_configs':\n    method = 'GET';\n    break;\n    \n  default:\n    $node.error(`Unexpected operation: ${operation}`);\n}\n\n// Branch Config Templates\nconst branchTemplates = {\n  small_branch: {\n    \"branch-config\": {\n      \"wan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"wan0\",\n            \"ip\": \"dhcp\",\n            \"gateway\": \"auto\",\n            \"mtu\": 1500\n          }\n        ]\n      },\n      \"lan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"lan0\", \n            \"ip\": \"192.168.1.1/24\",\n            \"dhcp-server\": {\n              \"enabled\": true,\n              \"range\": \"192.168.1.100-192.168.1.199\"\n            }\n          }\n        ]\n      }\n    }\n  },\n  medium_branch: {\n    \"branch-config\": {\n      \"wan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"wan0\",\n            \"ip\": \"dhcp\",\n            \"gateway\": \"auto\",\n            \"mtu\": 1500,\n            \"backup\": true\n          },\n          {\n            \"name\": \"wan1\",\n            \"ip\": \"dhcp\", \n            \"gateway\": \"auto\",\n            \"mtu\": 1500,\n            \"primary\": true\n          }\n        ]\n      },\n      \"lan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"lan0\",\n            \"ip\": \"192.168.10.1/24\",\n            \"vlan\": 10,\n            \"dhcp-server\": {\n              \"enabled\": true,\n              \"range\": \"192.168.10.100-192.168.10.199\"\n            }\n          },\n          {\n            \"name\": \"lan1\",\n            \"ip\": \"192.168.20.1/24\", \n            \"vlan\": 20,\n            \"dhcp-server\": {\n              \"enabled\": true,\n              \"range\": \"192.168.20.100-192.168.20.199\"\n            }\n          }\n        ]\n      }\n    }\n  },\n  large_branch: {\n    \"branch-config\": {\n      \"wan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"wan0\",\n            \"ip\": \"static\",\n            \"address\": \"203.0.113.10/30\",\n            \"gateway\": \"203.0.113.9\",\n            \"mtu\": 1500,\n            \"primary\": true\n          },\n          {\n            \"name\": \"wan1\",\n            \"ip\": \"dhcp\",\n            \"gateway\": \"auto\",\n            \"mtu\": 1500,\n            \"backup\": true\n          },\n          {\n            \"name\": \"wan2\",\n            \"ip\": \"dhcp\",\n            \"gateway\": \"auto\", \n            \"mtu\": 1500,\n            \"backup\": true\n          }\n        ]\n      },\n      \"lan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"lan0\",\n            \"ip\": \"192.168.100.1/24\",\n            \"vlan\": 100,\n            \"dhcp-server\": {\n              \"enabled\": true,\n              \"range\": \"192.168.100.100-192.168.100.199\"\n            }\n          },\n          {\n            \"name\": \"lan1\",\n            \"ip\": \"192.168.101.1/24\",\n            \"vlan\": 101,\n            \"dhcp-server\": {\n              \"enabled\": true,\n              \"range\": \"192.168.101.100-192.168.101.199\"\n            }\n          },\n          {\n            \"name\": \"lan2\",\n            \"ip\": \"192.168.102.1/24\",\n            \"vlan\": 102,\n            \"dhcp-server\": {\n              \"enabled\": false\n            }\n          }\n        ]\n      },\n      \"security\": {\n        \"firewall\": {\n          \"enabled\": true,\n          \"rules\": [\n            {\n              \"name\": \"allow-internal\",\n              \"source\": \"192.168.100.0/24\",\n              \"destination\": \"192.168.101.0/24\",\n              \"action\": \"allow\"\n            }\n          ]\n        }\n      }\n    }\n  }\n};\n\n// Use template if specified\nif (data.configData.template && branchTemplates[data.configData.template]) {\n  body = branchTemplates[data.configData.template];\n  \n  // Merge any custom configuration\n  if (data.configData.custom) {\n    body = Object.assign({}, body, data.configData.custom);\n  }\n}\n\n// Prepare output for HTTP request\nconst output = {\n  url: data.baseUrl + urlPath,\n  method: method,\n  headers: {\n    'X-AUTH-TOKEN': data.authToken,\n    'Content-Type': 'application/json'\n  },\n  operation: operation,\n  template: data.configData.template || 'custom'\n};\n\nif (body) {\n  output.body = body;\n}\n\nreturn { json: output };"
+      },
+      "id": "a7b8c9d0-e1f2-3a4b-5c6d-7e8f9a0b1c2d",
+      "name": "Prepare Branch Config API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Hub Configuration Operations\nconst data = $input.all()[0].json;\nconst operation = data.operation;\n\n// Determine HTTP method and URL path\nlet method = 'GET';\nlet urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/hub-config/`;\nlet body = null;\n\nswitch (operation) {\n  case 'create_hub_config':\n    method = 'POST';\n    body = data.configData;\n    break;\n    \n  case 'update_hub_config':\n    method = 'PUT';\n    body = data.configData;\n    break;\n    \n  case 'delete_hub_config':\n    method = 'DELETE';\n    break;\n    \n  case 'list_hub_configs':\n    method = 'GET';\n    break;\n    \n  default:\n    $node.error(`Unexpected operation: ${operation}`);\n}\n\n// Hub Config Templates\nconst hubTemplates = {\n  regional_hub: {\n    \"hub-config\": {\n      \"wan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"wan0\",\n            \"ip\": \"static\",\n            \"address\": \"203.0.113.50/30\",\n            \"gateway\": \"203.0.113.49\",\n            \"mtu\": 1500,\n            \"bandwidth\": \"1000Mbps\"\n          },\n          {\n            \"name\": \"wan1\",\n            \"ip\": \"static\",\n            \"address\": \"198.51.100.50/30\",\n            \"gateway\": \"198.51.100.49\",\n            \"mtu\": 1500,\n            \"bandwidth\": \"1000Mbps\"\n          }\n        ]\n      },\n      \"lan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"lan0\",\n            \"ip\": \"10.0.0.1/24\",\n            \"vlan\": 1,\n            \"dhcp-server\": {\n              \"enabled\": false\n            }\n          }\n        ]\n      },\n      \"bgp\": {\n        \"enabled\": true,\n        \"as-number\": 65001,\n        \"neighbors\": [\n          {\n            \"ip\": \"203.0.113.49\",\n            \"remote-as\": 65000\n          }\n        ]\n      },\n      \"transit\": {\n        \"enabled\": true,\n        \"redistribute\": [\n          \"connected\",\n          \"static\"\n        ]\n      }\n    }\n  },\n  datacenter_hub: {\n    \"hub-config\": {\n      \"wan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"wan0\",\n            \"ip\": \"static\",\n            \"address\": \"203.0.113.100/30\",\n            \"gateway\": \"203.0.113.99\",\n            \"mtu\": 9000,\n            \"bandwidth\": \"10Gbps\"\n          },\n          {\n            \"name\": \"wan1\",\n            \"ip\": \"static\",\n            \"address\": \"198.51.100.100/30\",\n            \"gateway\": \"198.51.100.99\",\n            \"mtu\": 9000,\n            \"bandwidth\": \"10Gbps\"\n          }\n        ]\n      },\n      \"lan-interfaces\": {\n        \"interface\": [\n          {\n            \"name\": \"lan0\",\n            \"ip\": \"10.10.0.1/16\",\n            \"vlan\": 10,\n            \"dhcp-server\": {\n              \"enabled\": false\n            }\n          },\n          {\n            \"name\": \"lan1\",\n            \"ip\": \"10.20.0.1/16\",\n            \"vlan\": 20,\n            \"dhcp-server\": {\n              \"enabled\": false\n            }\n          }\n        ]\n      },\n      \"bgp\": {\n        \"enabled\": true,\n        \"as-number\": 65010,\n        \"route-reflector\": true,\n        \"neighbors\": [\n          {\n            \"ip\": \"203.0.113.99\",\n            \"remote-as\": 65000\n          },\n          {\n            \"ip\": \"198.51.100.99\",\n            \"remote-as\": 65000\n          }\n        ]\n      },\n      \"security\": {\n        \"firewall\": {\n          \"enabled\": true,\n          \"zones\": [\n            {\n              \"name\": \"dmz\",\n              \"interfaces\": [\"lan0\"]\n            },\n            {\n              \"name\": \"internal\",\n              \"interfaces\": [\"lan1\"]\n            }\n          ]\n        }\n      }\n    }\n  }\n};\n\n// Use template if specified\nif (data.configData.template && hubTemplates[data.configData.template]) {\n  body = hubTemplates[data.configData.template];\n  \n  // Merge any custom configuration\n  if (data.configData.custom) {\n    body = Object.assign({}, body, data.configData.custom);\n  }\n}\n\n// Prepare output for HTTP request\nconst output = {\n  url: data.baseUrl + urlPath,\n  method: method,\n  headers: {\n    'X-AUTH-TOKEN': data.authToken,\n    'Content-Type': 'application/json'\n  },\n  operation: operation,\n  template: data.configData.template || 'custom'\n};\n\nif (body) {\n  output.body = body;\n}\n\nreturn { json: output };"
+      },
+      "id": "b8c9d0e1-f2a3-4b5c-6d7e-8f9a0b1c2d3e",
+      "name": "Prepare Hub Config API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Hub Cluster Operations\nconst data = $input.all()[0].json;\nconst operation = data.operation;\n\n// Determine HTTP method and URL path\nlet method = 'GET';\nlet urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/branch-config/hub-clusters/`;\nlet body = null;\n\nswitch (operation) {\n  case 'create_hub_cluster':\n    if (!data.clusterName || !data.clusterGroup) {\n      $node.error('cluster_name and cluster_group required for create operation');\n    }\n    method = 'POST';\n    urlPath += `${data.clusterName}/${data.clusterGroup}/`;\n    body = data.configData;\n    break;\n    \n  case 'update_hub_cluster':\n    if (!data.clusterName || !data.clusterGroup) {\n      $node.error('cluster_name and cluster_group required for update operation');\n    }\n    method = 'PUT';\n    urlPath += `${data.clusterName}/${data.clusterGroup}/`;\n    body = data.configData;\n    break;\n    \n  case 'delete_hub_cluster':\n    if (!data.clusterName || !data.clusterGroup) {\n      $node.error('cluster_name and cluster_group required for delete operation');\n    }\n    method = 'DELETE';\n    urlPath += `${data.clusterName}/${data.clusterGroup}/`;\n    break;\n    \n  case 'list_hub_clusters':\n    method = 'GET';\n    break;\n    \n  default:\n    $node.error(`Unexpected operation: ${operation}`);\n}\n\n// Hub Cluster Templates\nconst clusterTemplates = {\n  ha_cluster: {\n    \"hub-cluster\": {\n      \"name\": data.clusterName,\n      \"group\": data.clusterGroup,\n      \"mode\": \"active-active\",\n      \"members\": [\n        {\n          \"hostname\": `${data.clusterName}-hub1`,\n          \"role\": \"primary\",\n          \"priority\": 100\n        },\n        {\n          \"hostname\": `${data.clusterName}-hub2`,\n          \"role\": \"secondary\",\n          \"priority\": 90\n        }\n      ],\n      \"virtual-ip\": {\n        \"enabled\": true,\n        \"ip\": \"192.168.255.1\"\n      },\n      \"health-check\": {\n        \"interval\": 10,\n        \"timeout\": 5,\n        \"retries\": 3\n      }\n    }\n  },\n  load_balance_cluster: {\n    \"hub-cluster\": {\n      \"name\": data.clusterName,\n      \"group\": data.clusterGroup,\n      \"mode\": \"load-balance\",\n      \"members\": [\n        {\n          \"hostname\": `${data.clusterName}-hub1`,\n          \"role\": \"member\",\n          \"weight\": 50\n        },\n        {\n          \"hostname\": `${data.clusterName}-hub2`,\n          \"role\": \"member\",\n          \"weight\": 50\n        },\n        {\n          \"hostname\": `${data.clusterName}-hub3`,\n          \"role\": \"member\",\n          \"weight\": 30\n        }\n      ],\n      \"load-balancing\": {\n        \"algorithm\": \"round-robin\",\n        \"sticky-sessions\": false\n      },\n      \"health-check\": {\n        \"interval\": 5,\n        \"timeout\": 3,\n        \"retries\": 2\n      }\n    }\n  }\n};\n\n// Use template if specified\nif (data.configData.template && clusterTemplates[data.configData.template]) {\n  body = clusterTemplates[data.configData.template];\n  \n  // Merge any custom configuration\n  if (data.configData.custom) {\n    body = Object.assign({}, body, data.configData.custom);\n  }\n}\n\n// Prepare output for HTTP request\nconst output = {\n  url: data.baseUrl + urlPath,\n  method: method,\n  headers: {\n    'X-AUTH-TOKEN': data.authToken,\n    'Content-Type': 'application/json'\n  },\n  operation: operation,\n  clusterName: data.clusterName,\n  clusterGroup: data.clusterGroup,\n  template: data.configData.template || 'custom'\n};\n\nif (body) {\n  output.body = body;\n}\n\nreturn { json: output };"
+      },
+      "id": "c9d0e1f2-a3b4-5c6d-7e8f-9a0b1c2d3e4f",
+      "name": "Prepare Hub Cluster API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Admin Status and Topology Operations\nconst data = $input.all()[0].json;\nconst operation = data.operation;\n\n// Determine HTTP method and URL path\nlet method = 'GET';\nlet urlPath = '';\nlet body = null;\n\nswitch (operation) {\n  case 'create_microbranch_dc':\n    method = 'POST';\n    urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/microbranch-dc-cluster/`;\n    body = data.configData;\n    break;\n    \n  case 'update_microbranch_dc':\n    method = 'PUT';\n    urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/microbranch-dc-cluster/`;\n    body = data.configData;\n    break;\n    \n  case 'delete_microbranch_dc':\n    method = 'DELETE';\n    urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/microbranch-dc-cluster/`;\n    break;\n    \n  case 'get_admin_status':\n    method = 'GET';\n    urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/sdwan-global/admin-status/`;\n    break;\n    \n  case 'set_admin_status':\n    method = 'POST';\n    urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/sdwan-global/admin-status/`;\n    body = data.configData;\n    break;\n    \n  case 'get_topology':\n    method = 'GET';\n    urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/sdwan-global/topology/`;\n    break;\n    \n  case 'update_topology':\n    method = 'PUT';\n    urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/sdwan-global/topology/`;\n    body = data.configData;\n    break;\n    \n  default:\n    $node.error(`Unexpected operation: ${operation}`);\n}\n\n// Microbranch DC Templates\nconst microbranchTemplates = {\n  small_dc: {\n    \"microbranch-dc-cluster\": {\n      \"name\": \"small-dc-cluster\",\n      \"mode\": \"active-standby\",\n      \"appliances\": [\n        {\n          \"serial\": \"EC001234567890\",\n          \"role\": \"primary\",\n          \"priority\": 100\n        },\n        {\n          \"serial\": \"EC001234567891\",\n          \"role\": \"secondary\",\n          \"priority\": 90\n        }\n      ],\n      \"networks\": {\n        \"management\": \"192.168.1.0/24\",\n        \"data\": \"10.0.0.0/16\"\n      }\n    }\n  },\n  large_dc: {\n    \"microbranch-dc-cluster\": {\n      \"name\": \"large-dc-cluster\",\n      \"mode\": \"active-active\",\n      \"appliances\": [\n        {\n          \"serial\": \"EC001234567890\",\n          \"role\": \"member\",\n          \"weight\": 40\n        },\n        {\n          \"serial\": \"EC001234567891\",\n          \"role\": \"member\",\n          \"weight\": 40\n        },\n        {\n          \"serial\": \"EC001234567892\",\n          \"role\": \"member\",\n          \"weight\": 20\n        }\n      ],\n      \"networks\": {\n        \"management\": \"192.168.10.0/24\",\n        \"data\": \"10.10.0.0/16\",\n        \"storage\": \"10.20.0.0/16\"\n      },\n      \"redundancy\": {\n        \"enabled\": true,\n        \"failover-time\": 5\n      }\n    }\n  }\n};\n\n// Admin Status Templates\nconst adminStatusTemplates = {\n  enable_sdwan: {\n    \"admin-status\": {\n      \"enabled\": true,\n      \"mode\": \"full\",\n      \"features\": {\n        \"path-visibility\": true,\n        \"application-visibility\": true,\n        \"policy-enforcement\": true\n      }\n    }\n  },\n  disable_sdwan: {\n    \"admin-status\": {\n      \"enabled\": false,\n      \"mode\": \"bypass\"\n    }\n  }\n};\n\n// Topology Templates\nconst topologyTemplates = {\n  hub_spoke: {\n    \"topology\": {\n      \"type\": \"hub-spoke\",\n      \"hubs\": [\n        {\n          \"name\": \"primary-hub\",\n          \"priority\": 100\n        },\n        {\n          \"name\": \"secondary-hub\",\n          \"priority\": 90\n        }\n      ],\n      \"auto-failover\": true\n    }\n  },\n  full_mesh: {\n    \"topology\": {\n      \"type\": \"full-mesh\",\n      \"mesh-groups\": [\n        {\n          \"name\": \"region1\",\n          \"members\": [\"hub1\", \"hub2\", \"branch1\", \"branch2\"]\n        }\n      ],\n      \"load-balancing\": true\n    }\n  }\n};\n\n// Use appropriate template based on operation\nif (operation === 'create_microbranch_dc' || operation === 'update_microbranch_dc') {\n  if (data.configData.template && microbranchTemplates[data.configData.template]) {\n    body = microbranchTemplates[data.configData.template];\n  }\n} else if (operation === 'set_admin_status') {\n  if (data.configData.template && adminStatusTemplates[data.configData.template]) {\n    body = adminStatusTemplates[data.configData.template];\n  }\n} else if (operation === 'update_topology') {\n  if (data.configData.template && topologyTemplates[data.configData.template]) {\n    body = topologyTemplates[data.configData.template];\n  }\n}\n\n// Merge custom configuration if provided\nif (body && data.configData.custom) {\n  body = Object.assign({}, body, data.configData.custom);\n}\n\n// Prepare output for HTTP request\nconst output = {\n  url: data.baseUrl + urlPath,\n  method: method,\n  headers: {\n    'X-AUTH-TOKEN': data.authToken,\n    'Content-Type': 'application/json'\n  },\n  operation: operation,\n  template: data.configData.template || 'custom'\n};\n\nif (body) {\n  output.body = body;\n}\n\nreturn { json: output };"
+      },
+      "id": "d0e1f2a3-b4c5-6d7e-8f9a-0b1c2d3e4f5a",
+      "name": "Prepare Admin/Topology API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-AUTH-TOKEN",
+              "value": "={{ $json.headers['X-AUTH-TOKEN'] }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "jsonBody": "={{ $json.body || '{}' }}",
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 5000
+          },
+          "response": {
+            "response": {
+              "responseFormat": "autodetect"
+            }
+          }
+        }
+      },
+      "id": "e1f2a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b",
+      "name": "Execute Provisioning API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process Provisioning Response and Handle Errors\nconst items = $input.all();\nconst responses = [];\n\nfor (const item of items) {\n  const response = item.json;\n  const statusCode = item.json.$response?.statusCode || 200;\n  \n  // Determine success/failure\n  const isSuccess = statusCode >= 200 && statusCode < 300;\n  \n  const processedResponse = {\n    success: isSuccess,\n    statusCode: statusCode,\n    operation: response.operation || 'unknown',\n    template: response.template || 'custom',\n    timestamp: new Date().toISOString(),\n    data: response\n  };\n  \n  // Handle different response types\n  if (!isSuccess) {\n    processedResponse.error = {\n      code: statusCode,\n      message: response.message || response.error || 'Unknown error',\n      details: response\n    };\n    \n    // Categorize error for better handling\n    if (statusCode === 401) {\n      processedResponse.errorCategory = 'authentication';\n      processedResponse.recommendation = 'Check EdgeConnect Orchestrator authentication token';\n    } else if (statusCode === 403) {\n      processedResponse.errorCategory = 'authorization';\n      processedResponse.recommendation = 'Verify user permissions for appliance provisioning';\n    } else if (statusCode === 404) {\n      processedResponse.errorCategory = 'not_found';\n      processedResponse.recommendation = 'Check group name and appliance configuration';\n    } else if (statusCode === 409) {\n      processedResponse.errorCategory = 'conflict';\n      processedResponse.recommendation = 'Configuration may conflict with existing setup';\n    } else if (statusCode === 422) {\n      processedResponse.errorCategory = 'validation';\n      processedResponse.recommendation = 'Review configuration parameters for validity';\n    } else if (statusCode >= 500) {\n      processedResponse.errorCategory = 'server_error';\n      processedResponse.recommendation = 'EdgeConnect Orchestrator may be experiencing issues';\n    } else {\n      processedResponse.errorCategory = 'client_error';\n      processedResponse.recommendation = 'Review request parameters and try again';\n    }\n  } else {\n    // Success - format response based on operation\n    if (response.operation && response.operation.includes('list')) {\n      processedResponse.count = Array.isArray(response.data) ? response.data.length : 0;\n      processedResponse.configurations = response.data;\n    } else if (response.operation && response.operation.includes('create')) {\n      processedResponse.created = true;\n      processedResponse.configurationId = response.data?.id || 'unknown';\n    } else if (response.operation && response.operation.includes('update')) {\n      processedResponse.updated = true;\n      processedResponse.configurationId = response.data?.id || 'unknown';\n    } else if (response.operation && response.operation.includes('delete')) {\n      processedResponse.deleted = true;\n    }\n    \n    // Add template information\n    if (response.template && response.template !== 'custom') {\n      processedResponse.templateUsed = response.template;\n    }\n  }\n  \n  responses.push({ json: processedResponse });\n}\n\nreturn responses;"
+      },
+      "id": "f2a3b4c5-d6e7-8f9a-0b1c-2d3e4f5a6b7c",
+      "name": "Process Provisioning Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "a3b4c5d6-e7f8-9a0b-1c2d-3e4f5a6b7c8d",
+      "name": "Check Provisioning Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "chatId": "#network-automation",
+        "text": "✅ **EdgeConnect Appliance Provisioning Successful**\n\n**Operation:** {{ $json.operation }}\n**Template:** {{ $json.template }}\n**Status:** {{ $json.statusCode }}\n**Timestamp:** {{ $json.timestamp }}\n\n{% if $json.created %}**Configuration Created:** {{ $json.configurationId }}{% endif %}\n{% if $json.updated %}**Configuration Updated:** {{ $json.configurationId }}{% endif %}\n{% if $json.deleted %}**Configuration Deleted Successfully**{% endif %}\n{% if $json.count %}**Configurations Found:** {{ $json.count }}{% endif %}\n{% if $json.templateUsed %}**Template Applied:** {{ $json.templateUsed }}{% endif %}\n\n**Details:** Appliance provisioning completed successfully",
+        "options": {}
+      },
+      "id": "b4c5d6e7-f8a9-0b1c-2d3e-4f5a6b7c8d9e",
+      "name": "Notify Provisioning Success",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1780,
+        270
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "chatId": "#network-alerts",
+        "text": "❌ **EdgeConnect Appliance Provisioning Failed**\n\n**Operation:** {{ $json.operation }}\n**Template:** {{ $json.template }}\n**Error Category:** {{ $json.errorCategory }}\n**Status Code:** {{ $json.statusCode }}\n**Error Message:** {{ $json.error.message }}\n**Timestamp:** {{ $json.timestamp }}\n\n**Recommended Action:**\n{{ $json.recommendation }}\n\n**Additional Steps:**\n• Verify EdgeConnect Orchestrator connectivity\n• Check appliance provisioning permissions\n• Review configuration parameters\n• Contact network administrator if issue persists",
+        "options": {}
+      },
+      "id": "c5d6e7f8-a9b0-1c2d-3e4f-5a6b7c8d9e0f",
+      "name": "Notify Provisioning Failure",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1780,
+        430
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}",
+        "options": {}
+      },
+      "id": "d6e7f8a9-b0c1-2d3e-4f5a-6b7c8d9e0f1a",
+      "name": "Return Provisioning Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: EdgeConnect Provisioning": {
+      "main": [
+        [
+          {
+            "node": "Validate Provisioning Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Provisioning Input": {
+      "main": [
+        [
+          {
+            "node": "Route: Branch Config",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route: Hub Config",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route: Hub Clusters",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route: Admin & Topology",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Branch Config": {
+      "main": [
+        [
+          {
+            "node": "Prepare Branch Config API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Hub Config": {
+      "main": [
+        [
+          {
+            "node": "Prepare Hub Config API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Hub Clusters": {
+      "main": [
+        [
+          {
+            "node": "Prepare Hub Cluster API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Admin & Topology": {
+      "main": [
+        [
+          {
+            "node": "Prepare Admin/Topology API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Branch Config API": {
+      "main": [
+        [
+          {
+            "node": "Execute Provisioning API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Hub Config API": {
+      "main": [
+        [
+          {
+            "node": "Execute Provisioning API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Hub Cluster API": {
+      "main": [
+        [
+          {
+            "node": "Execute Provisioning API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Admin/Topology API": {
+      "main": [
+        [
+          {
+            "node": "Execute Provisioning API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Provisioning API": {
+      "main": [
+        [
+          {
+            "node": "Process Provisioning Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Provisioning Response": {
+      "main": [
+        [
+          {
+            "node": "Check Provisioning Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Provisioning Success": {
+      "main": [
+        [
+          {
+            "node": "Notify Provisioning Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Provisioning Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Provisioning Success": {
+      "main": [
+        [
+          {
+            "node": "Return Provisioning Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Provisioning Failure": {
+      "main": [
+        [
+          {
+            "node": "Return Provisioning Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-16T00:00:00.000Z",
+      "updatedAt": "2025-01-16T00:00:00.000Z",
+      "id": "edgeconnect-provisioning",
+      "name": "EdgeConnect Provisioning"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-16T00:00:00.000Z",
+  "versionId": "1"
+}

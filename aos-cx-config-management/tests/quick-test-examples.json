@@ -1,0 +1,243 @@
+{
+  "workflow_test_examples": {
+    "basic_list_operation": {
+      "name": "List All VLANs - Basic Test",
+      "description": "Simple test to list all VLANs on a switch",
+      "input_data": {
+        "operation": "list",
+        "switch_ip": "192.168.1.100"
+      },
+      "expected_result": "Returns JSON object with all VLANs",
+      "test_instructions": [
+        "1. Open n8n workflow 'AOS-CX VLAN Management'",
+        "2. Click 'Execute Workflow' button",
+        "3. Paste the input_data JSON into the manual trigger",
+        "4. Click 'Execute workflow'",
+        "5. Verify success notification in #network-automation channel"
+      ]
+    },
+    "create_test_vlan": {
+      "name": "Create Test VLAN",
+      "description": "Create a test VLAN for validation",
+      "input_data": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 999,
+        "vlan_name": "TEST_VLAN",
+        "description": "Temporary test VLAN for workflow validation",
+        "admin_state": "up"
+      },
+      "expected_result": "VLAN 999 created successfully",
+      "cleanup_required": true,
+      "cleanup_data": {
+        "operation": "delete",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 999
+      }
+    },
+    "read_created_vlan": {
+      "name": "Read Test VLAN",
+      "description": "Read the previously created test VLAN",
+      "input_data": {
+        "operation": "read",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 999
+      },
+      "expected_result": "Returns VLAN 999 configuration details",
+      "prerequisite": "create_test_vlan must be executed first"
+    },
+    "update_test_vlan": {
+      "name": "Update Test VLAN",
+      "description": "Update the test VLAN configuration",
+      "input_data": {
+        "operation": "update",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 999,
+        "vlan_name": "UPDATED_TEST_VLAN",
+        "description": "Updated test VLAN description",
+        "admin_state": "up"
+      },
+      "expected_result": "VLAN 999 updated successfully",
+      "prerequisite": "create_test_vlan must be executed first"
+    },
+    "delete_test_vlan": {
+      "name": "Delete Test VLAN",
+      "description": "Clean up by deleting the test VLAN",
+      "input_data": {
+        "operation": "delete",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 999
+      },
+      "expected_result": "VLAN 999 deleted successfully",
+      "prerequisite": "create_test_vlan must be executed first"
+    }
+  },
+  "validation_tests": {
+    "missing_operation": {
+      "name": "Missing Operation Validation",
+      "description": "Test validation when operation is missing",
+      "input_data": {
+        "switch_ip": "192.168.1.100"
+      },
+      "expected_result": "Validation error notification",
+      "expected_errors": ["operation must be one of: create, read, update, delete, list"]
+    },
+    "invalid_vlan_id": {
+      "name": "Invalid VLAN ID Validation",
+      "description": "Test validation with VLAN ID outside valid range",
+      "input_data": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 5000,
+        "vlan_name": "INVALID_VLAN"
+      },
+      "expected_result": "Validation error notification",
+      "expected_errors": ["vlan_id must be a number between 1 and 4094"]
+    },
+    "missing_vlan_name": {
+      "name": "Missing VLAN Name Validation",
+      "description": "Test validation when VLAN name is required but missing",
+      "input_data": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 100
+      },
+      "expected_result": "Validation error notification",
+      "expected_errors": ["vlan_name is required for create operation"]
+    }
+  },
+  "test_execution_guide": {
+    "full_workflow_test": {
+      "description": "Complete test sequence to validate all CRUD operations",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Execute 'basic_list_operation'",
+          "purpose": "Verify connectivity and list current VLANs",
+          "expected": "Success notification with VLAN list"
+        },
+        {
+          "step": 2,
+          "action": "Execute 'create_test_vlan'",
+          "purpose": "Test VLAN creation functionality",
+          "expected": "VLAN 999 created successfully"
+        },
+        {
+          "step": 3,
+          "action": "Execute 'read_created_vlan'",
+          "purpose": "Verify VLAN was created correctly",
+          "expected": "VLAN 999 details returned"
+        },
+        {
+          "step": 4,
+          "action": "Execute 'update_test_vlan'",
+          "purpose": "Test VLAN update functionality",
+          "expected": "VLAN 999 updated successfully"
+        },
+        {
+          "step": 5,
+          "action": "Execute 'read_created_vlan' again",
+          "purpose": "Verify update was applied",
+          "expected": "Updated VLAN 999 details returned"
+        },
+        {
+          "step": 6,
+          "action": "Execute 'delete_test_vlan'",
+          "purpose": "Test VLAN deletion and cleanup",
+          "expected": "VLAN 999 deleted successfully"
+        },
+        {
+          "step": 7,
+          "action": "Execute validation tests",
+          "purpose": "Verify input validation works correctly",
+          "expected": "Appropriate validation error messages"
+        }
+      ],
+      "estimated_time": "10-15 minutes",
+      "prerequisites": [
+        "n8n workflow imported and configured",
+        "Switch credentials configured in n8n",
+        "Slack webhook configured (optional)",
+        "Test switch accessible and responsive"
+      ]
+    }
+  },
+  "troubleshooting_examples": {
+    "connection_test": {
+      "name": "Basic Connectivity Test",
+      "description": "Simple test to verify switch connectivity",
+      "manual_test": "curl -k -u username:password https://192.168.1.100:443/rest/v10.08/system/vlans",
+      "expected_response": "HTTP 200 with JSON VLAN data",
+      "common_issues": [
+        "Connection timeout: Check network connectivity",
+        "401 Unauthorized: Verify credentials",
+        "SSL/TLS errors: Switch may use self-signed certificate"
+      ]
+    },
+    "authentication_test": {
+      "name": "Credential Validation Test",
+      "description": "Test switch authentication separately",
+      "steps": [
+        "1. SSH to switch and verify account works",
+        "2. Check if REST API is enabled: 'web-management rest'",
+        "3. Verify user has appropriate privileges",
+        "4. Test with curl command above"
+      ]
+    },
+    "api_status_check": {
+      "name": "Switch API Status Check",
+      "description": "Verify REST API service is running",
+      "switch_commands": [
+        "show web-management",
+        "show web-management rest",
+        "show interface mgmt",
+        "show running-config interface mgmt"
+      ],
+      "expected_output": "REST API should be enabled and running"
+    }
+  },
+  "production_considerations": {
+    "switch_preparation": {
+      "required_settings": [
+        "REST API enabled: 'web-management rest'",
+        "HTTPS enabled: 'web-management https'",
+        "Management interface configured",
+        "User account with API permissions"
+      ],
+      "recommended_settings": [
+        "SSL certificate properly configured",
+        "Rate limiting configured if available",
+        "Logging enabled for API access",
+        "Backup/restore procedures in place"
+      ]
+    },
+    "n8n_configuration": {
+      "required_setup": [
+        "Credentials stored securely in n8n credential manager",
+        "Appropriate timeout values configured",
+        "Error notification channels configured",
+        "Workflow versioning enabled"
+      ],
+      "recommended_setup": [
+        "Workflow execution logging enabled",
+        "Performance monitoring configured",
+        "Backup procedures for workflows",
+        "Access control and permissions set"
+      ]
+    },
+    "monitoring_setup": {
+      "success_metrics": [
+        "Workflow execution success rate > 95%",
+        "Average execution time < 30 seconds",
+        "API response time < 5 seconds",
+        "Zero authentication failures"
+      ],
+      "alert_conditions": [
+        "Workflow execution failures",
+        "Authentication errors",
+        "Network connectivity issues",
+        "Unusual execution times"
+      ]
+    }
+  }
+}

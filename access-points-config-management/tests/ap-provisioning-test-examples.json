@@ -1,0 +1,597 @@
+{
+  "test_scenarios": {
+    "basic_ap_provisioning": {
+      "name": "Basic AP Provisioning Test",
+      "description": "Test basic AP provisioning with office environment",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "CNF7G123ABC9",
+        "ap_model": "AP-515",
+        "site_name": "Headquarters",
+        "floor_name": "Floor-02",
+        "ap_group": "HQ-Office-APs",
+        "environment_template": "office",
+        "auto_naming": true,
+        "naming_convention": "{site}-{floor}-AP-{serial}",
+        "default_config": true,
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer"
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "operation": "provision_ap",
+        "ap_name": "Headquarters-Floor-02-AP-ABC9",
+        "compliance_status": "compliant"
+      }
+    },
+    "zero_touch_setup": {
+      "name": "Zero-Touch Provisioning Test",
+      "description": "Test automated zero-touch setup for new AP",
+      "input": {
+        "operation": "zero_touch_setup",
+        "ap_mac": "00:11:22:33:44:55",
+        "site_name": "Branch-Office",
+        "floor_name": "Ground",
+        "environment_template": "office",
+        "auto_naming": true,
+        "naming_convention": "{site}-{floor}-AP",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com"
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "operation": "zero_touch_setup",
+        "steps": ["discover_ap", "create_group_if_needed", "apply_template", "configure_ap", "move_to_group", "verify_configuration"]
+      }
+    },
+    "retail_environment": {
+      "name": "Retail Environment AP Setup",
+      "description": "Test AP provisioning for high-density retail environment",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "RTL5X789DEF2",
+        "ap_model": "AP-635",
+        "site_name": "Store-Main",
+        "floor_name": "Sales-Floor",
+        "ap_group": "Retail-High-Density",
+        "environment_template": "retail",
+        "template_name": "retail-high-density-template",
+        "auto_naming": true,
+        "default_config": true
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "template_config": {
+          "features": ["high_density", "guest_portal", "pos_support"],
+          "radio_config": {
+            "power_level": "high",
+            "channel_width": "40MHz",
+            "client_limit": 100
+          }
+        }
+      }
+    },
+    "healthcare_environment": {
+      "name": "Healthcare Secure Environment",
+      "description": "Test AP provisioning for secure healthcare environment",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "HCE9K456GHI8",
+        "ap_model": "AP-555",
+        "site_name": "Hospital-Main",
+        "floor_name": "ICU-Floor-3",
+        "ap_group": "Healthcare-Clinical",
+        "environment_template": "healthcare",
+        "template_name": "healthcare-secure-template",
+        "auto_naming": true,
+        "default_config": true
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "template_config": {
+          "features": ["enhanced_security", "iot_support", "location_services"],
+          "radio_config": {
+            "power_level": "medium",
+            "location_services": true,
+            "iot_radio": true
+          }
+        }
+      }
+    },
+    "education_environment": {
+      "name": "Education Multi-SSID Setup",
+      "description": "Test AP provisioning for education environment with BYOD support",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "EDU3M789JKL1",
+        "ap_model": "AP-575",
+        "site_name": "University-Main",
+        "floor_name": "Library-Floor-2",
+        "ap_group": "Education-Student-Areas",
+        "environment_template": "education",
+        "template_name": "education-byod-template",
+        "auto_naming": true,
+        "default_config": true
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "template_config": {
+          "features": ["multi_ssid", "byod_support", "content_filtering"],
+          "radio_config": {
+            "power_level": "high",
+            "multiple_ssid": true,
+            "bandwidth_control": true
+          }
+        }
+      }
+    },
+    "warehouse_environment": {
+      "name": "Warehouse Extended Range",
+      "description": "Test AP provisioning for warehouse with extended range settings",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "WHS7Y123MNO4",
+        "ap_model": "AP-685",
+        "site_name": "Warehouse-DC1",
+        "floor_name": "Storage-Level-A",
+        "ap_group": "Warehouse-Operations",
+        "environment_template": "warehouse",
+        "template_name": "warehouse-extended-range",
+        "auto_naming": true,
+        "default_config": true
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "template_config": {
+          "features": ["extended_range", "rugged_settings", "minimal_ssid"],
+          "radio_config": {
+            "power_level": "maximum",
+            "channel_width": "20MHz",
+            "coverage_optimization": true
+          }
+        }
+      }
+    },
+    "hospitality_environment": {
+      "name": "Hospitality Guest Portal",
+      "description": "Test AP provisioning for hospitality with guest portal",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "HTL1B456PQR7",
+        "ap_model": "AP-515",
+        "site_name": "Hotel-Downtown",
+        "floor_name": "Lobby-Floor-1",
+        "ap_group": "Hospitality-Guest-Areas",
+        "environment_template": "hospitality",
+        "template_name": "hospitality-guest-portal",
+        "auto_naming": true,
+        "default_config": true
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "template_config": {
+          "features": ["guest_portal", "captive_portal", "bandwidth_control"],
+          "radio_config": {
+            "power_level": "medium",
+            "guest_isolation": true,
+            "rate_limiting": true
+          }
+        }
+      }
+    },
+    "create_ap_group": {
+      "name": "Create AP Group Test",
+      "description": "Test creation of new AP group with template",
+      "input": {
+        "operation": "create_group",
+        "ap_group": "Test-New-Group",
+        "environment_template": "office",
+        "template_name": "office-standard-template",
+        "site_name": "Test-Site"
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "operation": "create_group",
+        "group_created": true
+      }
+    },
+    "move_ap_to_group": {
+      "name": "Move AP to Group Test",
+      "description": "Test moving existing AP to different group",
+      "input": {
+        "operation": "move_ap",
+        "ap_serial": "MVE8D789STU2",
+        "ap_group": "Target-Group",
+        "site_name": "Test-Site"
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "operation": "move_ap",
+        "ap_moved": true
+      }
+    },
+    "firmware_update": {
+      "name": "Firmware Update Test",
+      "description": "Test AP firmware update operation",
+      "input": {
+        "operation": "firmware_update",
+        "ap_serial": "FWU4C123VWX9",
+        "firmware_version": "8.10.0.8",
+        "site_name": "Test-Site"
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "operation": "firmware_update",
+        "firmware_updated": true
+      }
+    },
+    "deploy_template": {
+      "name": "Deploy Template Test",
+      "description": "Test template deployment to AP group",
+      "input": {
+        "operation": "deploy_template",
+        "template_name": "new-office-template",
+        "ap_group": "Office-APs-Group",
+        "environment_template": "office"
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "operation": "deploy_template",
+        "template_deployed": true
+      }
+    },
+    "create_template": {
+      "name": "Create Template Test",
+      "description": "Test creation of new configuration template",
+      "input": {
+        "operation": "create_template",
+        "template_name": "custom-office-template",
+        "environment_template": "office",
+        "ap_group": "Office-Template-Group"
+      },
+      "expected_outcome": {
+        "validation_status": "passed",
+        "operation": "create_template",
+        "template_created": true
+      }
+    }
+  },
+  "validation_error_tests": {
+    "invalid_operation": {
+      "name": "Invalid Operation Test",
+      "description": "Test validation with invalid operation type",
+      "input": {
+        "operation": "invalid_operation",
+        "ap_serial": "CNF7G123ABC9"
+      },
+      "expected_outcome": {
+        "validation_status": "failed",
+        "errors": ["Invalid operation. Must be one of: provision_ap, create_template, deploy_template, create_group, move_ap, firmware_update, zero_touch_setup"]
+      }
+    },
+    "invalid_serial": {
+      "name": "Invalid Serial Number Test",
+      "description": "Test validation with invalid AP serial format",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "invalid123"
+      },
+      "expected_outcome": {
+        "validation_status": "failed",
+        "errors": ["ap_serial is required and must be 12 alphanumeric characters"]
+      }
+    },
+    "invalid_mac": {
+      "name": "Invalid MAC Address Test",
+      "description": "Test validation with invalid MAC address format",
+      "input": {
+        "operation": "zero_touch_setup",
+        "ap_mac": "invalid-mac"
+      },
+      "expected_outcome": {
+        "validation_status": "failed",
+        "errors": ["ap_mac must be in valid MAC address format"]
+      }
+    },
+    "invalid_ap_model": {
+      "name": "Invalid AP Model Test",
+      "description": "Test validation with unsupported AP model",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "CNF7G123ABC9",
+        "ap_model": "AP-999"
+      },
+      "expected_outcome": {
+        "validation_status": "failed",
+        "errors": ["Invalid AP model. Must be one of: AP-505, AP-515, AP-535, AP-555, AP-575, AP-615, AP-635, AP-655, AP-675, AP-685"]
+      }
+    },
+    "invalid_site_name": {
+      "name": "Invalid Site Name Test",
+      "description": "Test validation with invalid site name length",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "CNF7G123ABC9",
+        "site_name": "X"
+      },
+      "expected_outcome": {
+        "validation_status": "failed",
+        "errors": ["site_name must be between 2 and 50 characters"]
+      }
+    },
+    "invalid_environment": {
+      "name": "Invalid Environment Template Test",
+      "description": "Test validation with invalid environment template",
+      "input": {
+        "operation": "provision_ap",
+        "ap_serial": "CNF7G123ABC9",
+        "environment_template": "invalid_env"
+      },
+      "expected_outcome": {
+        "validation_status": "failed",
+        "errors": ["Invalid environment_template. Must be one of: office, retail, healthcare, education, warehouse, hospitality"]
+      }
+    },
+    "invalid_firmware": {
+      "name": "Invalid Firmware Version Test",
+      "description": "Test validation with invalid firmware version format",
+      "input": {
+        "operation": "firmware_update",
+        "ap_serial": "CNF7G123ABC9",
+        "firmware_version": "invalid.version"
+      },
+      "expected_outcome": {
+        "validation_status": "failed",
+        "errors": ["firmware_version must be in format X.Y.Z"]
+      }
+    }
+  },
+  "error_handling_tests": {
+    "ap_not_found": {
+      "name": "AP Not Found Error Test",
+      "description": "Test error handling when AP is not found in inventory",
+      "simulated_error": {
+        "status_code": 404,
+        "message": "AP not found in device inventory",
+        "category": "ap_not_found"
+      },
+      "expected_response": {
+        "error_category": "ap_not_found",
+        "error_severity": "high",
+        "rollback_required": false,
+        "recommendations": [
+          "Verify AP serial number format (12 alphanumeric characters)",
+          "Check if AP is in device inventory",
+          "Ensure AP is powered on and connected to network"
+        ]
+      }
+    },
+    "template_deployment_failed": {
+      "name": "Template Deployment Failed Test",
+      "description": "Test error handling for template deployment failures",
+      "simulated_error": {
+        "status_code": 400,
+        "message": "Template deployment failed: invalid configuration",
+        "category": "template_error"
+      },
+      "expected_response": {
+        "error_category": "template_error",
+        "error_severity": "medium",
+        "rollback_required": true,
+        "recommendations": [
+          "Verify template exists in Central",
+          "Check template syntax and configuration",
+          "Ensure template is compatible with AP model"
+        ]
+      }
+    },
+    "firmware_update_failed": {
+      "name": "Firmware Update Failed Test",
+      "description": "Test error handling for firmware update failures",
+      "simulated_error": {
+        "status_code": 500,
+        "message": "Firmware update failed: insufficient memory",
+        "category": "firmware_error"
+      },
+      "expected_response": {
+        "error_category": "firmware_error",
+        "error_severity": "high",
+        "rollback_required": true,
+        "recommendations": [
+          "Check firmware version compatibility",
+          "Verify firmware file availability",
+          "Ensure AP has sufficient memory for update"
+        ]
+      }
+    },
+    "authentication_failed": {
+      "name": "Authentication Failed Test",
+      "description": "Test error handling for API authentication failures",
+      "simulated_error": {
+        "status_code": 401,
+        "message": "Authentication failed: invalid token",
+        "category": "authentication_error"
+      },
+      "expected_response": {
+        "error_category": "authentication_error",
+        "error_severity": "high",
+        "rollback_required": false,
+        "recommendations": [
+          "Check API credentials",
+          "Verify token expiration",
+          "Ensure proper API permissions"
+        ]
+      }
+    },
+    "rate_limit_exceeded": {
+      "name": "Rate Limit Exceeded Test",
+      "description": "Test error handling for API rate limiting",
+      "simulated_error": {
+        "status_code": 429,
+        "message": "Rate limit exceeded",
+        "category": "rate_limit"
+      },
+      "expected_response": {
+        "error_category": "rate_limit",
+        "error_severity": "low",
+        "rollback_required": false,
+        "retry_recommended": true,
+        "recommendations": [
+          "Wait before retrying",
+          "Implement exponential backoff",
+          "Consider batch operations"
+        ]
+      }
+    },
+    "network_connectivity": {
+      "name": "Network Connectivity Error Test",
+      "description": "Test error handling for network connectivity issues",
+      "simulated_error": {
+        "status_code": 504,
+        "message": "Network timeout: unable to reach Central API",
+        "category": "network_error"
+      },
+      "expected_response": {
+        "error_category": "network_error",
+        "error_severity": "high",
+        "rollback_required": false,
+        "retry_recommended": true,
+        "recommendations": [
+          "Check network connectivity",
+          "Verify API endpoint availability",
+          "Review error logs for details"
+        ]
+      }
+    }
+  },
+  "compliance_tests": {
+    "office_compliance_pass": {
+      "name": "Office Environment Compliance Pass",
+      "description": "Test compliance checking for compliant office configuration",
+      "input": {
+        "environment": "office",
+        "ap_serial": "CNF7G123ABC9",
+        "ssids": [
+          {"name": "Corporate", "security_type": "WPA3", "client_limit": 40},
+          {"name": "Guest", "security_type": "WPA2", "client_limit": 20}
+        ],
+        "features": ["band_steering", "fast_roaming"]
+      },
+      "expected_outcome": {
+        "compliance_status": "compliant",
+        "overall_score": 100,
+        "violations": [],
+        "warnings": []
+      }
+    },
+    "retail_compliance_warning": {
+      "name": "Retail Environment Compliance Warning",
+      "description": "Test compliance checking with warnings for retail configuration",
+      "input": {
+        "environment": "retail",
+        "ap_serial": "RTL5X789DEF2",
+        "ssids": [
+          {"name": "Store", "security_type": "WPA3", "client_limit": 120},
+          {"name": "POS", "security_type": "WPA2", "client_limit": 10},
+          {"name": "Guest", "security_type": "WPA2", "client_limit": 50}
+        ],
+        "features": ["high_density", "load_balancing"]
+      },
+      "expected_outcome": {
+        "compliance_status": "compliant_with_warnings",
+        "overall_score": 90,
+        "violations": [],
+        "warnings": [
+          {
+            "type": "client_limit",
+            "description": "SSIDs exceeding recommended client limit: Store",
+            "severity": "medium"
+          }
+        ]
+      }
+    },
+    "healthcare_compliance_fail": {
+      "name": "Healthcare Environment Compliance Fail",
+      "description": "Test compliance checking for non-compliant healthcare configuration",
+      "input": {
+        "environment": "healthcare",
+        "ap_serial": "HCE9K456GHI8",
+        "ssids": [
+          {"name": "Clinical", "security_type": "WPA2", "client_limit": 20},
+          {"name": "Admin", "security_type": "WPA2", "client_limit": 15}
+        ],
+        "features": ["enhanced_security"]
+      },
+      "expected_outcome": {
+        "compliance_status": "non_compliant",
+        "overall_score": 50,
+        "violations": [
+          {
+            "type": "missing_ssids",
+            "description": "Missing required SSIDs: IoT",
+            "severity": "high"
+          },
+          {
+            "type": "weak_security",
+            "description": "SSIDs with non-compliant security: Clinical, Admin",
+            "severity": "critical"
+          },
+          {
+            "type": "missing_features",
+            "description": "Missing required features: location_services",
+            "severity": "medium"
+          }
+        ]
+      }
+    }
+  },
+  "quick_test_commands": {
+    "basic_provision": {
+      "description": "Quick test for basic AP provisioning",
+      "webhook_url": "http://192.168.40.100:8006/webhook/ap-provisioning-manual",
+      "curl_command": "curl -X POST 'http://192.168.40.100:8006/webhook/ap-provisioning-manual' -H 'Content-Type: application/json' -d '{\"operation\": \"provision_ap\", \"ap_serial\": \"CNF7G123ABC9\", \"site_name\": \"TestSite\", \"environment_template\": \"office\"}'"
+    },
+    "zero_touch": {
+      "description": "Quick test for zero-touch provisioning",
+      "webhook_url": "http://192.168.40.100:8006/webhook/ap-provisioning-manual",
+      "curl_command": "curl -X POST 'http://192.168.40.100:8006/webhook/ap-provisioning-manual' -H 'Content-Type: application/json' -d '{\"operation\": \"zero_touch_setup\", \"ap_mac\": \"00:11:22:33:44:55\", \"site_name\": \"TestSite\", \"environment_template\": \"office\"}'"
+    },
+    "create_group": {
+      "description": "Quick test for creating AP group",
+      "webhook_url": "http://192.168.40.100:8006/webhook/ap-provisioning-manual",
+      "curl_command": "curl -X POST 'http://192.168.40.100:8006/webhook/ap-provisioning-manual' -H 'Content-Type: application/json' -d '{\"operation\": \"create_group\", \"ap_group\": \"TestGroup\", \"environment_template\": \"office\"}'"
+    },
+    "firmware_update": {
+      "description": "Quick test for firmware update",
+      "webhook_url": "http://192.168.40.100:8006/webhook/ap-provisioning-manual",
+      "curl_command": "curl -X POST 'http://192.168.40.100:8006/webhook/ap-provisioning-manual' -H 'Content-Type: application/json' -d '{\"operation\": \"firmware_update\", \"ap_serial\": \"CNF7G123ABC9\", \"firmware_version\": \"8.10.0.8\"}'"
+    }
+  },
+  "performance_tests": {
+    "single_ap_provision": {
+      "name": "Single AP Provisioning Performance",
+      "description": "Measure time for single AP provisioning",
+      "target_time": "< 30 seconds",
+      "test_data": {
+        "operation": "provision_ap",
+        "ap_serial": "PERF123ABC90",
+        "environment_template": "office"
+      }
+    },
+    "bulk_provision_10": {
+      "name": "Bulk Provision 10 APs",
+      "description": "Test bulk provisioning of 10 APs",
+      "target_time": "< 5 minutes",
+      "test_data": {
+        "operation": "bulk_provision",
+        "ap_list": ["AP01123ABC90", "AP02123ABC90", "AP03123ABC90", "AP04123ABC90", "AP05123ABC90", "AP06123ABC90", "AP07123ABC90", "AP08123ABC90", "AP09123ABC90", "AP10123ABC90"],
+        "environment_template": "office"
+      }
+    },
+    "concurrent_operations": {
+      "name": "Concurrent Operations Test",
+      "description": "Test multiple concurrent operations",
+      "target_time": "< 60 seconds",
+      "concurrent_operations": 5
+    }
+  }
+}

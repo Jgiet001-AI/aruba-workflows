@@ -1,0 +1,566 @@
+{
+  "test_scenarios": {
+    "create_corporate_user": {
+      "description": "Create a new corporate user with employee role",
+      "input": {
+        "operation": "create_user",
+        "username": "john.doe",
+        "user_email": "john.doe@company.com",
+        "user_role": "employee",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "User created successfully",
+        "operation": "create_user"
+      }
+    },
+    "create_contractor_user": {
+      "description": "Create a contractor user with time restrictions",
+      "input": {
+        "operation": "create_user",
+        "username": "contractor.smith",
+        "user_email": "contractor@external.com",
+        "user_role": "contractor",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "User created successfully",
+        "operation": "create_user"
+      }
+    },
+    "update_user_role": {
+      "description": "Update an existing user's role from employee to manager",
+      "input": {
+        "operation": "update_user",
+        "user_id": "12345",
+        "username": "jane.manager",
+        "user_email": "jane.manager@company.com",
+        "user_role": "manager",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "User updated successfully",
+        "operation": "update_user"
+      }
+    },
+    "create_guest_user": {
+      "description": "Create a guest user with 8-hour access",
+      "input": {
+        "operation": "create_guest",
+        "username": "guest.visitor",
+        "user_email": "visitor@example.com",
+        "guest_duration": "8",
+        "guest_sponsor": "sponsor@company.com",
+        "portal_id": "guest-portal-1",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "Guest user created successfully",
+        "operation": "create_guest"
+      }
+    },
+    "apply_corporate_policy": {
+      "description": "Apply corporate policy to a company device",
+      "input": {
+        "operation": "apply_policy",
+        "client_mac": "aa:bb:cc:dd:ee:01",
+        "device_type": "corporate",
+        "user_role": "employee",
+        "policy_name": "corporate_employee_policy",
+        "bandwidth_limit": "100",
+        "session_timeout": "0",
+        "vlan_assignment": "10",
+        "authentication_method": "802.1x",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "Policy applied successfully",
+        "operation": "apply_policy",
+        "policy_details": {
+          "device_type": "corporate",
+          "user_role": "employee",
+          "bandwidth_limit": 100,
+          "session_timeout": 0,
+          "vlan_assignment": 10,
+          "authentication_method": "802.1x"
+        }
+      }
+    },
+    "apply_byod_policy": {
+      "description": "Apply BYOD policy to a personal device",
+      "input": {
+        "operation": "apply_policy",
+        "client_mac": "bb:cc:dd:ee:ff:02",
+        "device_type": "byod",
+        "user_role": "employee",
+        "policy_name": "employee_byod_policy",
+        "bandwidth_limit": "30",
+        "session_timeout": "720",
+        "vlan_assignment": "30",
+        "authentication_method": "802.1x",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "Policy applied successfully",
+        "operation": "apply_policy",
+        "policy_details": {
+          "device_type": "byod",
+          "user_role": "employee",
+          "bandwidth_limit": 30,
+          "session_timeout": 720,
+          "vlan_assignment": 30,
+          "authentication_method": "802.1x"
+        }
+      }
+    },
+    "apply_guest_policy": {
+      "description": "Apply guest policy with captive portal",
+      "input": {
+        "operation": "apply_policy",
+        "client_mac": "cc:dd:ee:ff:aa:03",
+        "device_type": "guest",
+        "user_role": "guest",
+        "policy_name": "guest_internet_policy",
+        "bandwidth_limit": "10",
+        "session_timeout": "240",
+        "vlan_assignment": "100",
+        "authentication_method": "captive_portal",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "Policy applied successfully",
+        "operation": "apply_policy",
+        "policy_details": {
+          "device_type": "guest",
+          "user_role": "guest",
+          "bandwidth_limit": 20,
+          "session_timeout": 240,
+          "vlan_assignment": 100,
+          "authentication_method": "captive_portal"
+        }
+      }
+    },
+    "apply_contractor_policy": {
+      "description": "Apply contractor policy with time restrictions",
+      "input": {
+        "operation": "apply_policy",
+        "client_mac": "dd:ee:ff:aa:bb:04",
+        "device_type": "contractors",
+        "user_role": "contractor",
+        "policy_name": "contractor_limited_policy",
+        "bandwidth_limit": "25",
+        "session_timeout": "480",
+        "vlan_assignment": "20",
+        "time_restrictions": "{\"allowed_hours\": \"08:00-18:00\", \"allowed_days\": \"Mon-Fri\"}",
+        "authentication_method": "captive_portal",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "Policy applied successfully",
+        "operation": "apply_policy",
+        "policy_details": {
+          "device_type": "contractors",
+          "user_role": "contractor",
+          "bandwidth_limit": 25,
+          "session_timeout": 480,
+          "vlan_assignment": 20,
+          "authentication_method": "captive_portal"
+        }
+      }
+    },
+    "apply_iot_policy": {
+      "description": "Apply IoT device policy with restricted access",
+      "input": {
+        "operation": "apply_policy",
+        "client_mac": "ee:ff:aa:bb:cc:05",
+        "device_type": "iot",
+        "user_role": "device",
+        "policy_name": "iot_restricted_policy",
+        "bandwidth_limit": "5",
+        "session_timeout": "0",
+        "vlan_assignment": "200",
+        "authentication_method": "mac_auth",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "Policy applied successfully",
+        "operation": "apply_policy",
+        "policy_details": {
+          "device_type": "iot",
+          "user_role": "device",
+          "bandwidth_limit": 10,
+          "session_timeout": 0,
+          "vlan_assignment": 200,
+          "authentication_method": "mac_auth"
+        }
+      }
+    },
+    "apply_executive_policy": {
+      "description": "Apply executive policy with priority bandwidth",
+      "input": {
+        "operation": "apply_policy",
+        "client_mac": "ff:aa:bb:cc:dd:06",
+        "device_type": "corporate",
+        "user_role": "executive",
+        "policy_name": "executive_vip_policy",
+        "bandwidth_limit": "200",
+        "session_timeout": "0",
+        "vlan_assignment": "10",
+        "authentication_method": "802.1x",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "Policy applied successfully",
+        "operation": "apply_policy",
+        "policy_details": {
+          "device_type": "corporate",
+          "user_role": "executive",
+          "bandwidth_limit": 250,
+          "session_timeout": 0,
+          "vlan_assignment": 10,
+          "authentication_method": "802.1x"
+        }
+      }
+    },
+    "configure_corporate_byod": {
+      "description": "Configure BYOD for corporate devices with certificates",
+      "input": {
+        "operation": "configure_byod",
+        "device_type": "corporate",
+        "authentication_method": "802.1x",
+        "certificate_type": "user",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "BYOD configured successfully",
+        "operation": "configure_byod"
+      }
+    },
+    "configure_contractor_byod": {
+      "description": "Configure BYOD for contractor devices with approval",
+      "input": {
+        "operation": "configure_byod",
+        "device_type": "contractor",
+        "authentication_method": "captive_portal",
+        "certificate_type": "device",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "BYOD configured successfully",
+        "operation": "configure_byod"
+      }
+    },
+    "troubleshoot_authentication_issue": {
+      "description": "Troubleshoot client authentication problems",
+      "input": {
+        "operation": "troubleshoot_client",
+        "client_mac": "aa:bb:cc:dd:ee:ff",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "Client troubleshooting completed - Status: healthy",
+        "operation": "troubleshoot_client",
+        "troubleshooting_summary": {
+          "overall_status": "healthy",
+          "issues_found": 0,
+          "recommendations": 0,
+          "steps_executed": 5
+        }
+      }
+    },
+    "troubleshoot_connectivity_issue": {
+      "description": "Troubleshoot client connectivity and signal issues",
+      "input": {
+        "operation": "troubleshoot_client",
+        "client_mac": "bb:cc:dd:ee:ff:aa",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": true,
+        "message": "Client troubleshooting completed - Status: issues_detected",
+        "operation": "troubleshoot_client",
+        "troubleshooting_summary": {
+          "overall_status": "issues_detected",
+          "issues_found": 2,
+          "recommendations": 2,
+          "steps_executed": 5
+        }
+      }
+    }
+  },
+  "bulk_operations": {
+    "bulk_user_creation": {
+      "description": "Test multiple user creation operations",
+      "operations": [
+        {
+          "operation": "create_user",
+          "username": "employee1",
+          "user_email": "employee1@company.com",
+          "user_role": "employee"
+        },
+        {
+          "operation": "create_user",
+          "username": "employee2",
+          "user_email": "employee2@company.com",
+          "user_role": "employee"
+        },
+        {
+          "operation": "create_user",
+          "username": "manager1",
+          "user_email": "manager1@company.com",
+          "user_role": "manager"
+        },
+        {
+          "operation": "create_user",
+          "username": "contractor1",
+          "user_email": "contractor1@external.com",
+          "user_role": "contractor"
+        }
+      ]
+    },
+    "bulk_policy_application": {
+      "description": "Test multiple policy applications",
+      "operations": [
+        {
+          "operation": "apply_policy",
+          "client_mac": "aa:bb:cc:dd:ee:01",
+          "device_type": "corporate",
+          "user_role": "employee",
+          "policy_name": "corporate_employee_policy"
+        },
+        {
+          "operation": "apply_policy",
+          "client_mac": "aa:bb:cc:dd:ee:02",
+          "device_type": "byod",
+          "user_role": "employee",
+          "policy_name": "employee_byod_policy"
+        },
+        {
+          "operation": "apply_policy",
+          "client_mac": "aa:bb:cc:dd:ee:03",
+          "device_type": "guest",
+          "user_role": "guest",
+          "policy_name": "guest_internet_policy"
+        },
+        {
+          "operation": "apply_policy",
+          "client_mac": "aa:bb:cc:dd:ee:04",
+          "device_type": "iot",
+          "user_role": "device",
+          "policy_name": "iot_restricted_policy"
+        }
+      ]
+    }
+  },
+  "error_scenarios": {
+    "invalid_operation": {
+      "description": "Test with invalid operation parameter",
+      "input": {
+        "operation": "invalid_operation",
+        "username": "test.user",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": false,
+        "message": "Unknown operation: invalid_operation"
+      }
+    },
+    "missing_required_params": {
+      "description": "Test with missing required parameters",
+      "input": {
+        "operation": "create_user",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com"
+      },
+      "expected_result": {
+        "success": false,
+        "error_category": "client_error"
+      }
+    },
+    "invalid_mac_address": {
+      "description": "Test with invalid MAC address format",
+      "input": {
+        "operation": "apply_policy",
+        "client_mac": "invalid-mac",
+        "device_type": "corporate",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": false,
+        "error_category": "client_error"
+      }
+    },
+    "authentication_failure": {
+      "description": "Test with invalid authentication token",
+      "input": {
+        "operation": "create_user",
+        "username": "test.user",
+        "user_email": "test@company.com",
+        "user_role": "employee",
+        "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+        "customer_id": "test-customer-id"
+      },
+      "expected_result": {
+        "success": false,
+        "error_category": "authentication"
+      }
+    }
+  },
+  "performance_tests": {
+    "concurrent_policy_applications": {
+      "description": "Test concurrent policy applications for stress testing",
+      "concurrent_operations": 10,
+      "operation_template": {
+        "operation": "apply_policy",
+        "device_type": "corporate",
+        "user_role": "employee",
+        "policy_name": "corporate_employee_policy",
+        "bandwidth_limit": "100",
+        "session_timeout": "0",
+        "vlan_assignment": "10",
+        "authentication_method": "802.1x"
+      }
+    },
+    "bulk_user_management": {
+      "description": "Test bulk user creation and management",
+      "user_count": 50,
+      "operation_types": ["create_user", "update_user", "assign_role"]
+    }
+  },
+  "integration_tests": {
+    "end_to_end_corporate_onboarding": {
+      "description": "Complete corporate user and device onboarding flow",
+      "steps": [
+        {
+          "step": 1,
+          "operation": "create_user",
+          "username": "new.employee",
+          "user_email": "new.employee@company.com",
+          "user_role": "employee"
+        },
+        {
+          "step": 2,
+          "operation": "configure_byod",
+          "device_type": "corporate",
+          "authentication_method": "802.1x",
+          "certificate_type": "user"
+        },
+        {
+          "step": 3,
+          "operation": "apply_policy",
+          "client_mac": "new:device:mac:address",
+          "device_type": "corporate",
+          "user_role": "employee",
+          "policy_name": "corporate_employee_policy"
+        },
+        {
+          "step": 4,
+          "operation": "troubleshoot_client",
+          "client_mac": "new:device:mac:address"
+        }
+      ]
+    },
+    "guest_access_workflow": {
+      "description": "Complete guest access setup and management",
+      "steps": [
+        {
+          "step": 1,
+          "operation": "create_guest",
+          "username": "conference.guest",
+          "user_email": "guest@conference.com",
+          "guest_duration": "24",
+          "guest_sponsor": "event@company.com"
+        },
+        {
+          "step": 2,
+          "operation": "apply_policy",
+          "client_mac": "guest:device:mac:address",
+          "device_type": "guest",
+          "user_role": "guest",
+          "policy_name": "guest_internet_policy"
+        },
+        {
+          "step": 3,
+          "operation": "troubleshoot_client",
+          "client_mac": "guest:device:mac:address"
+        }
+      ]
+    }
+  },
+  "validation_rules": {
+    "mac_address_format": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$",
+    "email_format": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+    "username_format": "^[a-zA-Z0-9._-]{3,50}$",
+    "bandwidth_range": {
+      "min": 1,
+      "max": 1000
+    },
+    "session_timeout_range": {
+      "min": 0,
+      "max": 86400
+    },
+    "vlan_range": {
+      "min": 1,
+      "max": 4094
+    },
+    "supported_operations": [
+      "create_user",
+      "update_user",
+      "delete_user",
+      "create_role",
+      "assign_role",
+      "create_guest",
+      "configure_byod",
+      "apply_policy",
+      "troubleshoot_client"
+    ],
+    "supported_device_types": [
+      "corporate",
+      "byod",
+      "guest",
+      "iot",
+      "contractors"
+    ],
+    "supported_user_roles": [
+      "executive",
+      "manager",
+      "employee",
+      "contractor",
+      "guest"
+    ],
+    "supported_auth_methods": [
+      "802.1x",
+      "mac_auth",
+      "captive_portal",
+      "psk"
+    ]
+  }
+}

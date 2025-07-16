@@ -1,0 +1,307 @@
+{
+  "test_scenarios": {
+    "list_vlans": {
+      "description": "List all VLANs on a switch",
+      "input": {
+        "operation": "list",
+        "switch_ip": "192.168.1.100"
+      },
+      "expected_behavior": "Returns all VLANs configured on the switch",
+      "success_criteria": [
+        "HTTP 200 status code",
+        "JSON response with VLAN objects",
+        "Success notification sent"
+      ]
+    },
+    "read_specific_vlan": {
+      "description": "Read details of a specific VLAN",
+      "input": {
+        "operation": "read",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 100
+      },
+      "expected_behavior": "Returns configuration details for VLAN 100",
+      "success_criteria": [
+        "HTTP 200 status code",
+        "VLAN details in response",
+        "VLAN ID matches request"
+      ]
+    },
+    "create_new_vlan": {
+      "description": "Create a new VLAN with all parameters",
+      "input": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 200,
+        "vlan_name": "GUEST_NETWORK",
+        "description": "Guest network VLAN for visitor access",
+        "admin_state": "up"
+      },
+      "expected_behavior": "Creates VLAN 200 with specified configuration",
+      "success_criteria": [
+        "HTTP 201 or 200 status code",
+        "VLAN created successfully",
+        "Configuration matches input parameters"
+      ]
+    },
+    "create_minimal_vlan": {
+      "description": "Create VLAN with minimal required parameters",
+      "input": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 201,
+        "vlan_name": "MINIMAL_VLAN"
+      },
+      "expected_behavior": "Creates VLAN with default values for optional parameters",
+      "success_criteria": [
+        "HTTP 201 or 200 status code",
+        "VLAN created with defaults",
+        "Admin state defaults to 'up'"
+      ]
+    },
+    "update_vlan": {
+      "description": "Update existing VLAN configuration",
+      "input": {
+        "operation": "update",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 200,
+        "vlan_name": "GUEST_WIFI",
+        "description": "Updated guest WiFi network",
+        "admin_state": "up"
+      },
+      "expected_behavior": "Updates VLAN 200 with new configuration",
+      "success_criteria": [
+        "HTTP 200 status code",
+        "VLAN configuration updated",
+        "New values applied successfully"
+      ]
+    },
+    "delete_vlan": {
+      "description": "Delete an existing VLAN",
+      "input": {
+        "operation": "delete",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 201
+      },
+      "expected_behavior": "Removes VLAN 201 from switch configuration",
+      "success_criteria": [
+        "HTTP 200 or 204 status code",
+        "VLAN no longer exists",
+        "Cleanup completed successfully"
+      ]
+    }
+  },
+  "error_test_scenarios": {
+    "invalid_operation": {
+      "description": "Test validation with invalid operation",
+      "input": {
+        "operation": "invalid_op",
+        "switch_ip": "192.168.1.100"
+      },
+      "expected_behavior": "Validation error notification",
+      "expected_errors": ["operation must be one of: create, read, update, delete, list"]
+    },
+    "missing_switch_ip": {
+      "description": "Test validation without switch IP",
+      "input": {
+        "operation": "list"
+      },
+      "expected_behavior": "Validation error notification",
+      "expected_errors": ["switch_ip is required"]
+    },
+    "invalid_ip_format": {
+      "description": "Test validation with invalid IP format",
+      "input": {
+        "operation": "list",
+        "switch_ip": "invalid.ip.address"
+      },
+      "expected_behavior": "Validation error notification",
+      "expected_errors": ["switch_ip must be a valid IP address"]
+    },
+    "missing_vlan_id_for_create": {
+      "description": "Test create operation without VLAN ID",
+      "input": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_name": "TEST_VLAN"
+      },
+      "expected_behavior": "Validation error notification",
+      "expected_errors": ["vlan_id is required for create operation"]
+    },
+    "invalid_vlan_id_range": {
+      "description": "Test with VLAN ID outside valid range",
+      "input": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 5000,
+        "vlan_name": "INVALID_VLAN"
+      },
+      "expected_behavior": "Validation error notification",
+      "expected_errors": ["vlan_id must be a number between 1 and 4094"]
+    },
+    "missing_vlan_name_for_create": {
+      "description": "Test create operation without VLAN name",
+      "input": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 300
+      },
+      "expected_behavior": "Validation error notification",
+      "expected_errors": ["vlan_name is required for create operation"]
+    },
+    "invalid_vlan_name_format": {
+      "description": "Test with invalid VLAN name characters",
+      "input": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 301,
+        "vlan_name": "INVALID@VLAN#NAME"
+      },
+      "expected_behavior": "Validation error notification",
+      "expected_errors": ["vlan_name can only contain letters, numbers, underscores, and hyphens"]
+    },
+    "vlan_name_too_long": {
+      "description": "Test with VLAN name exceeding 32 characters",
+      "input": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 302,
+        "vlan_name": "THIS_IS_A_VERY_LONG_VLAN_NAME_THAT_EXCEEDS_LIMIT"
+      },
+      "expected_behavior": "Validation error notification",
+      "expected_errors": ["vlan_name must be 32 characters or less"]
+    },
+    "invalid_admin_state": {
+      "description": "Test with invalid admin state value",
+      "input": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 303,
+        "vlan_name": "TEST_VLAN",
+        "admin_state": "invalid_state"
+      },
+      "expected_behavior": "Validation error notification",
+      "expected_errors": ["admin_state must be \"up\" or \"down\""]
+    },
+    "nonexistent_vlan_read": {
+      "description": "Attempt to read non-existent VLAN",
+      "input": {
+        "operation": "read",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 9999
+      },
+      "expected_behavior": "API error with 404 status code",
+      "expected_error_type": "not_found"
+    },
+    "duplicate_vlan_creation": {
+      "description": "Attempt to create already existing VLAN",
+      "input": {
+        "operation": "create",
+        "switch_ip": "192.168.1.100",
+        "vlan_id": 1,
+        "vlan_name": "DEFAULT_VLAN"
+      },
+      "expected_behavior": "API error with 409 status code",
+      "expected_error_type": "conflict"
+    },
+    "unreachable_switch": {
+      "description": "Test with unreachable switch IP",
+      "input": {
+        "operation": "list",
+        "switch_ip": "192.168.255.254"
+      },
+      "expected_behavior": "Network error or timeout",
+      "expected_error_type": "network_error"
+    },
+    "invalid_credentials": {
+      "description": "Test with invalid authentication",
+      "input": {
+        "operation": "list",
+        "switch_ip": "192.168.1.100"
+      },
+      "expected_behavior": "Authentication error",
+      "expected_error_type": "authentication_error",
+      "note": "This test requires configuring invalid credentials"
+    }
+  },
+  "test_execution_order": [
+    "1. Run all validation error tests first",
+    "2. Test list_vlans to establish baseline",
+    "3. Test create_new_vlan",
+    "4. Test read_specific_vlan with created VLAN",
+    "5. Test update_vlan with created VLAN",
+    "6. Test create_minimal_vlan",
+    "7. Test delete_vlan with minimal VLAN",
+    "8. Test error scenarios with API calls",
+    "9. Final cleanup: delete any remaining test VLANs"
+  ],
+  "setup_requirements": {
+    "n8n_credentials": {
+      "type": "arubaOsCxApi",
+      "required_fields": [
+        "username",
+        "password"
+      ],
+      "notes": "Configure in n8n credential manager"
+    },
+    "slack_webhook": {
+      "type": "slack",
+      "required_fields": [
+        "webhook_url"
+      ],
+      "channels": [
+        "#network-automation",
+        "#network-alerts"
+      ],
+      "notes": "Configure for notifications"
+    },
+    "test_switch": {
+      "requirements": [
+        "AOS-CX switch with REST API enabled",
+        "Network connectivity from n8n server",
+        "Valid credentials for API access",
+        "VLANs 200-303 available for testing"
+      ]
+    }
+  },
+  "troubleshooting": {
+    "common_issues": {
+      "connection_refused": {
+        "description": "Unable to connect to switch",
+        "solutions": [
+          "Verify switch IP address is correct",
+          "Check network connectivity",
+          "Ensure REST API is enabled on switch",
+          "Verify firewall rules allow HTTPS (443)"
+        ]
+      },
+      "authentication_failed": {
+        "description": "Invalid credentials or unauthorized",
+        "solutions": [
+          "Verify username/password in n8n credentials",
+          "Check user has appropriate privileges",
+          "Ensure account is not locked",
+          "Verify API access is enabled for user"
+        ]
+      },
+      "timeout_errors": {
+        "description": "Requests timing out",
+        "solutions": [
+          "Increase timeout values in HTTP nodes",
+          "Check switch performance and load",
+          "Verify network latency",
+          "Consider switch maintenance windows"
+        ]
+      },
+      "validation_errors": {
+        "description": "Input validation failing",
+        "solutions": [
+          "Review required parameters for operation",
+          "Check VLAN ID range (1-4094)",
+          "Verify VLAN name format (alphanumeric, _, -)",
+          "Ensure all required fields are provided"
+        ]
+      }
+    }
+  }
+}

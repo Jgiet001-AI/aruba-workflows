@@ -1,0 +1,41 @@
+{
+  "name": "EdgeConnect API Request",
+  "type": "n8n-nodes-base.httpRequest",
+  "typeVersion": 4.1, 
+  "position": [400, 300],
+  "parameters": {
+    "url": "https://{{$parameter.orchestrator_url}}/api/{{$parameter.endpoint}}",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": [
+        {
+          "name": "Content-Type", 
+          "value": "application/json"
+        },
+        {
+          "name": "Accept",
+          "value": "application/json"
+        }
+      ]
+    },
+    "options": {
+      "timeout": 60000,
+      "retry": {
+        "enabled": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000
+      },
+      "redirect": {
+        "followRedirects": true,
+        "maxRedirects": 3
+      },
+      "response": {
+        "fullResponse": false,
+        "responseFormat": "autodetect"
+      }
+    }
+  },
+  "description": "Standard HTTP request template for EdgeConnect Orchestrator API calls with extended timeout for long operations"
+}

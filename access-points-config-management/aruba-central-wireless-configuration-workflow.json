@@ -1,0 +1,172 @@
+{
+  "name": "Aruba Central Wireless Configuration",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "aruba-wireless-config",
+        "responseMode": "responseNode",
+        "responseData": "json"
+      },
+      "id": "fb52ad86-b30f-4a78-8e83-1a7d27c0b7ca",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "aruba-wireless-config"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Wireless Configuration Input Validation\nconst input = items[0].json;\n\n// Validate required parameters\nif (!input.operation) {\n  throw new Error('operation parameter is required');\n}\n\nif (!input.central_base_url) {\n  throw new Error('central_base_url parameter is required');\n}\n\nif (!input.customer_id) {\n  throw new Error('customer_id parameter is required');\n}\n\n// Validate operation types\nconst validOps = ['create_ssid', 'update_ssid', 'delete_ssid', 'list_ssids', 'configure_radio', 'update_security'];\nif (!validOps.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}. Valid operations: ${validOps.join(', ')}`);\n}\n\n// Operation-specific validation\nif (['create_ssid', 'update_ssid'].includes(input.operation)) {\n  if (!input.ssid_name) {\n    throw new Error('ssid_name is required for create_ssid and update_ssid operations');\n  }\n  if (!input.essid) {\n    throw new Error('essid is required for create_ssid and update_ssid operations');\n  }\n  if (!input.security_type) {\n    throw new Error('security_type is required for create_ssid and update_ssid operations');\n  }\n  \n  // Validate security types\n  const validSecTypes = ['open', 'wpa2_personal', 'wpa3_personal', 'wpa2_enterprise', 'wpa3_enterprise'];\n  if (!validSecTypes.includes(input.security_type)) {\n    throw new Error(`Invalid security_type: ${input.security_type}. Valid types: ${validSecTypes.join(', ')}`);\n  }\n  \n  // Validate passphrase for personal networks\n  if (['wpa2_personal', 'wpa3_personal'].includes(input.security_type) && !input.passphrase) {\n    throw new Error('passphrase is required for personal security types');\n  }\n  \n  // Validate passphrase length\n  if (input.passphrase && (input.passphrase.length < 8 || input.passphrase.length > 63)) {\n    throw new Error('passphrase must be between 8 and 63 characters');\n  }\n}\n\nif (input.operation === 'delete_ssid' && !input.ssid_name) {\n  throw new Error('ssid_name is required for delete_ssid operation');\n}\n\nif (input.operation === 'configure_radio') {\n  if (!input.ap_group) {\n    throw new Error('ap_group is required for configure_radio operation');\n  }\n  if (!input.radio_band) {\n    throw new Error('radio_band is required for configure_radio operation');\n  }\n  \n  const validBands = ['2.4GHz', '5GHz', '6GHz', 'dual_band', 'tri_band'];\n  if (!validBands.includes(input.radio_band)) {\n    throw new Error(`Invalid radio_band: ${input.radio_band}. Valid bands: ${validBands.join(', ')}`);\n  }\n}\n\n// Validate VLAN ID if provided\nif (input.vlan_id && (input.vlan_id < 1 || input.vlan_id > 4094)) {\n  throw new Error('vlan_id must be between 1 and 4094');\n}\n\n// Validate channel width if provided\nif (input.channel_width) {\n  const validWidths = ['20MHz', '40MHz', '80MHz', '160MHz'];\n  if (!validWidths.includes(input.channel_width)) {\n    throw new Error(`Invalid channel_width: ${input.channel_width}. Valid widths: ${validWidths.join(', ')}`);\n  }\n}\n\n// Validate power level if provided\nif (input.power_level) {\n  const validPower = ['auto', 'low', 'medium', 'high'];\n  const isValidPower = validPower.includes(input.power_level) || (!isNaN(input.power_level) && input.power_level >= -30 && input.power_level <= 30);\n  if (!isValidPower) {\n    throw new Error('power_level must be auto, low, medium, high, or a number between -30 and 30 dBm');\n  }\n}\n\n// Validate max_clients if provided\nif (input.max_clients && (input.max_clients < 1 || input.max_clients > 512)) {\n  throw new Error('max_clients must be between 1 and 512');\n}\n\n// Set defaults\nconst validatedInput = {\n  ...input,\n  broadcast_ssid: input.broadcast_ssid !== false,\n  band_steering: input.band_steering !== false,\n  fast_transition: input.fast_transition !== false,\n  channel_width: input.channel_width || '80MHz',\n  power_level: input.power_level || 'auto',\n  max_clients: input.max_clients || 128\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      "name": "Input Validation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "create_ssid"
+            }
+          ]
+        }
+      },
+      "id": "route-create-ssid",
+      "name": "Route: Create SSID",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "update_ssid"
+            }
+          ]
+        }
+      },
+      "id": "route-update-ssid",
+      "name": "Route: Update SSID",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "delete_ssid"
+            }
+          ]
+        }
+      },
+      "id": "route-delete-ssid",
+      "name": "Route: Delete SSID",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "list_ssids"
+            }
+          ]
+        }
+      },
+      "id": "route-list-ssids",
+      "name": "Route: List SSIDs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "configure_radio"
+            }
+          ]
+        }
+      },
+      "id": "route-configure-radio",
+      "name": "Route: Configure Radio",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "update_security"
+            }
+          ]
+        }
+      },
+      "id": "route-update-security",
+      "name": "Route: Update Security",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Security Template Generator\nconst input = items[0].json;\nlet securityTemplate = {};\n\nswitch (input.security_type) {\n  case 'open':\n    securityTemplate = {\n      type: \"open\",\n      auth_method: \"open\"\n    };\n    break;\n    \n  case 'wpa2_personal':\n    securityTemplate = {\n      type: \"wpa2_personal\",\n      auth_method: \"psk\",\n      passphrase: input.passphrase,\n      encryption: \"aes\"\n    };\n    break;\n    \n  case 'wpa3_personal':\n    securityTemplate = {\n      type: \"wpa3_personal\",\n      auth_method: \"sae\",\n      passphrase: input.passphrase,\n      encryption: \"aes\"\n    };\n    break;\n    \n  case 'wpa2_enterprise':\n    securityTemplate = {\n      type: \"wpa2_enterprise\",\n      auth_method: \"eap\",\n      encryption: \"aes\",\n      radius_server: input.radius_server,\n      radius_secret: input.radius_secret\n    };\n    break;\n    \n  case 'wpa3_enterprise':\n    securityTemplate = {\n      type: \"wpa3_enterprise\",\n      auth_method: \"eap\",\n      encryption: \"aes\",\n      radius_server: input.radius_server,\n      radius_secret: input.radius_secret\n    };\n    break;\n}\n\n// Apply network type specific templates\nif (input.network_type === 'corporate') {\n  securityTemplate = {\n    ...securityTemplate,\n    fast_transition: true,\n    pmf: \"required\",\n    wpa3_transition: true\n  };\n} else if (input.network_type === 'guest') {\n  securityTemplate = {\n    ...securityTemplate,\n    captive_portal: true,\n    session_timeout: input.session_timeout || 3600,\n    bandwidth_limit: input.bandwidth_limit || 10000\n  };\n} else if (input.network_type === 'iot') {\n  securityTemplate = {\n    ...securityTemplate,\n    device_isolation: true,\n    max_clients: input.max_clients || 64,\n    rate_limit: 5000\n  };\n} else if (input.network_type === 'public') {\n  securityTemplate = {\n    ...securityTemplate,\n    terms_acceptance: true,\n    bandwidth_limit: 5000,\n    session_timeout: 1800\n  };\n}\n\nconst result = {\n  ...input,\n  security_config: securityTemplate\n};\n\nreturn [{ json: result }];"
+      },
+      "id": "security-template-generator",
+      "name": "Security Template Generator",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [840, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.central_base_url}}/configuration/v2/wlan/ssid",
+        "authentication": "predefinedCredentialType",
+        "credentialType": "arubaApi",
+        "requestMethod": "POST",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Customer-ID",
+              "value": "={{$json.customer_id}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"ssid_name\": \"{{$json.ssid_name}}\",\n  \"essid\": \"{{$json.essid}}\",\n  \"security\": {{JSON.stringify($json.security_config)}},\n  \"vlan_id\": {{$json.vlan_id || 1}},\n  \"broadcast_ssid\": {{$json.broadcast_ssid}},\n  \"max_clients\": {{$json.max_clients}},\n  \"band_steering\": {{$json.band_steering}},\n  \"fast_transition\": {{$json.fast_transition}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000\n          }\n        }\n      },\n      \"id\": \"create-ssid-api\",\n      \"name\": \"Create SSID API Call\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 3,\n      \"position\": [1040, 200]\n    },\n    {\n      \"parameters\": {\n        \"url\": \"={{$json.central_base_url}}/configuration/v2/wlan/ssid/{{$json.ssid_name}}\",\n        \"authentication\": \"predefinedCredentialType\",\n        \"credentialType\": \"arubaApi\",\n        \"requestMethod\": \"PUT\",\n        \"sendHeaders\": true,\n        \"specifyHeaders\": \"json\",\n        \"headerParameters\": {\n          \"parameters\": [\n            {\n              \"name\": \"Content-Type\",\n              \"value\": \"application/json\"\n            },\n            {\n              \"name\": \"X-Customer-ID\",\n              \"value\": \"={{$json.customer_id}}\"\n            }\n          ]\n        },\n        \"sendBody\": true,\n        \"specifyBody\": \"json\",\n        \"jsonBody\": \"={\\n  \\\"essid\\\": \\\"{{$json.essid}}\\\",\\n  \\\"security\\\": {{JSON.stringify($json.security_config)}},\\n  \\\"vlan_id\\\": {{$json.vlan_id || 1}},\\n  \\\"broadcast_ssid\\\": {{$json.broadcast_ssid}},\\n  \\\"max_clients\\\": {{$json.max_clients}},\\n  \\\"band_steering\\\": {{$json.band_steering}},\\n  \\\"fast_transition\\\": {{$json.fast_transition}}\\n}\",\n        \"options\": {\n          \"timeout\": 30000,\n          \"retry\": {\n            \"maxTries\": 3,\n            \"waitBetweenTries\": 2000\n          }\n        }\n      },\n      \"id\": \"update-ssid-api\",\n      \"name\": \"Update SSID API Call\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 3,\n      \"position\": [1040, 300]\n    },\n    {\n      \"parameters\": {\n        \"url\": \"={{$json.central_base_url}}/configuration/v2/wlan/ssid/{{$json.ssid_name}}\",\n        \"authentication\": \"predefinedCredentialType\",\n        \"credentialType\": \"arubaApi\",\n        \"requestMethod\": \"DELETE\",\n        \"sendHeaders\": true,\n        \"specifyHeaders\": \"json\",\n        \"headerParameters\": {\n          \"parameters\": [\n            {\n              \"name\": \"X-Customer-ID\",\n              \"value\": \"={{$json.customer_id}}\"\n            }\n          ]\n        },\n        \"options\": {\n          \"timeout\": 30000,\n          \"retry\": {\n            \"maxTries\": 3,\n            \"waitBetweenTries\": 2000\n          }\n        }\n      },\n      \"id\": \"delete-ssid-api\",\n      \"name\": \"Delete SSID API Call\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 3,\n      \"position\": [1040, 400]\n    },\n    {\n      \"parameters\": {\n        \"url\": \"={{$json.central_base_url}}/configuration/v2/wlan/ssid\",\n        \"authentication\": \"predefinedCredentialType\",\n        \"credentialType\": \"arubaApi\",\n        \"requestMethod\": \"GET\",\n        \"sendHeaders\": true,\n        \"specifyHeaders\": \"json\",\n        \"headerParameters\": {\n          \"parameters\": [\n            {\n              \"name\": \"X-Customer-ID\",\n              \"value\": \"={{$json.customer_id}}\"\n            }\n          ]\n        },\n        \"options\": {\n          \"timeout\": 30000,\n          \"retry\": {\n            \"maxTries\": 3,\n            \"waitBetweenTries\": 2000\n          }\n        }\n      },\n      \"id\": \"list-ssids-api\",\n      \"name\": \"List SSIDs API Call\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 3,\n      \"position\": [1040, 500]\n    },\n    {\n      \"parameters\": {\n        \"url\": \"={{$json.central_base_url}}/configuration/v2/ap_groups/{{$json.ap_group}}/wireless_profile\",\n        \"authentication\": \"predefinedCredentialType\",\n        \"credentialType\": \"arubaApi\",\n        \"requestMethod\": \"PUT\",\n        \"sendHeaders\": true,\n        \"specifyHeaders\": \"json\",\n        \"headerParameters\": {\n          \"parameters\": [\n            {\n              \"name\": \"Content-Type\",\n              \"value\": \"application/json\"\n            },\n            {\n              \"name\": \"X-Customer-ID\",\n              \"value\": \"={{$json.customer_id}}\"\n            }\n          ]\n        },\n        \"sendBody\": true,\n        \"specifyBody\": \"json\",\n        \"jsonBody\": \"={\\n  \\\"radio_settings\\\": {\\n    \\\"band\\\": \\\"{{$json.radio_band}}\\\",\\n    \\\"channel_width\\\": \\\"{{$json.channel_width}}\\\",\\n    \\\"power_level\\\": \\\"{{$json.power_level}}\\\",\\n    \\\"max_clients\\\": {{$json.max_clients}}\\n  },\\n  \\\"band_steering\\\": {{$json.band_steering}},\\n  \\\"load_balancing\\\": {{$json.load_balancing || true}}\\n}\",\n        \"options\": {\n          \"timeout\": 30000,\n          \"retry\": {\n            \"maxTries\": 3,\n            \"waitBetweenTries\": 2000\n          }\n        }\n      },\n      \"id\": \"configure-radio-api\",\n      \"name\": \"Configure Radio API Call\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 3,\n      \"position\": [1040, 600]\n    },\n    {\n      \"parameters\": {\n        \"jsCode\": \"// Error Categorization and Rollback Logic\\nconst input = items[0].json;\\nconst error = $input.first().error;\\n\\nlet errorCategory = 'unknown';\\nlet shouldRollback = false;\\nlet retryable = false;\\n\\nif (error) {\\n  const statusCode = error.httpCode || error.status;\\n  const errorMessage = error.message || error.description || '';\\n  \\n  // Categorize errors\\n  if (statusCode === 401 || statusCode === 403) {\\n    errorCategory = 'authentication';\\n    retryable = false;\\n  } else if (statusCode === 400) {\\n    errorCategory = 'validation';\\n    retryable = false;\\n  } else if (statusCode === 404) {\\n    errorCategory = 'not_found';\\n    retryable = false;\\n  } else if (statusCode === 409) {\\n    errorCategory = 'conflict';\\n    retryable = false;\\n    shouldRollback = true;\\n  } else if (statusCode === 429) {\\n    errorCategory = 'rate_limit';\\n    retryable = true;\\n  } else if (statusCode >= 500) {\\n    errorCategory = 'server_error';\\n    retryable = true;\\n  } else if (errorMessage.includes('timeout')) {\\n    errorCategory = 'timeout';\\n    retryable = true;\\n  } else if (errorMessage.includes('network')) {\\n    errorCategory = 'network';\\n    retryable = true;\\n  }\\n  \\n  // Determine rollback for critical operations\\n  if (['create_ssid', 'update_ssid', 'configure_radio'].includes(input.operation)) {\\n    shouldRollback = shouldRollback || statusCode >= 500;\\n  }\\n}\\n\\nconst result = {\\n  ...input,\\n  error: {\\n    category: errorCategory,\\n    original: error,\\n    should_rollback: shouldRollback,\\n    retryable: retryable,\\n    timestamp: new Date().toISOString()\\n  }\\n};\\n\\nreturn [{ json: result }];\"\n      },\n      \"id\": \"error-handler\",\n      \"name\": \"Error Handler\",\n      \"type\": \"n8n-nodes-base.function\",\n      \"typeVersion\": 1,\n      \"position\": [1240, 800]\n    },\n    {\n      \"parameters\": {\n        \"conditions\": {\n          \"boolean\": [\n            {\n              \"value1\": \"={{$json.error.should_rollback}}\",\n              \"operation\": \"equal\",\n              \"value2\": true\n            }\n          ]\n        }\n      },\n      \"id\": \"rollback-check\",\n      \"name\": \"Rollback Check\",\n      \"type\": \"n8n-nodes-base.if\",\n      \"typeVersion\": 1,\n      \"position\": [1440, 800]\n    },\n    {\n      \"parameters\": {\n        \"jsCode\": \"// Rollback Logic\\nconst input = items[0].json;\\nlet rollbackAction = null;\\n\\nswitch (input.operation) {\\n  case 'create_ssid':\\n    rollbackAction = {\\n      operation: 'delete_ssid',\\n      ssid_name: input.ssid_name,\\n      reason: 'rollback_after_creation_failure'\\n    };\\n    break;\\n    \\n  case 'update_ssid':\\n    // Would need original config to rollback properly\\n    rollbackAction = {\\n      operation: 'restore_ssid_backup',\\n      ssid_name: input.ssid_name,\\n      reason: 'rollback_after_update_failure'\\n    };\\n    break;\\n    \\n  case 'configure_radio':\\n    rollbackAction = {\\n      operation: 'restore_radio_backup',\\n      ap_group: input.ap_group,\\n      reason: 'rollback_after_radio_config_failure'\\n    };\\n    break;\\n}\\n\\nconst result = {\\n  ...input,\\n  rollback_action: rollbackAction\\n};\\n\\nreturn [{ json: result }];\"\n      },\n      \"id\": \"rollback-logic\",\n      \"name\": \"Rollback Logic\",\n      \"type\": \"n8n-nodes-base.function\",\n      \"typeVersion\": 1,\n      \"position\": [1640, 700]\n    },\n    {\n      \"parameters\": {\n        \"channel\": \"#network-alerts\",\n        \"text\": \"✅ **Aruba Wireless Configuration Success**\\n\\n**Operation**: {{$json.operation}}\\n**SSID**: {{$json.ssid_name || 'N/A'}}\\n**AP Group**: {{$json.ap_group || 'N/A'}}\\n**Time**: {{$now}}\\n\\n**Details**:\\n```json\\n{{JSON.stringify($json, null, 2)}}\\n```\",\n        \"username\": \"Aruba Automation\",\n        \"iconEmoji\": \":white_check_mark:\"\n      },\n      \"id\": \"success-notification\",\n      \"name\": \"Success Notification\",\n      \"type\": \"n8n-nodes-base.slack\",\n      \"typeVersion\": 1,\n      \"position\": [1240, 300]\n    },\n    {\n      \"parameters\": {\n        \"channel\": \"#network-alerts\",\n        \"text\": \"❌ **Aruba Wireless Configuration Failed**\\n\\n**Operation**: {{$json.operation}}\\n**SSID**: {{$json.ssid_name || 'N/A'}}\\n**AP Group**: {{$json.ap_group || 'N/A'}}\\n**Error Category**: {{$json.error.category}}\\n**Rollback Required**: {{$json.error.should_rollback}}\\n**Time**: {{$now}}\\n\\n**Error Details**:\\n```\\n{{$json.error.original.message || 'Unknown error'}}\\n```\\n\\n**Original Request**:\\n```json\\n{{JSON.stringify($json, null, 2)}}\\n```\",\n        \"username\": \"Aruba Automation\",\n        \"iconEmoji\": \":x:\"\n      },\n      \"id\": \"failure-notification\",\n      \"name\": \"Failure Notification\",\n      \"type\": \"n8n-nodes-base.slack\",\n      \"typeVersion\": 1,\n      \"position\": [1440, 900]\n    },\n    {\n      \"parameters\": {\n        \"values\": {\n          \"string\": [\n            {\n              \"name\": \"result\",\n              \"value\": \"success\"\n            },\n            {\n              \"name\": \"operation\",\n              \"value\": \"={{$json.operation}}\"\n            },\n            {\n              \"name\": \"ssid_name\",\n              \"value\": \"={{$json.ssid_name}}\"\n            },\n            {\n              \"name\": \"timestamp\",\n              \"value\": \"={{$now}}\"\n            }\n          ]\n        }\n      },\n      \"id\": \"format-success-response\",\n      \"name\": \"Format Success Response\",\n      \"type\": \"n8n-nodes-base.set\",\n      \"typeVersion\": 1,\n      \"position\": [1440, 300]\n    },\n    {\n      \"parameters\": {\n        \"values\": {\n          \"string\": [\n            {\n              \"name\": \"result\",\n              \"value\": \"error\"\n            },\n            {\n              \"name\": \"operation\",\n              \"value\": \"={{$json.operation}}\"\n            },\n            {\n              \"name\": \"error_category\",\n              \"value\": \"={{$json.error.category}}\"\n            },\n            {\n              \"name\": \"rollback_required\",\n              \"value\": \"={{$json.error.should_rollback}}\"\n            },\n            {\n              \"name\": \"timestamp\",\n              \"value\": \"={{$now}}\"\n            }\n          ]\n        }\n      },\n      \"id\": \"format-error-response\",\n      \"name\": \"Format Error Response\",\n      \"type\": \"n8n-nodes-base.set\",\n      \"typeVersion\": 1,\n      \"position\": [1640, 900]\n    },\n    {\n      \"parameters\": {\n        \"respondWith\": \"json\",\n        \"responseBody\": \"={{$json}}\"\n      },\n      \"id\": \"webhook-response\",\n      \"name\": \"Webhook Response\",\n      \"type\": \"n8n-nodes-base.respondToWebhook\",\n      \"typeVersion\": 1,\n      \"position\": [1640, 300]\n    }\n  ],\n  \"connections\": {\n    \"Manual Trigger\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Input Validation\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Input Validation\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Route: Create SSID\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Route: Update SSID\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Route: Delete SSID\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Route: List SSIDs\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Route: Configure Radio\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Route: Update Security\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Route: Create SSID\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Security Template Generator\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Route: Update SSID\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Security Template Generator\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Route: Delete SSID\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Delete SSID API Call\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Route: List SSIDs\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"List SSIDs API Call\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Route: Configure Radio\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Configure Radio API Call\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Route: Update Security\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Security Template Generator\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Security Template Generator\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Create SSID API Call\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Update SSID API Call\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Create SSID API Call\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Success Notification\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ],\n      \"error\": [\n        [\n          {\n            \"node\": \"Error Handler\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Update SSID API Call\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Success Notification\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ],\n      \"error\": [\n        [\n          {\n            \"node\": \"Error Handler\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Delete SSID API Call\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Success Notification\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ],\n      \"error\": [\n        [\n          {\n            \"node\": \"Error Handler\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"List SSIDs API Call\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Success Notification\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ],\n      \"error\": [\n        [\n          {\n            \"node\": \"Error Handler\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Configure Radio API Call\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Success Notification\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ],\n      \"error\": [\n        [\n          {\n            \"node\": \"Error Handler\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Error Handler\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Rollback Check\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Rollback Check\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Rollback Logic\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Failure Notification\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Rollback Logic\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Failure Notification\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Success Notification\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Format Success Response\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Failure Notification\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Format Error Response\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Format Success Response\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Webhook Response\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Format Error Response\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Webhook Response\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    }\n  },\n  \"active\": true,\n  \"settings\": {\n    \"timezone\": \"America/New_York\",\n    \"saveExecutionProgress\": true,\n    \"executionTimeout\": 300\n  },\n  \"versionId\": \"1.0.0\",\n  \"meta\": {\n    \"templateCreatedBy\": \"Claude Code\",\n    \"description\": \"Comprehensive wireless configuration automation workflow for HPE Aruba Central with SSID management, radio configuration, security templates, error handling, and rollback capabilities.\"\n  }\n}"

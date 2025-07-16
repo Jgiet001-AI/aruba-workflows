@@ -1,0 +1,490 @@
+{
+  "test_scenarios": {
+    "backup_tests": [
+      {
+        "name": "Basic Running Config Backup",
+        "description": "Test basic backup of running configuration",
+        "webhook_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.1.100",
+          "backup_type": "running",
+          "compression_enabled": false
+        },
+        "expected_results": {
+          "success": true,
+          "file_created": true,
+          "checkpoint_created": true,
+          "notification_sent": true
+        }
+      },
+      {
+        "name": "Compressed Backup with Custom Name",
+        "description": "Test backup with compression and custom filename",
+        "webhook_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.1.100",
+          "backup_type": "running",
+          "backup_name": "test_compressed_backup",
+          "compression_enabled": true
+        },
+        "expected_results": {
+          "success": true,
+          "file_created": true,
+          "file_extension": ".json.gz",
+          "compressed": true
+        }
+      },
+      {
+        "name": "Startup Configuration Backup",
+        "description": "Test backup of startup configuration",
+        "webhook_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.1.100",
+          "backup_type": "startup",
+          "compression_enabled": true
+        },
+        "expected_results": {
+          "success": true,
+          "backup_type": "startup",
+          "file_created": true
+        }
+      },
+      {
+        "name": "Invalid IP Address",
+        "description": "Test backup with invalid IP address format",
+        "webhook_payload": {
+          "operation": "backup",
+          "switch_ip": "invalid.ip.address",
+          "backup_type": "running"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "validation_error",
+          "error_message": "Invalid IP address format"
+        }
+      },
+      {
+        "name": "Missing Switch IP",
+        "description": "Test backup without required switch_ip parameter",
+        "webhook_payload": {
+          "operation": "backup",
+          "backup_type": "running"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "validation_error",
+          "error_message": "switch_ip is required"
+        }
+      }
+    ],
+    "restore_tests": [
+      {
+        "name": "Basic Configuration Restore",
+        "description": "Test basic restore from backup file",
+        "webhook_payload": {
+          "operation": "restore",
+          "switch_ip": "192.168.1.100",
+          "restore_file": "test_backup_2025-01-16.json"
+        },
+        "expected_results": {
+          "success": true,
+          "configuration_applied": true,
+          "verification_completed": true,
+          "notification_sent": true
+        }
+      },
+      {
+        "name": "Restore with Configuration Comparison",
+        "description": "Test restore with pre-restore configuration comparison",
+        "webhook_payload": {
+          "operation": "restore",
+          "switch_ip": "192.168.1.100",
+          "restore_file": "baseline_config.json",
+          "compare_configs": true
+        },
+        "expected_results": {
+          "success": true,
+          "comparison_performed": true,
+          "configuration_applied": true
+        }
+      },
+      {
+        "name": "Restore from Compressed Backup",
+        "description": "Test restore from compressed backup file",
+        "webhook_payload": {
+          "operation": "restore",
+          "switch_ip": "192.168.1.100",
+          "restore_file": "compressed_backup.json.gz"
+        },
+        "expected_results": {
+          "success": true,
+          "decompression_successful": true,
+          "configuration_applied": true
+        }
+      },
+      {
+        "name": "Missing Restore File",
+        "description": "Test restore without specifying restore file",
+        "webhook_payload": {
+          "operation": "restore",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "validation_error",
+          "error_message": "restore_file is required"
+        }
+      },
+      {
+        "name": "Invalid Backup File",
+        "description": "Test restore with non-existent backup file",
+        "webhook_payload": {
+          "operation": "restore",
+          "switch_ip": "192.168.1.100",
+          "restore_file": "non_existent_backup.json"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "file_error",
+          "error_message": "Backup file not found"
+        }
+      },
+      {
+        "name": "Corrupted Backup File",
+        "description": "Test restore with corrupted backup file",
+        "webhook_payload": {
+          "operation": "restore",
+          "switch_ip": "192.168.1.100",
+          "restore_file": "corrupted_backup.json"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "validation_error",
+          "error_message": "Invalid backup file format"
+        }
+      }
+    ],
+    "compare_tests": [
+      {
+        "name": "Configuration Comparison - Identical",
+        "description": "Test comparison with identical configurations",
+        "webhook_payload": {
+          "operation": "compare",
+          "switch_ip": "192.168.1.100",
+          "backup_name": "current_backup.json"
+        },
+        "expected_results": {
+          "success": true,
+          "identical": true,
+          "differences": 0
+        }
+      },
+      {
+        "name": "Configuration Comparison - Differences Found",
+        "description": "Test comparison with configuration differences",
+        "webhook_payload": {
+          "operation": "compare",
+          "switch_ip": "192.168.1.100",
+          "backup_name": "old_baseline.json"
+        },
+        "expected_results": {
+          "success": true,
+          "identical": false,
+          "differences_found": true,
+          "detailed_diff": true
+        }
+      },
+      {
+        "name": "Compare with Non-existent Backup",
+        "description": "Test comparison with missing backup file",
+        "webhook_payload": {
+          "operation": "compare",
+          "switch_ip": "192.168.1.100",
+          "backup_name": "missing_backup.json"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "file_error",
+          "error_message": "Backup file not found"
+        }
+      }
+    ],
+    "list_tests": [
+      {
+        "name": "List All Backups",
+        "description": "Test listing all available backup files",
+        "webhook_payload": {
+          "operation": "list_backups"
+        },
+        "expected_results": {
+          "success": true,
+          "backup_list_returned": true,
+          "metadata_included": true
+        }
+      },
+      {
+        "name": "List Backups with Retention Cleanup",
+        "description": "Test listing with automatic cleanup of old files",
+        "webhook_payload": {
+          "operation": "list_backups",
+          "retention_days": 7
+        },
+        "expected_results": {
+          "success": true,
+          "cleanup_performed": true,
+          "retention_applied": true
+        }
+      },
+      {
+        "name": "List from Empty Directory",
+        "description": "Test listing when no backup files exist",
+        "webhook_payload": {
+          "operation": "list_backups"
+        },
+        "expected_results": {
+          "success": true,
+          "total_backups": 0,
+          "empty_directory_message": true
+        }
+      }
+    ],
+    "checkpoint_tests": [
+      {
+        "name": "Create Configuration Checkpoint",
+        "description": "Test creating a configuration checkpoint",
+        "webhook_payload": {
+          "operation": "create_checkpoint",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_results": {
+          "success": true,
+          "checkpoint_created": true,
+          "checkpoint_name_generated": true
+        }
+      }
+    ],
+    "error_handling_tests": [
+      {
+        "name": "Invalid Operation",
+        "description": "Test with invalid operation parameter",
+        "webhook_payload": {
+          "operation": "invalid_operation",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "validation_error",
+          "error_message": "Invalid operation"
+        }
+      },
+      {
+        "name": "Network Connectivity Failure",
+        "description": "Test behavior when switch is unreachable",
+        "webhook_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.99.99",
+          "backup_type": "running"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "network_error",
+          "retry_attempted": true,
+          "notification_sent": true
+        }
+      },
+      {
+        "name": "Authentication Failure",
+        "description": "Test behavior with invalid credentials",
+        "webhook_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.1.100",
+          "backup_type": "running"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "authentication_error",
+          "http_status": 401
+        }
+      },
+      {
+        "name": "Insufficient Disk Space",
+        "description": "Test behavior when backup directory is full",
+        "webhook_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.1.100",
+          "backup_type": "running"
+        },
+        "expected_results": {
+          "success": false,
+          "error_type": "storage_error",
+          "error_message": "no space left on device"
+        }
+      }
+    ],
+    "schedule_tests": [
+      {
+        "name": "Automated Daily Backup",
+        "description": "Test scheduled backup execution",
+        "trigger_type": "schedule",
+        "expected_results": {
+          "success": true,
+          "default_parameters_used": true,
+          "backup_created": true,
+          "retention_applied": true
+        }
+      }
+    ],
+    "integration_tests": [
+      {
+        "name": "Multi-Switch Backup Sequence",
+        "description": "Test backing up multiple switches sequentially",
+        "switches": [
+          "192.168.1.100",
+          "192.168.1.101",
+          "192.168.1.102"
+        ],
+        "expected_results": {
+          "all_backups_successful": true,
+          "no_interference": true,
+          "proper_sequencing": true
+        }
+      },
+      {
+        "name": "Backup and Immediate Restore",
+        "description": "Test complete backup-to-restore cycle",
+        "steps": [
+          {
+            "operation": "backup",
+            "switch_ip": "192.168.1.100"
+          },
+          {
+            "operation": "restore",
+            "switch_ip": "192.168.1.100",
+            "restore_file": "{{previous_backup_file}}"
+          }
+        ],
+        "expected_results": {
+          "backup_successful": true,
+          "restore_successful": true,
+          "configuration_identical": true
+        }
+      }
+    ]
+  },
+  "test_data": {
+    "sample_backup_files": [
+      {
+        "filename": "test_backup_2025-01-16.json",
+        "description": "Valid backup file for restore testing",
+        "content_type": "uncompressed",
+        "size": "~1MB"
+      },
+      {
+        "filename": "compressed_backup.json.gz",
+        "description": "Compressed backup file for testing",
+        "content_type": "compressed",
+        "size": "~300KB"
+      },
+      {
+        "filename": "corrupted_backup.json",
+        "description": "Intentionally corrupted file for error testing",
+        "content_type": "invalid",
+        "size": "~50KB"
+      },
+      {
+        "filename": "baseline_config.json",
+        "description": "Baseline configuration for comparison tests",
+        "content_type": "uncompressed",
+        "size": "~800KB"
+      }
+    ],
+    "mock_switch_responses": {
+      "system_info": {
+        "hostname": "test-switch-01",
+        "software_version": "10.08.1010",
+        "platform_name": "8320",
+        "serial_number": "TEST123456",
+        "product_model": "JL479A",
+        "mgmt_intf_status": {
+          "ip4_address": "192.168.1.100"
+        }
+      },
+      "running_config": {
+        "System": {
+          "hostname": "test-switch-01",
+          "timezone": "America/New_York"
+        },
+        "VLAN": {
+          "1": {
+            "name": "default",
+            "status": "up"
+          },
+          "100": {
+            "name": "test-vlan",
+            "status": "up"
+          }
+        },
+        "Interface": {
+          "1/1/1": {
+            "admin": "up",
+            "vlan_access": "100"
+          }
+        }
+      }
+    }
+  },
+  "performance_tests": [
+    {
+      "name": "Large Configuration Backup",
+      "description": "Test backup of switch with large configuration",
+      "config_size": "10MB+",
+      "expected_duration": "< 2 minutes",
+      "compression_ratio": "> 60%"
+    },
+    {
+      "name": "Multiple Concurrent Operations",
+      "description": "Test multiple backup operations running concurrently",
+      "concurrent_operations": 5,
+      "expected_results": {
+        "no_conflicts": true,
+        "all_complete": true,
+        "proper_file_naming": true
+      }
+    },
+    {
+      "name": "Retention Cleanup Performance",
+      "description": "Test cleanup performance with many old backup files",
+      "old_files_count": 1000,
+      "expected_duration": "< 30 seconds"
+    }
+  ],
+  "security_tests": [
+    {
+      "name": "Credential Validation",
+      "description": "Verify credentials are properly validated",
+      "test_cases": [
+        "invalid_token",
+        "expired_token",
+        "missing_credentials"
+      ]
+    },
+    {
+      "name": "Input Sanitization",
+      "description": "Test protection against malicious inputs",
+      "test_cases": [
+        "sql_injection_attempt",
+        "path_traversal_attempt",
+        "script_injection_attempt"
+      ]
+    },
+    {
+      "name": "File Access Security",
+      "description": "Verify proper file access restrictions",
+      "test_cases": [
+        "directory_traversal",
+        "unauthorized_file_access",
+        "symlink_attacks"
+      ]
+    }
+  ]
+}

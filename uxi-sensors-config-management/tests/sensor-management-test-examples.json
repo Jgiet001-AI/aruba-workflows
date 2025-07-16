@@ -1,0 +1,404 @@
+{
+  "uxi_sensor_management_tests": {
+    "description": "Test examples for UXI sensor management workflow",
+    "webhook_url": "http://your-n8n-instance/webhook/uxi-sensor-management",
+    "test_scenarios": [
+      {
+        "name": "Register Office Sensor",
+        "description": "Register a new sensor in office environment",
+        "request": {
+          "operation": "register_sensor",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "environment_type": "office",
+          "sensor_data": {
+            "name": "Office-Floor1-Conference",
+            "description": "Conference room sensor on first floor"
+          },
+          "location_data": {
+            "name": "Conference Room A",
+            "address": "123 Main St, Building A",
+            "latitude": 37.7749,
+            "longitude": -122.4194,
+            "floor": 1,
+            "building": "Main Building",
+            "room": "Conference Room A",
+            "zone": "Meeting Rooms"
+          }
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "register_sensor",
+          "message": "Sensor 'Office-Floor1-Conference' registered successfully",
+          "data": {
+            "sensor_id": "sensor-123",
+            "name": "Office-Floor1-Conference",
+            "environment_type": "office",
+            "status": "registered"
+          }
+        }
+      },
+      {
+        "name": "Register Retail Sensor",
+        "description": "Register a new sensor in retail environment",
+        "request": {
+          "operation": "register_sensor",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "environment_type": "retail",
+          "sensor_data": {
+            "name": "Retail-Store-POS-Area",
+            "description": "POS area sensor in retail store"
+          },
+          "location_data": {
+            "name": "POS Area",
+            "address": "456 Shopping St, Mall Plaza",
+            "latitude": 40.7128,
+            "longitude": -74.0060,
+            "floor": 1,
+            "building": "Retail Store",
+            "room": "POS Area",
+            "zone": "Sales Floor"
+          }
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "register_sensor",
+          "message": "Sensor 'Retail-Store-POS-Area' registered successfully"
+        }
+      },
+      {
+        "name": "Register Healthcare Sensor",
+        "description": "Register a new sensor in healthcare environment",
+        "request": {
+          "operation": "register_sensor",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "environment_type": "healthcare",
+          "sensor_data": {
+            "name": "Healthcare-ICU-Station1",
+            "description": "ICU nursing station sensor"
+          },
+          "location_data": {
+            "name": "ICU Nursing Station 1",
+            "address": "789 Medical Center Dr",
+            "latitude": 34.0522,
+            "longitude": -118.2437,
+            "floor": 3,
+            "building": "Medical Center",
+            "room": "ICU Station 1",
+            "zone": "Intensive Care"
+          }
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "register_sensor",
+          "message": "Sensor 'Healthcare-ICU-Station1' registered successfully"
+        }
+      },
+      {
+        "name": "Update Sensor Configuration",
+        "description": "Update an existing sensor's configuration",
+        "request": {
+          "operation": "update_sensor",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "sensor_id": "sensor-123",
+          "environment_type": "office",
+          "sensor_data": {
+            "name": "Office-Floor1-Conference-Updated",
+            "description": "Updated conference room sensor configuration"
+          },
+          "location_data": {
+            "name": "Conference Room A - Updated",
+            "floor": 1,
+            "room": "Conference Room A",
+            "zone": "Meeting Rooms - Updated"
+          }
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "update_sensor",
+          "message": "Sensor 'Office-Floor1-Conference-Updated' updated successfully",
+          "data": {
+            "sensor_id": "sensor-123",
+            "name": "Office-Floor1-Conference-Updated",
+            "status": "updated"
+          }
+        }
+      },
+      {
+        "name": "List All Sensors",
+        "description": "List all registered sensors",
+        "request": {
+          "operation": "list_sensors",
+          "uxi_api_url": "https://api.uxi.aruba.com"
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "list_sensors",
+          "message": "Retrieved 3 sensors",
+          "data": {
+            "total_sensors": 3,
+            "sensors": [
+              {
+                "sensor_id": "sensor-123",
+                "name": "Office-Floor1-Conference",
+                "environment_type": "office",
+                "status": "online"
+              },
+              {
+                "sensor_id": "sensor-124",
+                "name": "Retail-Store-POS-Area",
+                "environment_type": "retail",
+                "status": "online"
+              },
+              {
+                "sensor_id": "sensor-125",
+                "name": "Healthcare-ICU-Station1",
+                "environment_type": "healthcare",
+                "status": "online"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "List Sensors by Environment",
+        "description": "List sensors filtered by environment type",
+        "request": {
+          "operation": "list_sensors",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "sensor_data": {
+            "environment_type": "office",
+            "status": "online",
+            "limit": 50
+          }
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "list_sensors",
+          "message": "Retrieved 1 sensors",
+          "data": {
+            "total_sensors": 1,
+            "sensors": [
+              {
+                "sensor_id": "sensor-123",
+                "name": "Office-Floor1-Conference",
+                "environment_type": "office",
+                "status": "online"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "Configure Sensor Settings",
+        "description": "Configure specific sensor settings",
+        "request": {
+          "operation": "configure_sensor",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "sensor_id": "sensor-123",
+          "environment_type": "office",
+          "sensor_data": {
+            "test_frequency": 180,
+            "thresholds": {
+              "wifi_signal": -75,
+              "download_speed": 30,
+              "upload_speed": 10,
+              "latency": 45
+            }
+          }
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "configure_sensor",
+          "message": "Sensor configuration updated successfully",
+          "data": {
+            "sensor_id": "sensor-123",
+            "status": "configured"
+          }
+        }
+      },
+      {
+        "name": "Get Sensor Status",
+        "description": "Get detailed sensor status and health information",
+        "request": {
+          "operation": "get_sensor_status",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "sensor_id": "sensor-123"
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "get_sensor_status",
+          "message": "Sensor status retrieved successfully",
+          "data": {
+            "sensor_id": "sensor-123",
+            "connectivity": "online",
+            "battery_level": 85,
+            "test_results": {
+              "last_test": "2025-01-16T10:30:00Z",
+              "success_rate": 98.5,
+              "average_latency": 25
+            },
+            "location_accuracy": "high",
+            "firmware_version": "2.1.0",
+            "last_updated": "2025-01-16T10:35:00Z"
+          }
+        }
+      },
+      {
+        "name": "Delete Sensor",
+        "description": "Delete a sensor from the system",
+        "request": {
+          "operation": "delete_sensor",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "sensor_id": "sensor-125"
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "delete_sensor",
+          "message": "Sensor deleted successfully",
+          "data": {
+            "sensor_id": "sensor-125",
+            "status": "deleted",
+            "cleanup_completed": true
+          }
+        }
+      }
+    ],
+    "error_test_scenarios": [
+      {
+        "name": "Invalid Operation",
+        "description": "Test invalid operation parameter",
+        "request": {
+          "operation": "invalid_operation",
+          "uxi_api_url": "https://api.uxi.aruba.com"
+        },
+        "expected_response": {
+          "success": false,
+          "error": {
+            "message": "Operation is required. Valid operations: register_sensor, update_sensor, delete_sensor, list_sensors, configure_sensor, get_sensor_status"
+          }
+        }
+      },
+      {
+        "name": "Missing Sensor ID",
+        "description": "Test missing sensor ID for update operation",
+        "request": {
+          "operation": "update_sensor",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "sensor_data": {
+            "name": "Test Sensor"
+          }
+        },
+        "expected_response": {
+          "success": false,
+          "error": {
+            "message": "Sensor ID is required for update, delete, configure, and status operations"
+          }
+        }
+      },
+      {
+        "name": "Missing Sensor Name",
+        "description": "Test missing sensor name for register operation",
+        "request": {
+          "operation": "register_sensor",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "environment_type": "office",
+          "sensor_data": {
+            "description": "Test sensor without name"
+          }
+        },
+        "expected_response": {
+          "success": false,
+          "error": {
+            "message": "Sensor name is required for register and update operations"
+          }
+        }
+      },
+      {
+        "name": "Authentication Error",
+        "description": "Test authentication error with invalid credentials",
+        "request": {
+          "operation": "list_sensors",
+          "uxi_api_url": "https://api.uxi.aruba.com"
+        },
+        "expected_response": {
+          "success": false,
+          "error": {
+            "category": "authentication",
+            "message": "UXI API authentication failed. Please check credentials.",
+            "code": 401
+          }
+        }
+      },
+      {
+        "name": "Sensor Not Found",
+        "description": "Test sensor not found error",
+        "request": {
+          "operation": "get_sensor_status",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "sensor_id": "non-existent-sensor"
+        },
+        "expected_response": {
+          "success": false,
+          "error": {
+            "category": "not_found",
+            "message": "Sensor with ID 'non-existent-sensor' not found.",
+            "code": 404
+          }
+        }
+      }
+    ],
+    "performance_test_scenarios": [
+      {
+        "name": "Bulk Sensor Registration",
+        "description": "Test registering multiple sensors in sequence",
+        "requests": [
+          {
+            "operation": "register_sensor",
+            "uxi_api_url": "https://api.uxi.aruba.com",
+            "environment_type": "office",
+            "sensor_data": {
+              "name": "Office-Sensor-1",
+              "description": "Office sensor 1"
+            }
+          },
+          {
+            "operation": "register_sensor",
+            "uxi_api_url": "https://api.uxi.aruba.com",
+            "environment_type": "office",
+            "sensor_data": {
+              "name": "Office-Sensor-2",
+              "description": "Office sensor 2"
+            }
+          },
+          {
+            "operation": "register_sensor",
+            "uxi_api_url": "https://api.uxi.aruba.com",
+            "environment_type": "office",
+            "sensor_data": {
+              "name": "Office-Sensor-3",
+              "description": "Office sensor 3"
+            }
+          }
+        ],
+        "expected_performance": {
+          "max_response_time": 10000,
+          "success_rate": 100
+        }
+      },
+      {
+        "name": "Concurrent Status Checks",
+        "description": "Test concurrent sensor status checks",
+        "concurrent_requests": 5,
+        "request_template": {
+          "operation": "get_sensor_status",
+          "uxi_api_url": "https://api.uxi.aruba.com",
+          "sensor_id": "sensor-{id}"
+        },
+        "expected_performance": {
+          "max_response_time": 5000,
+          "success_rate": 100
+        }
+      }
+    ]
+  }
+}

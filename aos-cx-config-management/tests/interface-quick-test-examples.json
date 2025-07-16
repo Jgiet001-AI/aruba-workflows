@@ -1,0 +1,355 @@
+{
+  "quick_test_examples": {
+    "description": "Ready-to-use test examples for AOS-CX Interface Configuration Workflow",
+    "webhook_url": "http://192.168.40.100:8006/webhook/aos-cx-interface-config",
+    "test_switch": "192.168.1.100",
+    
+    "curl_examples": {
+      "1_list_interfaces": {
+        "description": "List all interfaces on the switch",
+        "command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-interface-config -H \"Content-Type: application/json\" -d '{\"operation\": \"list\", \"switch_ip\": \"192.168.1.100\"}'"
+      },
+      
+      "2_read_interface": {
+        "description": "Read configuration of interface 1/1/1",
+        "command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-interface-config -H \"Content-Type: application/json\" -d '{\"operation\": \"read\", \"interface_name\": \"1/1/1\", \"switch_ip\": \"192.168.1.100\"}'"
+      },
+      
+      "3_configure_access_port": {
+        "description": "Configure basic access port for VLAN 100",
+        "command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-interface-config -H \"Content-Type: application/json\" -d '{\"operation\": \"configure_access\", \"interface_name\": \"1/1/5\", \"switch_ip\": \"192.168.1.100\", \"vlan_tag\": 100, \"description\": \"Test access port\", \"admin_state\": \"up\"}'"
+      },
+      
+      "4_configure_secure_access": {
+        "description": "Configure access port with port security",
+        "command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-interface-config -H \"Content-Type: application/json\" -d '{\"operation\": \"configure_access\", \"interface_name\": \"1/1/6\", \"switch_ip\": \"192.168.1.100\", \"vlan_tag\": 150, \"description\": \"Secure workstation port\", \"port_security_enable\": true, \"max_mac_addresses\": 1, \"admin_state\": \"up\"}'"
+      },
+      
+      "5_configure_trunk_port": {
+        "description": "Configure trunk port with multiple VLANs",
+        "command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-interface-config -H \"Content-Type: application/json\" -d '{\"operation\": \"configure_trunk\", \"interface_name\": \"1/1/24\", \"switch_ip\": \"192.168.1.100\", \"vlan_trunks\": [10, 20, 30, 100], \"native_vlan_tag\": 1, \"description\": \"Uplink trunk port\", \"admin_state\": \"up\"}'"
+      },
+      
+      "6_configure_ap_port": {
+        "description": "Configure port for wireless access point with PoE",
+        "command": "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-interface-config -H \"Content-Type: application/json\" -d '{\"operation\": \"configure_access\", \"interface_name\": \"1/1/12\", \"switch_ip\": \"192.168.1.100\", \"vlan_tag\": 200, \"description\": \"Wireless AP port\", \"poe_enable\": true, \"admin_state\": \"up\"}'"
+      }
+    },
+    
+    "postman_examples": {
+      "collection_name": "AOS-CX Interface Configuration Tests",
+      "base_url": "http://192.168.40.100:8006/webhook/aos-cx-interface-config",
+      
+      "requests": [
+        {
+          "name": "List All Interfaces",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "operation": "list",
+            "switch_ip": "192.168.1.100"
+          },
+          "tests": [
+            "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+            "pm.test('Response has interfaces', function () { pm.expect(pm.response.json()).to.have.property('interfaces'); });"
+          ]
+        },
+        
+        {
+          "name": "Configure Access Port - Basic",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "operation": "configure_access",
+            "interface_name": "1/1/5",
+            "switch_ip": "192.168.1.100",
+            "vlan_tag": 100,
+            "description": "Employee workstation",
+            "admin_state": "up"
+          },
+          "tests": [
+            "pm.test('Configuration successful', function () { pm.expect(pm.response.json().success).to.be.true; });",
+            "pm.test('Template applied', function () { pm.expect(pm.response.json().configuration.template_used).to.equal('access_port'); });"
+          ]
+        },
+        
+        {
+          "name": "Configure Trunk Port - Multi-VLAN",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "operation": "configure_trunk",
+            "interface_name": "1/1/24",
+            "switch_ip": "192.168.1.100",
+            "vlan_trunks": [10, 20, 30, 100],
+            "native_vlan_tag": 1,
+            "description": "Uplink to distribution",
+            "admin_state": "up"
+          },
+          "tests": [
+            "pm.test('Trunk configuration successful', function () { pm.expect(pm.response.json().success).to.be.true; });",
+            "pm.test('VLANs configured', function () { pm.expect(pm.response.json().configuration.vlan_config).to.include(10); });"
+          ]
+        },
+        
+        {
+          "name": "Error Test - Invalid VLAN",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "operation": "configure_access",
+            "interface_name": "1/1/7",
+            "switch_ip": "192.168.1.100",
+            "vlan_tag": 5000
+          },
+          "tests": [
+            "pm.test('Validation error caught', function () { pm.expect(pm.response.json().success).to.be.false; });",
+            "pm.test('Error type is validation', function () { pm.expect(pm.response.json().error.type).to.equal('VALIDATION'); });"
+          ]
+        }
+      ]
+    },
+    
+    "python_examples": {
+      "simple_request": {
+        "description": "Basic Python request example",
+        "code": "import requests\nimport json\n\nurl = 'http://192.168.40.100:8006/webhook/aos-cx-interface-config'\nheaders = {'Content-Type': 'application/json'}\n\n# Configure access port\ndata = {\n    'operation': 'configure_access',\n    'interface_name': '1/1/5',\n    'switch_ip': '192.168.1.100',\n    'vlan_tag': 100,\n    'description': 'Python test port',\n    'admin_state': 'up'\n}\n\nresponse = requests.post(url, headers=headers, json=data)\nprint(f'Status: {response.status_code}')\nprint(f'Response: {response.json()}')"
+      },
+      
+      "bulk_configuration": {
+        "description": "Configure multiple interfaces",
+        "code": "import requests\nimport json\nimport time\n\nurl = 'http://192.168.40.100:8006/webhook/aos-cx-interface-config'\nheaders = {'Content-Type': 'application/json'}\n\n# List of interfaces to configure\ninterfaces = [\n    {'interface_name': '1/1/10', 'vlan_tag': 100, 'description': 'Workstation 1'},\n    {'interface_name': '1/1/11', 'vlan_tag': 200, 'description': 'Workstation 2'},\n    {'interface_name': '1/1/12', 'vlan_tag': 300, 'description': 'Workstation 3'}\n]\n\nfor interface in interfaces:\n    data = {\n        'operation': 'configure_access',\n        'switch_ip': '192.168.1.100',\n        'admin_state': 'up',\n        **interface\n    }\n    \n    response = requests.post(url, headers=headers, json=data)\n    print(f'Interface {interface[\"interface_name\"]}: {response.status_code}')\n    \n    # Add delay to avoid rate limiting\n    time.sleep(2)"
+      }
+    },
+    
+    "javascript_examples": {
+      "node_js_request": {
+        "description": "Node.js request example",
+        "code": "const axios = require('axios');\n\nconst configureInterface = async () => {\n    const url = 'http://192.168.40.100:8006/webhook/aos-cx-interface-config';\n    \n    const data = {\n        operation: 'configure_access',\n        interface_name: '1/1/5',\n        switch_ip: '192.168.1.100',\n        vlan_tag: 100,\n        description: 'JavaScript test port',\n        admin_state: 'up'\n    };\n    \n    try {\n        const response = await axios.post(url, data, {\n            headers: { 'Content-Type': 'application/json' }\n        });\n        \n        console.log('Success:', response.data);\n    } catch (error) {\n        console.error('Error:', error.response?.data || error.message);\n    }\n};\n\nconfigureInterface();"
+      },
+      
+      "browser_fetch": {
+        "description": "Browser fetch API example",
+        "code": "// Configure access port using fetch API\nconst configurePort = async () => {\n    const url = 'http://192.168.40.100:8006/webhook/aos-cx-interface-config';\n    \n    const data = {\n        operation: 'configure_access',\n        interface_name: '1/1/6',\n        switch_ip: '192.168.1.100',\n        vlan_tag: 150,\n        description: 'Browser test port',\n        port_security_enable: true,\n        max_mac_addresses: 1,\n        admin_state: 'up'\n    };\n    \n    try {\n        const response = await fetch(url, {\n            method: 'POST',\n            headers: {\n                'Content-Type': 'application/json'\n            },\n            body: JSON.stringify(data)\n        });\n        \n        const result = await response.json();\n        console.log('Configuration result:', result);\n        \n        // Display result in webpage\n        document.getElementById('result').textContent = JSON.stringify(result, null, 2);\n        \n    } catch (error) {\n        console.error('Configuration failed:', error);\n    }\n};\n\n// Call the function\nconfigurePort();"
+      }
+    },
+    
+    "validation_tests": {
+      "invalid_interface_format": {
+        "description": "Test input validation with invalid interface name",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "invalid-name",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 100
+        },
+        "expected_error": "Invalid interface_name format"
+      },
+      
+      "invalid_vlan_range": {
+        "description": "Test VLAN range validation",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "1/1/5",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 5000
+        },
+        "expected_error": "Invalid VLAN ID 5000"
+      },
+      
+      "missing_required_params": {
+        "description": "Test missing required parameters",
+        "payload": {
+          "operation": "configure_access",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_error": "interface_name is required"
+      },
+      
+      "port_security_validation": {
+        "description": "Test port security parameter validation",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "1/1/5",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 100,
+          "port_security_enable": true,
+          "max_mac_addresses": 2000
+        },
+        "expected_error": "max_mac_addresses (1-1024) is required"
+      }
+    },
+    
+    "template_tests": {
+      "access_port_templates": [
+        {
+          "name": "Basic Workstation Port",
+          "payload": {
+            "operation": "configure_access",
+            "interface_name": "1/1/10",
+            "switch_ip": "192.168.1.100",
+            "vlan_tag": 100,
+            "description": "Employee workstation",
+            "admin_state": "up"
+          }
+        },
+        {
+          "name": "Secure Workstation Port",
+          "payload": {
+            "operation": "configure_access",
+            "interface_name": "1/1/11",
+            "switch_ip": "192.168.1.100",
+            "vlan_tag": 150,
+            "description": "Secure employee workstation",
+            "port_security_enable": true,
+            "max_mac_addresses": 1,
+            "admin_state": "up"
+          }
+        },
+        {
+          "name": "Wireless AP Port",
+          "payload": {
+            "operation": "configure_access",
+            "interface_name": "1/1/12",
+            "switch_ip": "192.168.1.100",
+            "vlan_tag": 200,
+            "description": "Wireless Access Point",
+            "poe_enable": true,
+            "admin_state": "up"
+          }
+        },
+        {
+          "name": "Server Access Port",
+          "payload": {
+            "operation": "configure_access",
+            "interface_name": "1/1/48",
+            "switch_ip": "192.168.1.100",
+            "vlan_tag": 300,
+            "description": "Server connection",
+            "speed": "1000",
+            "duplex": "full",
+            "admin_state": "up"
+          }
+        }
+      ],
+      
+      "trunk_port_templates": [
+        {
+          "name": "Basic Uplink Trunk",
+          "payload": {
+            "operation": "configure_trunk",
+            "interface_name": "1/1/24",
+            "switch_ip": "192.168.1.100",
+            "vlan_trunks": [10, 20, 30, 100],
+            "native_vlan_tag": 1,
+            "description": "Uplink to distribution switch",
+            "admin_state": "up"
+          }
+        },
+        {
+          "name": "Server Trunk Port",
+          "payload": {
+            "operation": "configure_trunk",
+            "interface_name": "1/1/47",
+            "switch_ip": "192.168.1.100",
+            "vlan_trunks": [100, 200, 300, 400],
+            "native_vlan_tag": 100,
+            "description": "Server multi-VLAN trunk",
+            "admin_state": "up"
+          }
+        },
+        {
+          "name": "Inter-Switch Link",
+          "payload": {
+            "operation": "configure_trunk",
+            "interface_name": "1/1/25",
+            "switch_ip": "192.168.1.100",
+            "vlan_trunks": [1, 10, 20, 30, 100, 200, 999],
+            "native_vlan_tag": 1,
+            "description": "ISL to core switch",
+            "admin_state": "up"
+          }
+        }
+      ]
+    },
+    
+    "test_sequence": {
+      "description": "Recommended test execution sequence",
+      "steps": [
+        {
+          "step": 1,
+          "action": "List interfaces",
+          "command": "curl_examples.1_list_interfaces"
+        },
+        {
+          "step": 2,
+          "action": "Read specific interface",
+          "command": "curl_examples.2_read_interface"
+        },
+        {
+          "step": 3,
+          "action": "Test input validation",
+          "command": "validation_tests.invalid_interface_format"
+        },
+        {
+          "step": 4,
+          "action": "Configure basic access port",
+          "command": "curl_examples.3_configure_access_port"
+        },
+        {
+          "step": 5,
+          "action": "Configure secure access port",
+          "command": "curl_examples.4_configure_secure_access"
+        },
+        {
+          "step": 6,
+          "action": "Configure trunk port",
+          "command": "curl_examples.5_configure_trunk_port"
+        },
+        {
+          "step": 7,
+          "action": "Configure AP port with PoE",
+          "command": "curl_examples.6_configure_ap_port"
+        },
+        {
+          "step": 8,
+          "action": "Verify configurations",
+          "command": "Read each configured interface"
+        }
+      ]
+    },
+    
+    "troubleshooting": {
+      "common_issues": [
+        {
+          "issue": "Authentication failure",
+          "solution": "Check AOS-CX API credentials in n8n",
+          "test_command": "curl_examples.1_list_interfaces"
+        },
+        {
+          "issue": "Interface not found",
+          "solution": "Verify interface name format and existence",
+          "test_command": "curl_examples.2_read_interface"
+        },
+        {
+          "issue": "VLAN assignment failure",
+          "solution": "Ensure VLANs exist on switch first",
+          "test_command": "Run VLAN management workflow"
+        },
+        {
+          "issue": "Port security issues",
+          "solution": "Check MAC address limits and policies",
+          "test_command": "validation_tests.port_security_validation"
+        }
+      ]
+    }
+  }
+}

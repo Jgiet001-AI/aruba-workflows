@@ -1,0 +1,665 @@
+{
+  "location_services_test_scenarios": {
+    "test_info": {
+      "workflow_name": "Aruba Central Location Services",
+      "workflow_file": "aruba-central-location-services-workflow.json",
+      "webhook_url": "http://192.168.40.100:8006/webhook/aruba-location-services",
+      "total_test_scenarios": 12,
+      "test_categories": [
+        "RTLS Setup",
+        "Beacon Configuration",
+        "Geofencing",
+        "AP Location Setting",
+        "Analytics Setup",
+        "Proximity Configuration",
+        "Environment Templates",
+        "Error Scenarios",
+        "Validation Tests"
+      ]
+    },
+    
+    "quick_start_tests": {
+      "1_setup_rtls_retail": {
+        "description": "Setup RTLS for retail environment with high accuracy",
+        "method": "POST",
+        "url": "http://192.168.40.100:8006/webhook/aruba-location-services",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "operation": "setup_rtls",
+          "site_id": "retail_store_001",
+          "site_name": "Main Retail Store",
+          "campus_name": "Retail Campus",
+          "building_name": "Store Building",
+          "floor_name": "Ground Floor",
+          "environment_type": "retail",
+          "accuracy_mode": "high",
+          "update_interval": 15,
+          "positioning_algorithm": "trilateration",
+          "enable_analytics": true,
+          "minimum_aps": 4,
+          "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+          "customer_id": "customer_retail_123"
+        },
+        "expected_result": {
+          "status": "success",
+          "operation": "setup_rtls"
+        }
+      },
+      
+      "2_configure_ibeacon": {
+        "description": "Configure iBeacon for way-finding in corporate office",
+        "method": "POST",
+        "url": "http://192.168.40.100:8006/webhook/aruba-location-services",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "operation": "configure_beacon",
+          "site_id": "corporate_hq_001",
+          "beacon_type": "ibeacon",
+          "beacon_uuid": "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0",
+          "beacon_major": 100,
+          "beacon_minor": 1,
+          "beacon_power": -8,
+          "beacon_interval": 500,
+          "environment_type": "corporate",
+          "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+          "customer_id": "customer_corp_456"
+        },
+        "expected_result": {
+          "status": "success",
+          "operation": "configure_beacon"
+        }
+      },
+      
+      "3_configure_eddystone": {
+        "description": "Configure Eddystone beacon for hospitality guest services",
+        "method": "POST",
+        "url": "http://192.168.40.100:8006/webhook/aruba-location-services",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "operation": "configure_beacon",
+          "site_id": "hotel_main_001",
+          "beacon_type": "eddystone",
+          "eddystone_url": "https://hotel.com/services",
+          "beacon_power": -6,
+          "beacon_interval": 1000,
+          "environment_type": "hospitality",
+          "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+          "customer_id": "customer_hotel_789"
+        },
+        "expected_result": {
+          "status": "success",
+          "operation": "configure_beacon"
+        }
+      },
+      
+      "4_create_safety_geofence": {
+        "description": "Create safety zone geofence for manufacturing environment",
+        "method": "POST",
+        "url": "http://192.168.40.100:8006/webhook/aruba-location-services",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "operation": "create_geofence",
+          "site_id": "manufacturing_plant_001",
+          "geofence_name": "High Voltage Safety Zone",
+          "geofence_type": "enter",
+          "geofence_coordinates": [
+            {"x": 0, "y": 0},
+            {"x": 20, "y": 0},
+            {"x": 20, "y": 15},
+            {"x": 0, "y": 15}
+          ],
+          "environment_type": "manufacturing",
+          "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+          "customer_id": "customer_mfg_101"
+        },
+        "expected_result": {
+          "status": "success",
+          "operation": "create_geofence"
+        }
+      }
+    },
+    
+    "comprehensive_test_scenarios": {
+      "rtls_setup_tests": {
+        "healthcare_rtls_high_accuracy": {
+          "description": "RTLS setup for healthcare with maximum accuracy and privacy",
+          "body": {
+            "operation": "setup_rtls",
+            "site_id": "hospital_main_001",
+            "site_name": "General Hospital",
+            "campus_name": "Medical Campus",
+            "environment_type": "healthcare",
+            "accuracy_mode": "high",
+            "update_interval": 10,
+            "positioning_algorithm": "trilateration",
+            "enable_analytics": true,
+            "minimum_aps": 5,
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "hospital_customer_001"
+          }
+        },
+        
+        "education_rtls_attendance": {
+          "description": "RTLS setup for education with attendance tracking focus",
+          "body": {
+            "operation": "setup_rtls",
+            "site_id": "university_campus_001",
+            "site_name": "Main University Campus",
+            "campus_name": "Academic Campus",
+            "environment_type": "education",
+            "accuracy_mode": "medium",
+            "update_interval": 30,
+            "positioning_algorithm": "trilateration",
+            "enable_analytics": true,
+            "minimum_aps": 3,
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "university_customer_001"
+          }
+        }
+      },
+      
+      "beacon_configuration_tests": {
+        "dual_beacon_retail_promotion": {
+          "description": "Configure both iBeacon and Eddystone for retail promotions",
+          "body": {
+            "operation": "configure_beacon",
+            "site_id": "retail_store_002",
+            "beacon_type": "both",
+            "beacon_uuid": "F7826DA6-4FA2-4E98-8024-BC5B71E0893E",
+            "beacon_major": 200,
+            "beacon_minor": 10,
+            "beacon_power": -12,
+            "beacon_interval": 100,
+            "eddystone_url": "https://store.com/deals",
+            "environment_type": "retail",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "retail_customer_002"
+          }
+        },
+        
+        "asset_tracking_beacon_healthcare": {
+          "description": "Configure beacon for medical equipment tracking",
+          "body": {
+            "operation": "configure_beacon",
+            "site_id": "hospital_main_002",
+            "beacon_type": "ibeacon",
+            "beacon_uuid": "A1B2C3D4-E5F6-7890-1234-567890ABCDEF",
+            "beacon_major": 500,
+            "beacon_minor": 25,
+            "beacon_power": -4,
+            "beacon_interval": 1000,
+            "environment_type": "healthcare",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "hospital_customer_002"
+          }
+        },
+        
+        "emergency_beacon_high_power": {
+          "description": "Configure high-power beacon for emergency mustering",
+          "body": {
+            "operation": "configure_beacon",
+            "site_id": "corporate_hq_002",
+            "beacon_type": "ibeacon",
+            "beacon_uuid": "EMERGENCY1-2345-6789-ABCD-EF1234567890",
+            "beacon_major": 999,
+            "beacon_minor": 1,
+            "beacon_power": 4,
+            "beacon_interval": 200,
+            "environment_type": "corporate",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "corporate_customer_002"
+          }
+        }
+      },
+      
+      "geofencing_tests": {
+        "meeting_room_geofence": {
+          "description": "Create geofence for meeting room occupancy tracking",
+          "body": {
+            "operation": "create_geofence",
+            "site_id": "corporate_hq_003",
+            "geofence_name": "Conference Room A",
+            "geofence_type": "enter",
+            "geofence_coordinates": [
+              {"x": 10, "y": 5},
+              {"x": 20, "y": 5},
+              {"x": 20, "y": 15},
+              {"x": 10, "y": 15}
+            ],
+            "environment_type": "corporate",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "corporate_customer_003"
+          }
+        },
+        
+        "patient_room_geofence": {
+          "description": "Create geofence for patient room monitoring",
+          "body": {
+            "operation": "create_geofence",
+            "site_id": "hospital_main_003",
+            "geofence_name": "Patient Room 204",
+            "geofence_type": "dwell",
+            "geofence_coordinates": [
+              {"x": 0, "y": 0},
+              {"x": 8, "y": 0},
+              {"x": 8, "y": 6},
+              {"x": 0, "y": 6}
+            ],
+            "environment_type": "healthcare",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "hospital_customer_003"
+          }
+        },
+        
+        "production_line_geofence": {
+          "description": "Create geofence for production line efficiency monitoring",
+          "body": {
+            "operation": "create_geofence",
+            "site_id": "manufacturing_plant_002",
+            "geofence_name": "Assembly Line 1",
+            "geofence_type": "enter",
+            "geofence_coordinates": [
+              {"x": 5, "y": 10},
+              {"x": 50, "y": 10},
+              {"x": 50, "y": 20},
+              {"x": 5, "y": 20}
+            ],
+            "environment_type": "manufacturing",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "manufacturing_customer_002"
+          }
+        }
+      },
+      
+      "ap_location_tests": {
+        "retail_ap_positioning": {
+          "description": "Set AP location for retail store positioning accuracy",
+          "body": {
+            "operation": "set_ap_location",
+            "site_id": "retail_store_003",
+            "ap_serial": "CNF7G9X123",
+            "ap_coordinates": {
+              "x": 25.5,
+              "y": 15.0,
+              "z": 3.0
+            },
+            "floor_name": "Sales Floor",
+            "building_name": "Main Store",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "retail_customer_003"
+          }
+        },
+        
+        "hospital_ap_positioning": {
+          "description": "Set AP location for hospital ward positioning",
+          "body": {
+            "operation": "set_ap_location",
+            "site_id": "hospital_main_004",
+            "ap_serial": "HOSPITAL-AP-001",
+            "ap_coordinates": {
+              "x": 12.0,
+              "y": 8.5,
+              "z": 2.8
+            },
+            "floor_name": "Ward 3",
+            "building_name": "Medical Tower",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "hospital_customer_004"
+          }
+        }
+      },
+      
+      "analytics_setup_tests": {
+        "comprehensive_retail_analytics": {
+          "description": "Setup comprehensive analytics for retail environment",
+          "body": {
+            "operation": "analytics_setup",
+            "site_id": "retail_store_004",
+            "analytics_enabled": true,
+            "asset_tracking": false,
+            "retention_days": 90,
+            "export_format": "json",
+            "real_time_updates": true,
+            "privacy_mode": "anonymized",
+            "environment_type": "retail",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "retail_customer_004"
+          }
+        },
+        
+        "healthcare_analytics_hipaa": {
+          "description": "Setup HIPAA-compliant analytics for healthcare",
+          "body": {
+            "operation": "analytics_setup",
+            "site_id": "hospital_main_005",
+            "analytics_enabled": true,
+            "asset_tracking": true,
+            "retention_days": 30,
+            "export_format": "json",
+            "real_time_updates": false,
+            "privacy_mode": "maximum",
+            "environment_type": "healthcare",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "hospital_customer_005"
+          }
+        }
+      },
+      
+      "proximity_configuration_tests": {
+        "welcome_proximity_hospitality": {
+          "description": "Configure welcome message for hotel guests",
+          "body": {
+            "operation": "proximity_config",
+            "site_id": "hotel_main_002",
+            "proximity_distance": 3,
+            "proximity_action": "welcome",
+            "proximity_message": "Welcome to our hotel! Enjoy your stay.",
+            "environment_type": "hospitality",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "hotel_customer_002"
+          }
+        },
+        
+        "safety_proximity_manufacturing": {
+          "description": "Configure safety alert for manufacturing environment",
+          "body": {
+            "operation": "proximity_config",
+            "site_id": "manufacturing_plant_003",
+            "proximity_distance": 1,
+            "proximity_action": "safety_alert",
+            "proximity_message": "Caution: Entering restricted area. Safety equipment required.",
+            "environment_type": "manufacturing",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "manufacturing_customer_003"
+          }
+        }
+      }
+    },
+    
+    "error_scenario_tests": {
+      "validation_errors": {
+        "missing_required_site_id": {
+          "description": "Test error handling for missing required site_id",
+          "body": {
+            "operation": "setup_rtls",
+            "campus_name": "Test Campus",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "test_customer"
+          },
+          "expected_error": "Missing required parameter: site_id"
+        },
+        
+        "invalid_operation": {
+          "description": "Test error handling for invalid operation",
+          "body": {
+            "operation": "invalid_operation",
+            "site_id": "test_site",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "test_customer"
+          },
+          "expected_error": "Invalid operation"
+        },
+        
+        "invalid_beacon_uuid": {
+          "description": "Test error handling for invalid beacon UUID format",
+          "body": {
+            "operation": "configure_beacon",
+            "site_id": "test_site",
+            "beacon_type": "ibeacon",
+            "beacon_uuid": "invalid-uuid-format",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "test_customer"
+          },
+          "expected_error": "Invalid beacon_uuid format"
+        },
+        
+        "invalid_beacon_power": {
+          "description": "Test error handling for beacon power out of range",
+          "body": {
+            "operation": "configure_beacon",
+            "site_id": "test_site",
+            "beacon_type": "ibeacon",
+            "beacon_power": 10,
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "test_customer"
+          },
+          "expected_error": "beacon_power must be between -12 and 4 dBm"
+        },
+        
+        "insufficient_geofence_coordinates": {
+          "description": "Test error handling for insufficient geofence coordinates",
+          "body": {
+            "operation": "create_geofence",
+            "site_id": "test_site",
+            "geofence_name": "Test Fence",
+            "geofence_coordinates": [
+              {"x": 0, "y": 0},
+              {"x": 10, "y": 0}
+            ],
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "test_customer"
+          },
+          "expected_error": "geofence_coordinates must be an array with at least 3 coordinate points"
+        },
+        
+        "missing_ap_serial": {
+          "description": "Test error handling for missing AP serial in location setting",
+          "body": {
+            "operation": "set_ap_location",
+            "site_id": "test_site",
+            "ap_coordinates": {"x": 0, "y": 0, "z": 0},
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "test_customer"
+          },
+          "expected_error": "ap_serial is required for set_ap_location operation"
+        }
+      },
+      
+      "api_errors": {
+        "authentication_failure": {
+          "description": "Test handling of authentication failure",
+          "body": {
+            "operation": "setup_rtls",
+            "site_id": "test_site",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "test_customer",
+            "access_token": "invalid_token"
+          },
+          "expected_status_code": 401,
+          "expected_error_category": "authentication_error"
+        },
+        
+        "resource_not_found": {
+          "description": "Test handling of non-existent site",
+          "body": {
+            "operation": "setup_rtls",
+            "site_id": "non_existent_site",
+            "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+            "customer_id": "test_customer"
+          },
+          "expected_status_code": 404,
+          "expected_error_category": "resource_not_found"
+        }
+      }
+    },
+    
+    "performance_tests": {
+      "bulk_beacon_configuration": {
+        "description": "Test configuring multiple beacons for large deployment",
+        "test_type": "performance",
+        "iterations": 10,
+        "body_template": {
+          "operation": "configure_beacon",
+          "site_id": "large_deployment_001",
+          "beacon_type": "ibeacon",
+          "beacon_uuid": "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0",
+          "beacon_major": "{{iteration}}",
+          "beacon_minor": 1,
+          "beacon_power": -8,
+          "beacon_interval": 1000,
+          "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+          "customer_id": "performance_test_customer"
+        }
+      },
+      
+      "multiple_geofence_creation": {
+        "description": "Test creating multiple geofences for campus-wide deployment",
+        "test_type": "performance",
+        "iterations": 5,
+        "body_template": {
+          "operation": "create_geofence",
+          "site_id": "campus_deployment_001",
+          "geofence_name": "Zone {{iteration}}",
+          "geofence_type": "enter",
+          "geofence_coordinates": [
+            {"x": "{{iteration * 10}}", "y": 0},
+            {"x": "{{iteration * 10 + 10}}", "y": 0},
+            {"x": "{{iteration * 10 + 10}}", "y": 10},
+            {"x": "{{iteration * 10}}", "y": 10}
+          ],
+          "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+          "customer_id": "performance_test_customer"
+        }
+      }
+    },
+    
+    "integration_tests": {
+      "full_location_service_deployment": {
+        "description": "Complete location services deployment test sequence",
+        "test_sequence": [
+          {
+            "step": 1,
+            "description": "Setup RTLS",
+            "operation": "setup_rtls",
+            "body": {
+              "operation": "setup_rtls",
+              "site_id": "integration_test_site",
+              "site_name": "Integration Test Site",
+              "campus_name": "Test Campus",
+              "environment_type": "corporate",
+              "accuracy_mode": "high",
+              "update_interval": 30,
+              "enable_analytics": true,
+              "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+              "customer_id": "integration_test_customer"
+            }
+          },
+          {
+            "step": 2,
+            "description": "Configure beacon",
+            "operation": "configure_beacon",
+            "body": {
+              "operation": "configure_beacon",
+              "site_id": "integration_test_site",
+              "beacon_type": "ibeacon",
+              "beacon_uuid": "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0",
+              "beacon_major": 100,
+              "beacon_minor": 1,
+              "beacon_power": -8,
+              "beacon_interval": 1000,
+              "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+              "customer_id": "integration_test_customer"
+            }
+          },
+          {
+            "step": 3,
+            "description": "Create geofence",
+            "operation": "create_geofence",
+            "body": {
+              "operation": "create_geofence",
+              "site_id": "integration_test_site",
+              "geofence_name": "Main Entrance",
+              "geofence_type": "enter",
+              "geofence_coordinates": [
+                {"x": 0, "y": 0},
+                {"x": 10, "y": 0},
+                {"x": 10, "y": 5},
+                {"x": 0, "y": 5}
+              ],
+              "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+              "customer_id": "integration_test_customer"
+            }
+          },
+          {
+            "step": 4,
+            "description": "Set AP location",
+            "operation": "set_ap_location",
+            "body": {
+              "operation": "set_ap_location",
+              "site_id": "integration_test_site",
+              "ap_serial": "TEST-AP-001",
+              "ap_coordinates": {
+                "x": 5.0,
+                "y": 5.0,
+                "z": 3.0
+              },
+              "floor_name": "Ground Floor",
+              "building_name": "Main Building",
+              "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+              "customer_id": "integration_test_customer"
+            }
+          },
+          {
+            "step": 5,
+            "description": "Setup analytics",
+            "operation": "analytics_setup",
+            "body": {
+              "operation": "analytics_setup",
+              "site_id": "integration_test_site",
+              "analytics_enabled": true,
+              "asset_tracking": true,
+              "retention_days": 30,
+              "real_time_updates": true,
+              "privacy_mode": "anonymized",
+              "central_base_url": "https://apigw-uswest4.central.arubanetworks.com",
+              "customer_id": "integration_test_customer"
+            }
+          }
+        ]
+      }
+    },
+    
+    "test_execution_guidelines": {
+      "prerequisites": [
+        "Valid Aruba Central credentials configured in n8n",
+        "Test sites created in Aruba Central",
+        "Network connectivity to Aruba Central APIs",
+        "Slack webhook configured for notifications (optional)",
+        "Email configuration for notifications (optional)"
+      ],
+      
+      "test_execution_order": [
+        "1. Run validation error tests to verify input handling",
+        "2. Execute quick start tests for basic functionality",
+        "3. Run comprehensive tests for each operation type",
+        "4. Test error scenarios for proper error handling",
+        "5. Execute performance tests for scalability validation",
+        "6. Run integration tests for end-to-end validation"
+      ],
+      
+      "success_criteria": {
+        "quick_start_tests": "All 4 tests should return success status",
+        "validation_tests": "All validation errors should be caught and reported",
+        "comprehensive_tests": "85% success rate for real API calls",
+        "error_handling": "Proper error categorization and rollback execution",
+        "performance_tests": "Successful completion within timeout limits",
+        "integration_tests": "Complete sequence execution without failures"
+      },
+      
+      "troubleshooting": {
+        "authentication_errors": "Verify Aruba Central API credentials and permissions",
+        "timeout_errors": "Check network connectivity and API response times",
+        "validation_errors": "Review input parameters against API documentation",
+        "rollback_failures": "Check resource existence and deletion permissions"
+      }
+    }
+  }
+}

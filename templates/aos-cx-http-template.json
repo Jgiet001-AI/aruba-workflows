@@ -1,0 +1,42 @@
+{
+  "name": "AOS-CX API Request",
+  "type": "n8n-nodes-base.httpRequest", 
+  "typeVersion": 4.1,
+  "position": [400, 300],
+  "parameters": {
+    "url": "https://{{$parameter.switch_ip}}/rest/v10.08/{{$parameter.endpoint}}",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "httpBasicAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Accept",
+          "value": "application/json"
+        }
+      ]
+    },
+    "options": {
+      "timeout": 30000,
+      "allowUnauthorizedCerts": true,
+      "retry": {
+        "enabled": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      "redirect": {
+        "followRedirects": true,
+        "maxRedirects": 3
+      },
+      "response": {
+        "fullResponse": false,
+        "responseFormat": "autodetect"
+      }
+    }
+  },
+  "description": "Standard HTTP request template for AOS-CX switch API calls with SSL verification disabled for lab environments"
+}

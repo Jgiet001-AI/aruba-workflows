@@ -1,0 +1,216 @@
+{
+  "environment": {
+    "description": "Target deployment environment",
+    "default": "production",
+    "options": ["development", "staging", "production"]
+  },
+  "centralCredentials": {
+    "description": "Aruba Central authentication method",
+    "default": "oauth2",
+    "options": ["oauth2", "api_key"]
+  },
+  "apiVersion": {
+    "description": "Aruba Central API version",
+    "default": "v2",
+    "options": ["v1", "v2"]
+  },
+  "wirelessSettings": {
+    "ssidDefaults": {
+      "description": "Default SSID configuration settings",
+      "wpa_passphrase_policy": {
+        "min_length": 8,
+        "max_length": 63,
+        "complexity_required": true
+      },
+      "security_level": "wpa3_personal_mixed",
+      "broadcast_ssid": true,
+      "max_clients_per_ap": 128
+    },
+    "radioSettings": {
+      "2.4GHz": {
+        "channel_width": "20MHz",
+        "power_level": "auto",
+        "band_steering": true,
+        "max_clients": 64
+      },
+      "5GHz": {
+        "channel_width": "80MHz", 
+        "power_level": "auto",
+        "dfs_channels": true,
+        "max_clients": 128
+      },
+      "6GHz": {
+        "channel_width": "160MHz",
+        "power_level": "auto",
+        "psc_channels_only": true,
+        "max_clients": 256
+      }
+    },
+    "networkTypeTemplates": {
+      "corporate": {
+        "description": "Enterprise corporate network settings",
+        "security_type": "wpa3_enterprise",
+        "fast_transition": true,
+        "pmf": "required",
+        "band_steering": true
+      },
+      "guest": {
+        "description": "Guest network settings with captive portal",
+        "security_type": "open",
+        "captive_portal": true,
+        "session_timeout": 3600,
+        "bandwidth_limit": 10000
+      },
+      "iot": {
+        "description": "IoT device network settings",
+        "security_type": "wpa2_personal",
+        "device_isolation": true,
+        "max_clients": 64,
+        "rate_limit": 5000
+      },
+      "public": {
+        "description": "Public network settings",
+        "security_type": "open",
+        "terms_acceptance": true,
+        "bandwidth_limit": 5000,
+        "session_timeout": 1800
+      }
+    }
+  },
+  "provisioningSettings": {
+    "zeroTouchProvisioning": {
+      "enabled": true,
+      "default_group": "default",
+      "firmware_auto_upgrade": true,
+      "config_auto_apply": true
+    },
+    "apNaming": {
+      "convention": "SITE-FLOOR-APnumber",
+      "auto_generate": true,
+      "include_mac_suffix": false
+    },
+    "groupAssignment": {
+      "by_location": true,
+      "by_model": false,
+      "default_group": "default"
+    }
+  },
+  "locationServices": {
+    "rtlsSettings": {
+      "enabled": false,
+      "positioning_mode": "triangulation",
+      "accuracy_level": "high",
+      "location_persistence": 300
+    },
+    "beaconSettings": {
+      "enabled": false,
+      "ibeacon_enabled": false,
+      "eddystone_enabled": false,
+      "transmit_power": -12,
+      "advertisement_interval": 1000
+    },
+    "analyticsIntegration": {
+      "enabled": true,
+      "data_export": false,
+      "retention_days": 90
+    }
+  },
+  "clientPolicySettings": {
+    "deviceOnboarding": {
+      "byod_enabled": true,
+      "corporate_owned_enabled": true,
+      "guest_access_enabled": true,
+      "max_devices_per_user": 5
+    },
+    "authenticationMethods": {
+      "802.1x": true,
+      "mac_auth": true,
+      "captive_portal": true,
+      "psk": true
+    },
+    "accessControl": {
+      "role_based_access": true,
+      "time_based_access": false,
+      "bandwidth_limits": true,
+      "application_visibility": true
+    }
+  },
+  "complianceSettings": {
+    "securityBaseline": {
+      "min_wpa_version": "wpa2",
+      "encryption_required": true,
+      "management_frame_protection": true,
+      "fast_transition": true
+    },
+    "regulatoryCompliance": {
+      "country_code": "US",
+      "power_constraint": true,
+      "dfs_compliance": true,
+      "spectrum_analysis": false
+    },
+    "auditSettings": {
+      "configuration_drift_check": true,
+      "security_posture_monitoring": true,
+      "compliance_reporting": true,
+      "automated_remediation": false
+    }
+  },
+  "bulkOperations": {
+    "batchSize": {
+      "description": "Number of APs to process in parallel",
+      "default": 10,
+      "min": 1,
+      "max": 50
+    },
+    "firmwareUpdates": {
+      "maintenance_window": "02:00-04:00",
+      "staged_rollout": true,
+      "rollback_on_failure": true,
+      "max_simultaneous": 20
+    },
+    "configurationUpdates": {
+      "validation_required": true,
+      "rollback_enabled": true,
+      "progress_reporting": true
+    }
+  },
+  "notificationChannels": {
+    "slack": {
+      "description": "Slack channel for notifications",
+      "default": "#wireless-operations"
+    },
+    "email": {
+      "description": "Email addresses for alerts",
+      "default": ["wireless-admin@company.com"]
+    },
+    "webhook": {
+      "description": "Webhook URL for external integrations",
+      "default": null,
+      "example": "https://monitoring.company.com/hooks/wireless-events"
+    }
+  },
+  "performanceSettings": {
+    "apiTimeout": {
+      "description": "API request timeout in seconds",
+      "default": 45,
+      "min": 15,
+      "max": 120
+    },
+    "retryAttempts": {
+      "description": "Number of retry attempts for failed API calls",
+      "default": 3,
+      "min": 1,
+      "max": 5
+    },
+    "rateLimiting": {
+      "description": "Requests per minute limit",
+      "default": 100,
+      "central_api_limit": 300
+    },
+    "cachingSettings": {
+      "template_cache_ttl": 3600,
+      "ap_status_cache_ttl": 300,
+      "client_cache_ttl": 600
+    }
+  }
+}

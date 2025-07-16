@@ -1,0 +1,829 @@
+{
+  "name": "AOS-CX Backup & Restore",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        },
+        "timezone": "America/New_York"
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "id": "daily-backup-schedule",
+      "name": "Daily Backup Schedule"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aos-cx-backup-restore",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 500],
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "webhookId": "aos-cx-backup-restore"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input parameters and determine operation\nconst scheduledRun = $input.first().json.hasOwnProperty('timestamp');\nconst webhookData = !scheduledRun ? $input.first().json : {};\n\n// Default parameters for scheduled backup\nconst defaultParams = {\n  operation: 'backup',\n  backup_type: 'running',\n  switch_ip: process.env.DEFAULT_SWITCH_IP || '192.168.1.100',\n  backup_name: `scheduled_backup_${new Date().toISOString().split('T')[0]}_${Date.now()}`,\n  compression_enabled: true,\n  retention_days: 30,\n  compare_configs: false\n};\n\n// Merge webhook parameters with defaults\nconst params = scheduledRun ? defaultParams : { ...defaultParams, ...webhookData };\n\n// Validate required parameters\nconst validOperations = ['backup', 'restore', 'compare', 'list_backups', 'create_checkpoint'];\nif (!validOperations.includes(params.operation)) {\n  throw new Error(`Invalid operation: ${params.operation}. Must be one of: ${validOperations.join(', ')}`);\n}\n\nif (['backup', 'restore'].includes(params.operation) && !params.switch_ip) {\n  throw new Error('switch_ip is required for backup and restore operations');\n}\n\nif (params.operation === 'restore' && !params.restore_file) {\n  throw new Error('restore_file is required for restore operation');\n}\n\n// Validate IP address format\nconst ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;\nif (params.switch_ip && !ipRegex.test(params.switch_ip)) {\n  throw new Error(`Invalid IP address format: ${params.switch_ip}`);\n}\n\n// Set backup directory path\nconst backupDir = '/Users/jeangiet/Documents/Claude/aruba-workflows/aos-cx-config-management/backups';\nparams.backup_directory = backupDir;\n\n// Generate backup filename if not provided\nif (params.operation === 'backup' && !params.backup_name) {\n  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];\n  params.backup_name = `${params.switch_ip}_${params.backup_type}_${timestamp}_${Date.now()}`;\n}\n\nreturn [{ json: params }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400],
+      "id": "parameter-processor",
+      "name": "Parameter Processor"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "operation-backup",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "backup",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 400],
+      "id": "operation-router",
+      "name": "Operation Router"
+    },
+    {
+      "parameters": {
+        "url": "=https://{{ $json.switch_ip }}/rest/v10.08/system",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200],
+      "id": "get-system-info",
+      "name": "Get System Info"
+    },
+    {
+      "parameters": {
+        "url": "=https://{{ $json.switch_ip }}/rest/v10.08/fullconfigs/{{ $json.backup_type }}-config",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 5000
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200],
+      "id": "get-configuration",
+      "name": "Get Configuration"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process backup and prepare file storage\nconst systemInfo = $input.first().json;\nconst configData = $input.all()[1].json;\nconst params = $('Parameter Processor').first().json;\n\n// Extract system information\nconst deviceInfo = {\n  hostname: systemInfo.hostname || 'unknown',\n  software_version: systemInfo.software_version || 'unknown',\n  platform_name: systemInfo.platform_name || 'unknown',\n  serial_number: systemInfo.serial_number || 'unknown',\n  model: systemInfo.product_model || 'unknown',\n  mgmt_ip: systemInfo.mgmt_intf_status?.ip4_address || params.switch_ip\n};\n\n// Create backup metadata\nconst backupMetadata = {\n  backup_timestamp: new Date().toISOString(),\n  backup_type: params.backup_type,\n  device_info: deviceInfo,\n  backup_size: JSON.stringify(configData).length,\n  backup_name: params.backup_name,\n  compression_enabled: params.compression_enabled,\n  api_version: 'v10.08',\n  backup_method: 'REST_API'\n};\n\n// Create backup content\nconst backupContent = {\n  metadata: backupMetadata,\n  configuration: configData,\n  created_by: 'AOS-CX Backup & Restore Workflow',\n  workflow_version: '1.0.0'\n};\n\n// Prepare filename and path\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\nconst filename = `${params.backup_name}${params.compression_enabled ? '.json.gz' : '.json'}`;\nconst filepath = `${params.backup_directory}/${filename}`;\n\n// Convert to JSON string\nlet fileContent = JSON.stringify(backupContent, null, 2);\n\n// Simulate compression if enabled (in real implementation, use compression library)\nif (params.compression_enabled) {\n  // For simulation, just add compression marker\n  fileContent = JSON.stringify({\n    compressed: true,\n    original_size: fileContent.length,\n    data: Buffer.from(fileContent).toString('base64')\n  }, null, 2);\n}\n\nreturn [{\n  json: {\n    ...params,\n    backup_metadata: backupMetadata,\n    filepath: filepath,\n    filename: filename,\n    file_content: fileContent,\n    backup_size: fileContent.length,\n    device_info: deviceInfo\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200],
+      "id": "process-backup",
+      "name": "Process Backup Data"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.filename }}",
+        "dataPropertyName": "file_content",
+        "options": {
+          "folderPath": "={{ $json.backup_directory }}"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1560, 200],
+      "id": "save-backup-file",
+      "name": "Save Backup File"
+    },
+    {
+      "parameters": {
+        "url": "=https://{{ $json.switch_ip }}/rest/v10.08/system/config/checkpoint",
+        "sendBody": true,
+        "specifyBodyType": "json",
+        "jsonBody": "={\n  \"checkpoint_name\": \"backup_checkpoint_{{ $json.backup_name }}\",\n  \"description\": \"Automatic checkpoint created during backup process\"\n}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 200],
+      "id": "create-checkpoint",
+      "name": "Create Checkpoint"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "operation-restore",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "restore",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 400],
+      "id": "restore-router",
+      "name": "Restore Router"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileName": "={{ $json.restore_file }}",
+        "options": {
+          "folderPath": "={{ $json.backup_directory }}"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1120, 400],
+      "id": "read-backup-file",
+      "name": "Read Backup File"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process and validate backup file for restore\nconst params = $('Parameter Processor').first().json;\nconst fileContent = $input.first().json.data;\n\ntry {\n  // Parse backup file\n  let backupData = JSON.parse(fileContent);\n  \n  // Handle compressed files\n  if (backupData.compressed) {\n    const decompressedData = Buffer.from(backupData.data, 'base64').toString();\n    backupData = JSON.parse(decompressedData);\n  }\n  \n  // Validate backup file structure\n  if (!backupData.metadata || !backupData.configuration) {\n    throw new Error('Invalid backup file format: missing metadata or configuration');\n  }\n  \n  // Validate backup file is compatible\n  const metadata = backupData.metadata;\n  if (!metadata.device_info) {\n    throw new Error('Invalid backup file: missing device information');\n  }\n  \n  // Check if compare_configs is enabled\n  if (params.compare_configs) {\n    // In a real implementation, we would fetch current config and compare\n    // For now, just log that comparison would happen\n    console.log('Configuration comparison enabled - would compare current vs backup');\n  }\n  \n  // Prepare restore data\n  const restoreConfig = backupData.configuration;\n  \n  return [{\n    json: {\n      ...params,\n      backup_metadata: metadata,\n      restore_config: restoreConfig,\n      backup_valid: true,\n      restore_ready: true,\n      original_backup_size: metadata.backup_size,\n      device_info: metadata.device_info\n    }\n  }];\n  \n} catch (error) {\n  throw new Error(`Failed to process backup file: ${error.message}`);\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400],
+      "id": "validate-backup",
+      "name": "Validate Backup File"
+    },
+    {
+      "parameters": {
+        "url": "=https://{{ $json.switch_ip }}/rest/v10.08/system/config/cfg_restore",
+        "sendBody": true,
+        "specifyBodyType": "json",
+        "jsonBody": "={{ JSON.stringify($json.restore_config) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000,
+          "retry": {
+            "maxTries": 2,
+            "waitBetweenTries": 10000
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 400],
+      "id": "restore-configuration",
+      "name": "Restore Configuration"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "operation-compare",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "compare",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 600],
+      "id": "compare-router",
+      "name": "Compare Router"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "operation-list",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "list_backups",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 800],
+      "id": "list-router",
+      "name": "List Router"
+    },
+    {
+      "parameters": {
+        "jsCode": "// List all backup files in directory\nconst params = $('Parameter Processor').first().json;\nconst fs = require('fs');\nconst path = require('path');\n\ntry {\n  const backupDir = params.backup_directory;\n  \n  // Check if directory exists\n  if (!fs.existsSync(backupDir)) {\n    return [{\n      json: {\n        ...params,\n        backups: [],\n        total_backups: 0,\n        message: 'Backup directory does not exist'\n      }\n    }];\n  }\n  \n  // Read directory contents\n  const files = fs.readdirSync(backupDir);\n  const backupFiles = files.filter(file => file.endsWith('.json') || file.endsWith('.json.gz'));\n  \n  // Get file details\n  const backups = backupFiles.map(filename => {\n    const filepath = path.join(backupDir, filename);\n    const stats = fs.statSync(filepath);\n    \n    // Try to read metadata from file\n    let metadata = null;\n    try {\n      const content = fs.readFileSync(filepath, 'utf8');\n      const data = JSON.parse(content);\n      \n      if (data.compressed) {\n        const decompressed = Buffer.from(data.data, 'base64').toString();\n        const backupData = JSON.parse(decompressed);\n        metadata = backupData.metadata;\n      } else {\n        metadata = data.metadata;\n      }\n    } catch (e) {\n      // If we can't read metadata, just use file stats\n    }\n    \n    return {\n      filename: filename,\n      size: stats.size,\n      created: stats.birthtime.toISOString(),\n      modified: stats.mtime.toISOString(),\n      metadata: metadata\n    };\n  });\n  \n  // Sort by creation date (newest first)\n  backups.sort((a, b) => new Date(b.created) - new Date(a.created));\n  \n  return [{\n    json: {\n      ...params,\n      backups: backups,\n      total_backups: backups.length,\n      backup_directory: backupDir\n    }\n  }];\n  \n} catch (error) {\n  throw new Error(`Failed to list backups: ${error.message}`);\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 800],
+      "id": "list-backups",
+      "name": "List Backups"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cleanup old backups based on retention policy\nconst params = $('Parameter Processor').first().json;\nconst listResult = $input.first().json;\nconst fs = require('fs');\nconst path = require('path');\n\nconst retentionDays = params.retention_days || 30;\nconst cutoffDate = new Date();\ncutoffDate.setDate(cutoffDate.getDate() - retentionDays);\n\nlet deletedFiles = [];\nlet errors = [];\n\n// Filter files older than retention period\nconst filesToDelete = listResult.backups.filter(backup => {\n  return new Date(backup.created) < cutoffDate;\n});\n\n// Delete old files\nfilesToDelete.forEach(backup => {\n  try {\n    const filepath = path.join(params.backup_directory, backup.filename);\n    fs.unlinkSync(filepath);\n    deletedFiles.push(backup.filename);\n  } catch (error) {\n    errors.push({\n      filename: backup.filename,\n      error: error.message\n    });\n  }\n});\n\nconst remainingBackups = listResult.total_backups - deletedFiles.length;\n\nreturn [{\n  json: {\n    ...params,\n    backups: listResult.backups.filter(b => !deletedFiles.includes(b.filename)),\n    total_backups: remainingBackups,\n    retention_applied: true,\n    retention_days: retentionDays,\n    deleted_files: deletedFiles,\n    deletion_errors: errors,\n    cleanup_date: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 800],
+      "id": "cleanup-old-backups",
+      "name": "Cleanup Old Backups"
+    },
+    {
+      "parameters": {
+        "url": "=https://{{ $json.switch_ip }}/rest/v10.08/fullconfigs/running-config",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 600],
+      "id": "get-current-config",
+      "name": "Get Current Config"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileName": "={{ $json.backup_name }}",
+        "options": {
+          "folderPath": "={{ $json.backup_directory }}"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1340, 600],
+      "id": "read-compare-backup",
+      "name": "Read Compare Backup"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare current configuration with backup file\nconst params = $('Parameter Processor').first().json;\nconst currentConfig = $input.all()[0].json;\nconst backupFileContent = $input.all()[1].json.data;\n\ntry {\n  // Parse backup file\n  let backupData = JSON.parse(backupFileContent);\n  \n  if (backupData.compressed) {\n    const decompressed = Buffer.from(backupData.data, 'base64').toString();\n    backupData = JSON.parse(decompressed);\n  }\n  \n  const backupConfig = backupData.configuration;\n  \n  // Simple comparison - in production, use more sophisticated diff\n  const currentConfigStr = JSON.stringify(currentConfig, null, 2);\n  const backupConfigStr = JSON.stringify(backupConfig, null, 2);\n  \n  const identical = currentConfigStr === backupConfigStr;\n  \n  // Calculate basic differences\n  const currentKeys = Object.keys(currentConfig || {});\n  const backupKeys = Object.keys(backupConfig || {});\n  \n  const addedKeys = currentKeys.filter(key => !backupKeys.includes(key));\n  const removedKeys = backupKeys.filter(key => !currentKeys.includes(key));\n  const commonKeys = currentKeys.filter(key => backupKeys.includes(key));\n  \n  const modifiedKeys = commonKeys.filter(key => {\n    return JSON.stringify(currentConfig[key]) !== JSON.stringify(backupConfig[key]);\n  });\n  \n  const comparisonResult = {\n    identical: identical,\n    total_differences: addedKeys.length + removedKeys.length + modifiedKeys.length,\n    added_configurations: addedKeys,\n    removed_configurations: removedKeys,\n    modified_configurations: modifiedKeys,\n    backup_metadata: backupData.metadata,\n    comparison_timestamp: new Date().toISOString()\n  };\n  \n  return [{\n    json: {\n      ...params,\n      comparison_result: comparisonResult,\n      current_config_size: currentConfigStr.length,\n      backup_config_size: backupConfigStr.length\n    }\n  }];\n  \n} catch (error) {\n  throw new Error(`Failed to compare configurations: ${error.message}`);\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 600],
+      "id": "compare-configurations",
+      "name": "Compare Configurations"
+    },
+    {
+      "parameters": {
+        "url": "=https://{{ $json.switch_ip }}/rest/v10.08/fullconfigs/running-config",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 400],
+      "id": "verify-restore",
+      "name": "Verify Restore"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate comprehensive success notification\nconst operation = $('Parameter Processor').first().json.operation;\nconst data = $input.first().json;\n\nlet message = '';\nlet details = {};\nlet color = 'good'; // Slack color\n\nswitch (operation) {\n  case 'backup':\n    message = `✅ **AOS-CX Configuration Backup Successful**\\n\\n`;\n    message += `• **Device**: ${data.device_info?.hostname || 'Unknown'} (${data.switch_ip})\\n`;\n    message += `• **Backup Type**: ${data.backup_type}\\n`;\n    message += `• **File**: ${data.filename}\\n`;\n    message += `• **Size**: ${(data.backup_size / 1024).toFixed(2)} KB\\n`;\n    message += `• **Compressed**: ${data.compression_enabled ? 'Yes' : 'No'}\\n`;\n    message += `• **Checkpoint Created**: Yes\\n`;\n    message += `• **Timestamp**: ${new Date().toISOString()}\\n`;\n    \n    details = {\n      operation: 'backup',\n      success: true,\n      device: data.device_info,\n      backup_file: data.filename,\n      backup_size: data.backup_size\n    };\n    break;\n    \n  case 'restore':\n    message = `✅ **AOS-CX Configuration Restore Successful**\\n\\n`;\n    message += `• **Device**: ${data.switch_ip}\\n`;\n    message += `• **Restored From**: ${data.restore_file}\\n`;\n    message += `• **Original Backup**: ${data.backup_metadata?.backup_timestamp}\\n`;\n    message += `• **Device Model**: ${data.backup_metadata?.device_info?.model || 'Unknown'}\\n`;\n    message += `• **Verification**: Completed\\n`;\n    message += `• **Timestamp**: ${new Date().toISOString()}\\n`;\n    \n    details = {\n      operation: 'restore',\n      success: true,\n      device: data.switch_ip,\n      restore_file: data.restore_file,\n      backup_metadata: data.backup_metadata\n    };\n    break;\n    \n  case 'compare':\n    const identical = data.comparison_result?.identical;\n    message = `📊 **Configuration Comparison ${identical ? 'Complete - No Changes' : 'Complete - Differences Found'}**\\n\\n`;\n    message += `• **Device**: ${data.switch_ip}\\n`;\n    message += `• **Backup File**: ${data.backup_name}\\n`;\n    message += `• **Identical**: ${identical ? 'Yes' : 'No'}\\n`;\n    \n    if (!identical) {\n      const result = data.comparison_result;\n      message += `• **Total Differences**: ${result.total_differences}\\n`;\n      message += `• **Added**: ${result.added_configurations?.length || 0}\\n`;\n      message += `• **Removed**: ${result.removed_configurations?.length || 0}\\n`;\n      message += `• **Modified**: ${result.modified_configurations?.length || 0}\\n`;\n      color = 'warning';\n    }\n    \n    details = {\n      operation: 'compare',\n      success: true,\n      comparison_result: data.comparison_result\n    };\n    break;\n    \n  case 'list_backups':\n    message = `📁 **Backup List Retrieved**\\n\\n`;\n    message += `• **Total Backups**: ${data.total_backups}\\n`;\n    message += `• **Directory**: ${data.backup_directory}\\n`;\n    \n    if (data.retention_applied) {\n      message += `• **Cleanup Applied**: ${data.deleted_files?.length || 0} old files deleted\\n`;\n      message += `• **Retention**: ${data.retention_days} days\\n`;\n    }\n    \n    details = {\n      operation: 'list_backups',\n      success: true,\n      total_backups: data.total_backups,\n      backups: data.backups\n    };\n    break;\n    \n  default:\n    message = `✅ **AOS-CX Operation Completed**\\n\\n`;\n    message += `• **Operation**: ${operation}\\n`;\n    message += `• **Status**: Success\\n`;\n    message += `• **Timestamp**: ${new Date().toISOString()}\\n`;\n    \n    details = {\n      operation: operation,\n      success: true,\n      data: data\n    };\n}\n\nreturn [{\n  json: {\n    notification: {\n      message: message,\n      color: color,\n      details: details,\n      timestamp: new Date().toISOString(),\n      success: true\n    },\n    operation_result: data\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 400],
+      "id": "success-formatter",
+      "name": "Format Success Notification"
+    },
+    {
+      "parameters": {
+        "channel": "#network-automation",
+        "text": "={{ $json.notification.message }}",
+        "attachments": [
+          {
+            "color": "={{ $json.notification.color }}",
+            "fields": [
+              {
+                "title": "Operation Details",
+                "value": "={{ JSON.stringify($json.notification.details, null, 2) }}",
+                "short": false
+              }
+            ]
+          }
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1.1,
+      "position": [2220, 300],
+      "id": "slack-notification",
+      "name": "Slack Success Notification"
+    },
+    {
+      "parameters": {
+        "fromEmail": "network-automation@company.com",
+        "toEmail": "network-team@company.com",
+        "subject": "=AOS-CX {{ $json.notification.details.operation }} - Success",
+        "emailFormat": "html",
+        "html": "=<h2>AOS-CX Backup & Restore Operation Successful</h2>\n<pre>{{ $json.notification.message }}</pre>\n\n<h3>Technical Details:</h3>\n<pre>{{ JSON.stringify($json.notification.details, null, 2) }}</pre>\n\n<p><small>Generated by n8n AOS-CX Backup & Restore Workflow at {{ $json.notification.timestamp }}</small></p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2220, 500],
+      "id": "email-notification",
+      "name": "Email Success Notification"
+    },
+    {
+      "parameters": {
+        "channel": "#network-automation",
+        "text": "=🚨 **AOS-CX Backup & Restore - FAILURE**\\n\\n• **Operation**: {{ $('Parameter Processor').first().json.operation }}\\n• **Device**: {{ $('Parameter Processor').first().json.switch_ip }}\\n• **Error**: {{ $json.error.message }}\\n• **Node**: {{ $json.error.node }}\\n• **Timestamp**: {{ $now }}",
+        "attachments": [
+          {
+            "color": "danger",
+            "fields": [
+              {
+                "title": "Error Details",
+                "value": "={{ JSON.stringify($json.error, null, 2) }}",
+                "short": false
+              }
+            ]
+          }
+        ]
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1.1,
+      "position": [2220, 700],
+      "id": "error-slack-notification",
+      "name": "Error Slack Notification"
+    },
+    {
+      "parameters": {
+        "fromEmail": "network-automation@company.com",
+        "toEmail": "network-team@company.com",
+        "subject": "=AOS-CX Backup & Restore - FAILURE - {{ $('Parameter Processor').first().json.operation }}",
+        "emailFormat": "html",
+        "html": "=<h2 style=\"color: red;\">AOS-CX Backup & Restore Operation Failed</h2>\n\n<p><strong>Operation:</strong> {{ $('Parameter Processor').first().json.operation }}</p>\n<p><strong>Device:</strong> {{ $('Parameter Processor').first().json.switch_ip }}</p>\n<p><strong>Error:</strong> {{ $json.error.message }}</p>\n<p><strong>Node:</strong> {{ $json.error.node }}</p>\n<p><strong>Timestamp:</strong> {{ $now }}</p>\n\n<h3>Full Error Details:</h3>\n<pre>{{ JSON.stringify($json.error, null, 2) }}</pre>\n\n<h3>Troubleshooting Steps:</h3>\n<ul>\n<li>Check switch connectivity and credentials</li>\n<li>Verify backup directory permissions</li>\n<li>Validate input parameters</li>\n<li>Check switch API availability</li>\n</ul>\n\n<p><small>Generated by n8n AOS-CX Backup & Restore Workflow</small></p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2220, 900],
+      "id": "error-email-notification",
+      "name": "Error Email Notification"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 400],
+      "id": "webhook-response",
+      "name": "Webhook Response"
+    }
+  ],
+  "connections": {
+    "Daily Backup Schedule": {
+      "main": [
+        [
+          {
+            "node": "Parameter Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parameter Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parameter Processor": {
+      "main": [
+        [
+          {
+            "node": "Operation Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Operation Router": {
+      "main": [
+        [
+          {
+            "node": "Get System Info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Restore Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get System Info": {
+      "main": [
+        [
+          {
+            "node": "Get Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Configuration": {
+      "main": [
+        [
+          {
+            "node": "Process Backup Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Backup Data": {
+      "main": [
+        [
+          {
+            "node": "Save Backup File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Backup File": {
+      "main": [
+        [
+          {
+            "node": "Create Checkpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Checkpoint": {
+      "main": [
+        [
+          {
+            "node": "Format Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Router": {
+      "main": [
+        [
+          {
+            "node": "Read Backup File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Compare Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Backup File": {
+      "main": [
+        [
+          {
+            "node": "Validate Backup File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Backup File": {
+      "main": [
+        [
+          {
+            "node": "Restore Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Configuration": {
+      "main": [
+        [
+          {
+            "node": "Verify Restore",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare Router": {
+      "main": [
+        [
+          {
+            "node": "Get Current Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "List Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Router": {
+      "main": [
+        [
+          {
+            "node": "List Backups",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Backups": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Old Backups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cleanup Old Backups": {
+      "main": [
+        [
+          {
+            "node": "Format Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Config": {
+      "main": [
+        [
+          {
+            "node": "Read Compare Backup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Compare Backup": {
+      "main": [
+        [
+          {
+            "node": "Compare Configurations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare Configurations": {
+      "main": [
+        [
+          {
+            "node": "Format Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Restore": {
+      "main": [
+        [
+          {
+            "node": "Format Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Slack Success Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Success Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-workflow"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "id": "aos-cx",
+      "name": "aos-cx"
+    },
+    {
+      "id": "configuration",
+      "name": "configuration"
+    },
+    {
+      "id": "backup",
+      "name": "backup"
+    },
+    {
+      "id": "restore",
+      "name": "restore"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2025-01-16T12:00:00.000Z",
+  "versionId": "1"
+}

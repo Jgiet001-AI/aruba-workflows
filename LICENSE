@@ -1,0 +1,62 @@
+MIT License
+
+Copyright (c) 2025 HPE Aruba Workflows Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## Third Party Notices
+
+This project utilizes the following third-party components:
+
+### n8n
+- License: Sustainable Use License
+- Homepage: https://n8n.io/
+- Usage: Workflow automation platform
+
+### HPE Aruba Networking APIs
+- Usage: Network device management and configuration
+- Documentation: https://developer.arubanetworks.com/
+- Terms: Subject to HPE Aruba API Terms of Service
+
+## Disclaimers
+
+### Network Infrastructure
+This software is designed to interact with network infrastructure. Users are responsible for:
+- Testing in non-production environments first
+- Understanding the impact of automated changes
+- Maintaining proper backups and rollback procedures
+- Ensuring compliance with organizational policies
+
+### Security
+- Never commit actual credentials or API keys to version control
+- Use proper authentication and authorization mechanisms
+- Follow security best practices for network automation
+- Regularly audit and rotate credentials
+
+### Support
+This project is provided as-is. While we strive for reliability and comprehensive testing, users should:
+- Thoroughly test in their specific environments
+- Maintain proper monitoring and alerting
+- Have rollback procedures in place
+- Understand the workflows before deploying to production
+
+### Trademark Notice
+HPE Aruba and related trademarks are property of Hewlett Packard Enterprise.
+n8n is a trademark of n8n GmbH.
+This project is not officially endorsed by HPE Aruba or n8n GmbH.

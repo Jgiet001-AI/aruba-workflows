@@ -1,0 +1,9 @@
+{
+  "name": "Error Handler",
+  "type": "n8n-nodes-base.errorTrigger",
+  "typeVersion": 1,
+  "position": [400, 500],
+  "parameters": {},
+  "description": "Catches and handles errors from any node in the workflow",
+  "continueOnFail": false
+}

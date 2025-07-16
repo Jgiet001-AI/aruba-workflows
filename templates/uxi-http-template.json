@@ -1,0 +1,41 @@
+{
+  "name": "UXI API Request",
+  "type": "n8n-nodes-base.httpRequest",
+  "typeVersion": 4.1,
+  "position": [400, 300], 
+  "parameters": {
+    "url": "https://api.uxi.aruba.com/api/v1/{{$parameter.endpoint}}",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Accept", 
+          "value": "application/json"
+        }
+      ]
+    },
+    "options": {
+      "timeout": 30000,
+      "retry": {
+        "enabled": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      "redirect": {
+        "followRedirects": true,
+        "maxRedirects": 3
+      },
+      "response": {
+        "fullResponse": false,
+        "responseFormat": "autodetect"
+      }
+    }
+  },
+  "description": "Standard HTTP request template for UXI API calls with appropriate rate limiting consideration"
+}

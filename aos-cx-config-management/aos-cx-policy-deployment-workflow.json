@@ -1,0 +1,893 @@
+{
+  "meta": {
+    "instanceId": "abc123"
+  },
+  "name": "AOS-CX Policy Deployment",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aos-cx-policy",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Policy Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "aos-cx-policy-webhook"
+    },
+    {
+      "parameters": {
+        "operation": "manual",
+        "options": {}
+      },
+      "id": "manual-trigger",
+      "name": "Manual Policy Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// AOS-CX Policy Deployment - Input Validation\nconst item = items[0].json;\n\n// Initialize validation results\nconst validation = {\n  isValid: true,\n  errors: [],\n  warnings: []\n};\n\n// Required parameters\nconst requiredParams = ['operation', 'switch_ip'];\nfor (const param of requiredParams) {\n  if (!item[param]) {\n    validation.errors.push(`Missing required parameter: ${param}`);\n    validation.isValid = false;\n  }\n}\n\n// Validate operation type\nconst validOperations = [\n  'create_acl', 'update_acl', 'delete_acl', 'list_acls', \n  'apply_to_interface', 'create_qos_policy', 'get_qos', 'update_qos'\n];\nif (item.operation && !validOperations.includes(item.operation)) {\n  validation.errors.push(`Invalid operation: ${item.operation}. Valid operations: ${validOperations.join(', ')}`);\n  validation.isValid = false;\n}\n\n// Validate policy type\nif (item.policy_type && !['acl', 'qos'].includes(item.policy_type)) {\n  validation.errors.push(`Invalid policy_type: ${item.policy_type}. Must be 'acl' or 'qos'`);\n  validation.isValid = false;\n}\n\n// Validate ACL type\nif (item.acl_type && !['ipv4', 'ipv6', 'mac'].includes(item.acl_type)) {\n  validation.errors.push(`Invalid acl_type: ${item.acl_type}. Must be 'ipv4', 'ipv6', or 'mac'`);\n  validation.isValid = false;\n}\n\n// Validate direction\nif (item.direction && !['in', 'out'].includes(item.direction)) {\n  validation.errors.push(`Invalid direction: ${item.direction}. Must be 'in' or 'out'`);\n  validation.isValid = false;\n}\n\n// Validate switch IP\nif (item.switch_ip) {\n  const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;\n  if (!ipRegex.test(item.switch_ip)) {\n    validation.errors.push(`Invalid switch_ip format: ${item.switch_ip}`);\n    validation.isValid = false;\n  }\n}\n\n// Validate ACL name format\nif (item.acl_name) {\n  if (item.acl_name.length > 64) {\n    validation.errors.push('ACL name cannot exceed 64 characters');\n    validation.isValid = false;\n  }\n  if (!/^[a-zA-Z0-9_-]+$/.test(item.acl_name)) {\n    validation.errors.push('ACL name can only contain letters, numbers, underscores, and hyphens');\n    validation.isValid = false;\n  }\n}\n\n// Validate interface name format\nif (item.interface_name) {\n  const interfaceRegex = /^(\\d+\\/)*\\d+(\\/\\d+)?$/;\n  if (!interfaceRegex.test(item.interface_name)) {\n    validation.warnings.push(`Interface name format may be invalid: ${item.interface_name}`);\n  }\n}\n\n// Validate ACL rules structure\nif (item.rules && Array.isArray(item.rules)) {\n  item.rules.forEach((rule, index) => {\n    if (!rule.sequence || !rule.action) {\n      validation.errors.push(`Rule ${index + 1}: Missing required fields (sequence, action)`);\n      validation.isValid = false;\n    }\n    if (rule.action && !['permit', 'deny'].includes(rule.action)) {\n      validation.errors.push(`Rule ${index + 1}: Invalid action '${rule.action}'. Must be 'permit' or 'deny'`);\n      validation.isValid = false;\n    }\n  });\n}\n\n// Set default values\nconst processedItem = {\n  ...item,\n  policy_type: item.policy_type || 'acl',\n  acl_type: item.acl_type || 'ipv4',\n  direction: item.direction || 'in',\n  validation: validation,\n  timestamp: new Date().toISOString(),\n  workflow_id: $workflow.id,\n  execution_id: $execution.id\n};\n\n// Apply policy templates if requested\nif (item.template) {\n  const templates = {\n    'security_basic': {\n      description: 'Basic security ACL blocking common threats',\n      rules: [\n        { sequence: 10, action: 'deny', protocol: 'tcp', destination: 'any', dst_port: '22', comment: 'Block SSH from outside' },\n        { sequence: 20, action: 'deny', protocol: 'tcp', destination: 'any', dst_port: '23', comment: 'Block Telnet' },\n        { sequence: 30, action: 'deny', protocol: 'tcp', destination: 'any', dst_port: '135', comment: 'Block RPC' },\n        { sequence: 40, action: 'permit', protocol: 'tcp', source: 'any', destination: 'any', dst_port: '80', comment: 'Allow HTTP' },\n        { sequence: 50, action: 'permit', protocol: 'tcp', source: 'any', destination: 'any', dst_port: '443', comment: 'Allow HTTPS' },\n        { sequence: 60, action: 'deny', protocol: 'any', source: 'any', destination: 'any', comment: 'Deny all others' }\n      ]\n    },\n    'guest_network': {\n      description: 'Guest network isolation policy',\n      rules: [\n        { sequence: 10, action: 'permit', protocol: 'tcp', source: 'any', destination: 'any', dst_port: '53', comment: 'Allow DNS' },\n        { sequence: 20, action: 'permit', protocol: 'udp', source: 'any', destination: 'any', dst_port: '53', comment: 'Allow DNS UDP' },\n        { sequence: 30, action: 'permit', protocol: 'tcp', source: 'any', destination: 'any', dst_port: '80', comment: 'Allow HTTP' },\n        { sequence: 40, action: 'permit', protocol: 'tcp', source: 'any', destination: 'any', dst_port: '443', comment: 'Allow HTTPS' },\n        { sequence: 50, action: 'deny', protocol: 'any', source: 'any', destination: '192.168.0.0/16', comment: 'Block private networks' },\n        { sequence: 60, action: 'deny', protocol: 'any', source: 'any', destination: '10.0.0.0/8', comment: 'Block private networks' },\n        { sequence: 70, action: 'permit', protocol: 'any', source: 'any', destination: 'any', comment: 'Allow internet access' }\n      ]\n    },\n    'iot_security': {\n      description: 'IoT device security policy',\n      rules: [\n        { sequence: 10, action: 'permit', protocol: 'tcp', source: 'any', destination: 'any', dst_port: '443', comment: 'Allow HTTPS for updates' },\n        { sequence: 20, action: 'permit', protocol: 'udp', source: 'any', destination: 'any', dst_port: '123', comment: 'Allow NTP' },\n        { sequence: 30, action: 'permit', protocol: 'udp', source: 'any', destination: 'any', dst_port: '53', comment: 'Allow DNS' },\n        { sequence: 40, action: 'deny', protocol: 'tcp', source: 'any', destination: 'any', dst_port: '22', comment: 'Block SSH' },\n        { sequence: 50, action: 'deny', protocol: 'tcp', source: 'any', destination: 'any', dst_port: '23', comment: 'Block Telnet' },\n        { sequence: 60, action: 'deny', protocol: 'any', source: 'any', destination: 'any', comment: 'Default deny' }\n      ]\n    },\n    'qos_voice_priority': {\n      description: 'QoS policy prioritizing voice traffic',\n      qos_rules: {\n        classes: [\n          { name: 'voice', dscp: 46, priority: 7, bandwidth_percent: 30 },\n          { name: 'video', dscp: 34, priority: 5, bandwidth_percent: 40 },\n          { name: 'data', dscp: 0, priority: 1, bandwidth_percent: 30 }\n        ],\n        policies: [\n          { class: 'voice', action: 'set_dscp', value: 46 },\n          { class: 'video', action: 'set_dscp', value: 34 },\n          { class: 'data', action: 'set_dscp', value: 0 }\n        ]\n      }\n    }\n  };\n  \n  if (templates[item.template]) {\n    processedItem.rules = processedItem.rules || templates[item.template].rules;\n    processedItem.qos_rules = processedItem.qos_rules || templates[item.template].qos_rules;\n    processedItem.template_applied = item.template;\n    processedItem.template_description = templates[item.template].description;\n  } else {\n    validation.warnings.push(`Unknown template: ${item.template}`);\n  }\n}\n\nreturn [{ json: processedItem }];"
+      },
+      "id": "input-validation",
+      "name": "Input Validation & Templates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 250]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.validation.isValid}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "validation-check",
+      "name": "Validation Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 250]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "list_acls"
+            }
+          ]
+        }
+      },
+      "id": "operation-router",
+      "name": "Operation Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 150]
+    },
+    {
+      "parameters": {
+        "url": "=https://{{$json.switch_ip}}/rest/v10.08/system/acls",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "list-acls",
+      "name": "List ACLs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1040, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "create_acl"
+            }
+          ]
+        }
+      },
+      "id": "create-acl-check",
+      "name": "Create ACL Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 250]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Build ACL Configuration for AOS-CX\nconst item = items[0].json;\n\n// Basic ACL structure\nconst aclConfig = {\n  [item.acl_name]: {\n    list_type: item.acl_type || 'ipv4',\n    cfg_aces: {}\n  }\n};\n\n// Convert rules to AOS-CX format\nif (item.rules && Array.isArray(item.rules)) {\n  item.rules.forEach(rule => {\n    const aceKey = rule.sequence.toString();\n    const ace = {\n      action: rule.action,\n      comment: rule.comment || '',\n      count: true,\n      log: false\n    };\n    \n    // Add protocol\n    if (rule.protocol && rule.protocol !== 'any') {\n      ace.protocol = rule.protocol;\n    }\n    \n    // Add source\n    if (rule.source && rule.source !== 'any') {\n      ace.src_ip = rule.source;\n    }\n    \n    // Add destination\n    if (rule.destination && rule.destination !== 'any') {\n      ace.dst_ip = rule.destination;\n    }\n    \n    // Add destination port\n    if (rule.dst_port) {\n      ace.dst_l4_port_max = rule.dst_port;\n      ace.dst_l4_port_min = rule.dst_port;\n    }\n    \n    // Add source port\n    if (rule.src_port) {\n      ace.src_l4_port_max = rule.src_port;\n      ace.src_l4_port_min = rule.src_port;\n    }\n    \n    aclConfig[item.acl_name].cfg_aces[aceKey] = ace;\n  });\n}\n\nconst result = {\n  ...item,\n  acl_config: aclConfig,\n  api_url: `https://${item.switch_ip}/rest/v10.08/system/acls`,\n  method: 'POST'\n};\n\nreturn [{ json: result }];"
+      },
+      "id": "build-acl-config",
+      "name": "Build ACL Config",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1040, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.api_url}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json.acl_config}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "create-acl-api",
+      "name": "Create ACL API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1240, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "update_acl"
+            }
+          ]
+        }
+      },
+      "id": "update-acl-check",
+      "name": "Update ACL Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 350]
+    },
+    {
+      "parameters": {
+        "url": "=https://{{$json.switch_ip}}/rest/v10.08/system/acls/{{$json.acl_name}}",
+        "httpMethod": "PUT",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json.acl_config}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "update-acl-api",
+      "name": "Update ACL API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1040, 350]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "delete_acl"
+            }
+          ]
+        }
+      },
+      "id": "delete-acl-check",
+      "name": "Delete ACL Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 450]
+    },
+    {
+      "parameters": {
+        "url": "=https://{{$json.switch_ip}}/rest/v10.08/system/acls/{{$json.acl_name}}",
+        "httpMethod": "DELETE",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "delete-acl-api",
+      "name": "Delete ACL API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1040, 450]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "apply_to_interface"
+            }
+          ]
+        }
+      },
+      "id": "apply-interface-check",
+      "name": "Apply to Interface Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 550]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Build Interface ACL Configuration\nconst item = items[0].json;\n\n// Interface configuration for ACL application\nconst interfaceConfig = {\n  aclmac_in_cfg: item.direction === 'in' && item.acl_type === 'mac' ? {\n    [item.acl_name]: {\n      direction: 'in',\n      type: 'mac'\n    }\n  } : undefined,\n  aclmac_out_cfg: item.direction === 'out' && item.acl_type === 'mac' ? {\n    [item.acl_name]: {\n      direction: 'out',\n      type: 'mac'\n    }\n  } : undefined,\n  aclv4_in_cfg: item.direction === 'in' && item.acl_type === 'ipv4' ? {\n    [item.acl_name]: {\n      direction: 'in',\n      type: 'ipv4'\n    }\n  } : undefined,\n  aclv4_out_cfg: item.direction === 'out' && item.acl_type === 'ipv4' ? {\n    [item.acl_name]: {\n      direction: 'out',\n      type: 'ipv4'\n    }\n  } : undefined,\n  aclv6_in_cfg: item.direction === 'in' && item.acl_type === 'ipv6' ? {\n    [item.acl_name]: {\n      direction: 'in',\n      type: 'ipv6'\n    }\n  } : undefined,\n  aclv6_out_cfg: item.direction === 'out' && item.acl_type === 'ipv6' ? {\n    [item.acl_name]: {\n      direction: 'out',\n      type: 'ipv6'\n    }\n  } : undefined\n};\n\n// Remove undefined properties\nObject.keys(interfaceConfig).forEach(key => {\n  if (interfaceConfig[key] === undefined) {\n    delete interfaceConfig[key];\n  }\n});\n\nconst result = {\n  ...item,\n  interface_config: interfaceConfig,\n  api_url: `https://${item.switch_ip}/rest/v10.08/system/interfaces/${item.interface_name}`,\n  method: 'PUT'\n};\n\nreturn [{ json: result }];"
+      },
+      "id": "build-interface-config",
+      "name": "Build Interface Config",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1040, 550]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.api_url}}",
+        "httpMethod": "PUT",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json.interface_config}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "apply-interface-api",
+      "name": "Apply to Interface API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1240, 550]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "create_qos_policy"
+            }
+          ]
+        }
+      },
+      "id": "qos-policy-check",
+      "name": "QoS Policy Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 650]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Build QoS Configuration for AOS-CX\nconst item = items[0].json;\n\n// Basic QoS structure\nconst qosConfig = {\n  global_qos: {\n    qos_enable: true,\n    qos_config: {\n      classification: {},\n      marking: {},\n      queuing: {\n        queue_profile: {}\n      }\n    }\n  }\n};\n\n// Apply QoS rules if provided\nif (item.qos_rules && item.qos_rules.classes) {\n  item.qos_rules.classes.forEach((qosClass, index) => {\n    const className = qosClass.name || `class_${index + 1}`;\n    \n    // Classification rules\n    qosConfig.global_qos.qos_config.classification[className] = {\n      dscp: qosClass.dscp || 0,\n      priority: qosClass.priority || 0,\n      match_criteria: qosClass.match_criteria || 'dscp'\n    };\n    \n    // Marking rules\n    qosConfig.global_qos.qos_config.marking[className] = {\n      dscp_mark: qosClass.dscp || 0,\n      cos_mark: qosClass.cos || 0\n    };\n    \n    // Queue configuration\n    qosConfig.global_qos.qos_config.queuing.queue_profile[className] = {\n      algorithm: 'strict',\n      bandwidth_percent: qosClass.bandwidth_percent || 10,\n      priority: qosClass.priority || 0\n    };\n  });\n}\n\n// Apply policy rules if provided\nif (item.qos_rules && item.qos_rules.policies) {\n  item.qos_rules.policies.forEach(policy => {\n    if (policy.action === 'set_dscp' && qosConfig.global_qos.qos_config.marking[policy.class]) {\n      qosConfig.global_qos.qos_config.marking[policy.class].dscp_mark = policy.value;\n    }\n  });\n}\n\nconst result = {\n  ...item,\n  qos_config: qosConfig,\n  api_url: `https://${item.switch_ip}/rest/v10.08/system/qos`,\n  method: 'PUT'\n};\n\nreturn [{ json: result }];"
+      },
+      "id": "build-qos-config",
+      "name": "Build QoS Config",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1040, 650]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.api_url}}",
+        "httpMethod": "PUT",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json.qos_config}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "create-qos-api",
+      "name": "Create QoS Policy API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1240, 650]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "get_qos"
+            }
+          ]
+        }
+      },
+      "id": "get-qos-check",
+      "name": "Get QoS Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 750]
+    },
+    {
+      "parameters": {
+        "url": "=https://{{$json.switch_ip}}/rest/v10.08/system/qos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "get-qos-api",
+      "name": "Get QoS Configuration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1040, 750]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Success Response Processing\nconst item = items[0].json;\nconst httpResponse = item.response || item;\n\n// Extract response data\nlet responseData;\ntry {\n  responseData = typeof httpResponse === 'string' ? JSON.parse(httpResponse) : httpResponse;\n} catch (e) {\n  responseData = httpResponse;\n}\n\nconst result = {\n  status: 'success',\n  operation: item.operation,\n  switch_ip: item.switch_ip,\n  timestamp: new Date().toISOString(),\n  execution_id: item.execution_id,\n  response_data: responseData,\n  summary: generateSummary(item.operation, responseData),\n  next_steps: generateNextSteps(item.operation)\n};\n\nfunction generateSummary(operation, data) {\n  switch (operation) {\n    case 'list_acls':\n      const aclCount = data && typeof data === 'object' ? Object.keys(data).length : 0;\n      return `Found ${aclCount} ACL(s) configured on the switch`;\n    case 'create_acl':\n      return `Successfully created ACL '${item.acl_name}' with ${item.rules ? item.rules.length : 0} rules`;\n    case 'update_acl':\n      return `Successfully updated ACL '${item.acl_name}'`;\n    case 'delete_acl':\n      return `Successfully deleted ACL '${item.acl_name}'`;\n    case 'apply_to_interface':\n      return `Successfully applied ACL '${item.acl_name}' to interface '${item.interface_name}' (${item.direction}bound)`;\n    case 'create_qos_policy':\n      return `Successfully created/updated QoS policy with ${item.qos_rules && item.qos_rules.classes ? item.qos_rules.classes.length : 0} classes`;\n    case 'get_qos':\n      return `Retrieved QoS configuration from switch`;\n    default:\n      return `Completed ${operation} successfully`;\n  }\n}\n\nfunction generateNextSteps(operation) {\n  switch (operation) {\n    case 'create_acl':\n      return ['Apply ACL to interface(s)', 'Test ACL functionality', 'Monitor ACL hit counters'];\n    case 'apply_to_interface':\n      return ['Verify ACL is active on interface', 'Test traffic filtering', 'Monitor interface statistics'];\n    case 'create_qos_policy':\n      return ['Verify QoS classes are active', 'Monitor queue statistics', 'Test traffic prioritization'];\n    default:\n      return ['Verify configuration is active', 'Test functionality', 'Monitor performance'];\n  }\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1440, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Error Response Processing\nconst item = items[0].json;\nconst error = item.error || item;\n\n// Categorize error type\nlet errorCategory = 'unknown';\nlet rollbackRequired = false;\nlet rollbackSteps = [];\n\nif (error.httpCode) {\n  switch (error.httpCode) {\n    case 400:\n      errorCategory = 'invalid_request';\n      break;\n    case 401:\n      errorCategory = 'authentication_failed';\n      break;\n    case 403:\n      errorCategory = 'authorization_failed';\n      break;\n    case 404:\n      errorCategory = 'resource_not_found';\n      break;\n    case 409:\n      errorCategory = 'resource_conflict';\n      rollbackRequired = true;\n      break;\n    case 422:\n      errorCategory = 'validation_failed';\n      break;\n    case 500:\n      errorCategory = 'server_error';\n      rollbackRequired = true;\n      break;\n    default:\n      errorCategory = 'http_error';\n  }\n}\n\n// Determine rollback steps\nif (rollbackRequired && item.operation) {\n  switch (item.operation) {\n    case 'create_acl':\n      rollbackSteps = [\n        `Delete ACL '${item.acl_name}' if partially created`,\n        'Verify no interface assignments remain'\n      ];\n      break;\n    case 'apply_to_interface':\n      rollbackSteps = [\n        `Remove ACL from interface '${item.interface_name}'`,\n        'Restore previous interface configuration'\n      ];\n      break;\n    case 'create_qos_policy':\n      rollbackSteps = [\n        'Restore previous QoS configuration',\n        'Verify no traffic disruption'\n      ];\n      break;\n  }\n}\n\nconst result = {\n  status: 'error',\n  operation: item.operation,\n  switch_ip: item.switch_ip,\n  timestamp: new Date().toISOString(),\n  execution_id: item.execution_id,\n  error_category: errorCategory,\n  error_message: error.message || error.error || 'Unknown error occurred',\n  error_details: error,\n  rollback_required: rollbackRequired,\n  rollback_steps: rollbackSteps,\n  troubleshooting: generateTroubleshootingSteps(errorCategory, item.operation)\n};\n\nfunction generateTroubleshootingSteps(category, operation) {\n  const steps = [];\n  \n  switch (category) {\n    case 'authentication_failed':\n      steps.push('Verify API credentials are correct');\n      steps.push('Check if authentication token has expired');\n      steps.push('Confirm API access is enabled on the switch');\n      break;\n    case 'invalid_request':\n      steps.push('Review request parameters and format');\n      steps.push('Check ACL name and rule syntax');\n      steps.push('Verify interface name format');\n      break;\n    case 'resource_conflict':\n      steps.push('Check if ACL already exists');\n      steps.push('Verify interface is not already configured');\n      steps.push('Review existing policy conflicts');\n      break;\n    case 'validation_failed':\n      steps.push('Review input validation errors');\n      steps.push('Check ACL rule syntax and parameters');\n      steps.push('Verify DSCP and priority values are valid');\n      break;\n    default:\n      steps.push('Check switch connectivity and status');\n      steps.push('Review switch logs for additional details');\n      steps.push('Verify API version compatibility');\n  }\n  \n  return steps;\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "error-response",
+      "name": "Error Response & Rollback",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1440, 600]
+    },
+    {
+      "parameters": {
+        "channel": "#network-automation",
+        "text": "=AOS-CX Policy Deployment {{$json.status === 'success' ? '✅ SUCCESS' : '❌ ERROR'}}\n\n**Operation:** {{$json.operation}}\n**Switch:** {{$json.switch_ip}}\n**Timestamp:** {{$json.timestamp}}\n\n{{$json.status === 'success' ? '**Summary:** ' + $json.summary : '**Error:** ' + $json.error_message}}\n\n{{$json.status === 'success' && $json.next_steps ? '**Next Steps:**\\n' + $json.next_steps.map(step => '• ' + step).join('\\n') : ''}}\n\n{{$json.status === 'error' && $json.rollback_required ? '**⚠️ Rollback Required:**\\n' + $json.rollback_steps.map(step => '• ' + step).join('\\n') : ''}}\n\n{{$json.status === 'error' && $json.troubleshooting ? '**Troubleshooting:**\\n' + $json.troubleshooting.map(step => '• ' + step).join('\\n') : ''}}",
+        "otherOptions": {},
+        "attachments": [],
+        "blocksUi": false,
+        "select": "channel",
+        "channelId": "C1234567890"
+      },
+      "id": "slack-notification",
+      "name": "Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [1640, 500]
+    },
+    {
+      "parameters": {
+        "fromEmail": "network-automation@company.com",
+        "toEmail": "network-team@company.com",
+        "subject": "=AOS-CX Policy Deployment {{$json.status === 'success' ? 'Success' : 'Error'}} - {{$json.operation}}",
+        "text": "=AOS-CX Policy Deployment Report\n\nStatus: {{$json.status}}\nOperation: {{$json.operation}}\nSwitch: {{$json.switch_ip}}\nTimestamp: {{$json.timestamp}}\nExecution ID: {{$json.execution_id}}\n\n{{$json.status === 'success' ? 'Summary: ' + $json.summary : 'Error: ' + $json.error_message}}\n\n{{$json.status === 'success' && $json.next_steps ? 'Next Steps:\\n' + $json.next_steps.map(step => '- ' + step).join('\\n') : ''}}\n\n{{$json.status === 'error' && $json.rollback_required ? 'Rollback Required:\\n' + $json.rollback_steps.map(step => '- ' + step).join('\\n') : ''}}\n\n{{$json.status === 'error' && $json.troubleshooting ? 'Troubleshooting Steps:\\n' + $json.troubleshooting.map(step => '- ' + step).join('\\n') : ''}}\n\nFor detailed information, check the n8n workflow execution logs.",
+        "options": {}
+      },
+      "id": "email-notification",
+      "name": "Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1640, 600]
+    },
+    {
+      "parameters": {
+        "channel": "#network-alerts",
+        "text": "=❌ **AOS-CX Policy Deployment Validation Failed**\n\n**Input Validation Errors:**\n{{$json.validation.errors.map(error => '• ' + error).join('\\n')}}\n\n{{$json.validation.warnings.length > 0 ? '**Warnings:**\\n' + $json.validation.warnings.map(warning => '• ' + warning).join('\\n') : ''}}\n\n**Timestamp:** {{$json.timestamp}}\n**Execution ID:** {{$json.execution_id}}\n\n**Provided Parameters:**\n```json\n{{JSON.stringify($json, null, 2)}}\n```",
+        "otherOptions": {},
+        "attachments": [],
+        "blocksUi": false,
+        "select": "channel",
+        "channelId": "C1234567890"
+      },
+      "id": "validation-error-notification",
+      "name": "Validation Error Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [840, 400]
+    }
+  ],
+  "connections": {
+    "Policy Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input Validation & Templates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Policy Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input Validation & Templates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Validation & Templates": {
+      "main": [
+        [
+          {
+            "node": "Validation Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Check": {
+      "main": [
+        [
+          {
+            "node": "Operation Router",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create ACL Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update ACL Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delete ACL Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Apply to Interface Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "QoS Policy Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get QoS Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Operation Router": {
+      "main": [
+        [
+          {
+            "node": "List ACLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create ACL Check": {
+      "main": [
+        [
+          {
+            "node": "Build ACL Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update ACL Check": {
+      "main": [
+        [
+          {
+            "node": "Build ACL Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete ACL Check": {
+      "main": [
+        [
+          {
+            "node": "Delete ACL API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply to Interface Check": {
+      "main": [
+        [
+          {
+            "node": "Build Interface Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QoS Policy Check": {
+      "main": [
+        [
+          {
+            "node": "Build QoS Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get QoS Check": {
+      "main": [
+        [
+          {
+            "node": "Get QoS Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build ACL Config": {
+      "main": [
+        [
+          {
+            "node": "Create ACL API Call",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update ACL API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Interface Config": {
+      "main": [
+        [
+          {
+            "node": "Apply to Interface API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build QoS Config": {
+      "main": [
+        [
+          {
+            "node": "Create QoS Policy API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List ACLs": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response & Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create ACL API Call": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response & Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update ACL API Call": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response & Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete ACL API Call": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response & Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply to Interface API Call": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response & Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create QoS Policy API Call": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response & Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get QoS Configuration": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response & Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Response": {
+      "main": [
+        [
+          {
+            "node": "Slack Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Response & Rollback": {
+      "main": [
+        [
+          {
+            "node": "Slack Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-16T21:00:00.000Z",
+      "updatedAt": "2025-01-16T21:00:00.000Z",
+      "id": "aos-cx-policy",
+      "name": "AOS-CX Policy Management"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2025-01-16T21:00:00.000Z",
+  "versionId": "policy-deployment-v1.0.0"
+}

@@ -1,0 +1,192 @@
+{
+  "environment": {
+    "description": "Target deployment environment",
+    "default": "production",
+    "options": ["development", "staging", "production"]
+  },
+  "switchCredentials": {
+    "description": "AOS-CX switch authentication method",
+    "default": "basic_auth",
+    "options": ["basic_auth", "token_auth"]
+  },
+  "apiVersion": {
+    "description": "AOS-CX REST API version",
+    "default": "v10.08",
+    "options": ["v10.08", "v10.09", "v10.10"]
+  },
+  "vlanSettings": {
+    "defaultVlanRange": {
+      "description": "Default VLAN ID range for automation",
+      "min": 100,
+      "max": 999,
+      "default": "100-200"
+    },
+    "managementVlans": {
+      "description": "Protected management VLANs (won't be modified)",
+      "default": [1, 4094]
+    }
+  },
+  "interfaceSettings": {
+    "monitoredInterfaces": {
+      "description": "Interface types to monitor and configure",
+      "default": ["1/1/*", "1/2/*"],
+      "examples": ["1/1/1", "1/1/2-48", "lag1"]
+    },
+    "securityDefaults": {
+      "portSecurity": true,
+      "stormControl": true,
+      "dhcpSnooping": true
+    }
+  },
+  "backupSettings": {
+    "scheduleExpression": {
+      "description": "Cron expression for backup schedule",
+      "default": "0 2 * * *",
+      "note": "Daily at 2 AM"
+    },
+    "retentionDays": {
+      "description": "Number of days to retain backups",
+      "default": 30,
+      "min": 7,
+      "max": 365
+    },
+    "compressionEnabled": {
+      "description": "Enable backup compression",
+      "default": true
+    }
+  },
+  "validationSettings": {
+    "preChangeValidation": {
+      "description": "Validate configuration before applying",
+      "default": true
+    },
+    "postChangeVerification": {
+      "description": "Verify configuration after applying",
+      "default": true
+    },
+    "rollbackOnFailure": {
+      "description": "Automatically rollback on validation failure",
+      "default": true
+    }
+  },
+  "notificationChannels": {
+    "slack": {
+      "description": "Slack channel for notifications",
+      "default": "#network-operations"
+    },
+    "email": {
+      "description": "Email addresses for critical alerts",
+      "default": ["network-admin@company.com"]
+    },
+    "webhook": {
+      "description": "Webhook URL for external integrations",
+      "default": null,
+      "example": "https://monitoring.company.com/hooks/network-events"
+    }
+  },
+  "performanceSettings": {
+    "batchSize": {
+      "description": "Number of switches to process in parallel",
+      "default": 5,
+      "min": 1,
+      "max": 20
+    },
+    "requestTimeout": {
+      "description": "API request timeout in seconds",
+      "default": 30,
+      "min": 10,
+      "max": 120
+    },
+    "retryAttempts": {
+      "description": "Number of retry attempts for failed API calls",
+      "default": 3,
+      "min": 1,
+      "max": 5
+    },
+    "delayBetweenRequests": {
+      "description": "Delay between API requests in milliseconds",
+      "default": 1000,
+      "min": 500,
+      "max": 5000
+    }
+  },
+  "policySettings": {
+    "defaultAclType": {
+      "description": "Default ACL type for policy creation",
+      "default": "ipv4",
+      "options": ["ipv4", "ipv6", "mac"]
+    },
+    "defaultDirection": {
+      "description": "Default direction for interface ACL application",
+      "default": "in",
+      "options": ["in", "out"]
+    },
+    "aclNamingConvention": {
+      "description": "ACL naming convention pattern",
+      "default": "UPPERCASE_WITH_UNDERSCORES",
+      "examples": ["SECURITY_BASIC", "GUEST_NETWORK", "IOT_POLICY"]
+    },
+    "maxRulesPerAcl": {
+      "description": "Maximum number of rules per ACL",
+      "default": 100,
+      "min": 10,
+      "max": 500
+    },
+    "policyTemplates": {
+      "security_basic": {
+        "description": "Basic security ACL blocking common threats",
+        "category": "security",
+        "risk_level": "low"
+      },
+      "guest_network": {
+        "description": "Guest network isolation with internet access",
+        "category": "segmentation",
+        "risk_level": "medium"
+      },
+      "iot_security": {
+        "description": "IoT device restrictions with minimal connectivity",
+        "category": "iot",
+        "risk_level": "high"
+      },
+      "qos_voice_priority": {
+        "description": "Voice traffic prioritization with bandwidth allocation",
+        "category": "qos",
+        "risk_level": "low"
+      }
+    },
+    "rollbackSettings": {
+      "enableAutoRollback": {
+        "description": "Enable automatic rollback on critical failures",
+        "default": true
+      },
+      "rollbackTimeoutSeconds": {
+        "description": "Timeout for rollback operations",
+        "default": 60,
+        "min": 30,
+        "max": 300
+      },
+      "backupBeforeChange": {
+        "description": "Create backup before applying policy changes",
+        "default": true
+      }
+    },
+    "validationRules": {
+      "aclNameMaxLength": {
+        "description": "Maximum length for ACL names",
+        "default": 64
+      },
+      "aclNamePattern": {
+        "description": "Regex pattern for valid ACL names",
+        "default": "^[a-zA-Z0-9_-]+$"
+      },
+      "interfaceNamePattern": {
+        "description": "Regex pattern for valid interface names",
+        "default": "^(\\d+\\/)*\\d+(\\/\\d+)?$"
+      },
+      "ipAddressPattern": {
+        "description": "Regex pattern for valid IP addresses",
+        "default": "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+      }
+    }
+  }
+}

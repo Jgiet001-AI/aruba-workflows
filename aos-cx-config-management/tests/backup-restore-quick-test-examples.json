@@ -1,0 +1,226 @@
+{
+  "quick_test_examples": {
+    "note": "These are ready-to-use test examples for the AOS-CX Backup & Restore workflow",
+    "webhook_url": "http://192.168.40.100:8006/webhook/aos-cx-backup-restore",
+    "examples": [
+      {
+        "name": "1. Basic Backup Test",
+        "description": "Test basic backup functionality",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"backup\", \"switch_ip\": \"192.168.1.100\", \"backup_type\": \"running\"}'",
+        "json_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.1.100",
+          "backup_type": "running"
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "backup",
+          "backup_file": "192.168.1.100_running_2025-01-16_*.json.gz"
+        }
+      },
+      {
+        "name": "2. Custom Named Backup",
+        "description": "Test backup with custom filename",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"backup\", \"switch_ip\": \"192.168.1.100\", \"backup_name\": \"pre_maintenance_backup\", \"compression_enabled\": true}'",
+        "json_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.1.100",
+          "backup_name": "pre_maintenance_backup",
+          "compression_enabled": true
+        },
+        "expected_response": {
+          "success": true,
+          "backup_file": "pre_maintenance_backup.json.gz"
+        }
+      },
+      {
+        "name": "3. List All Backups",
+        "description": "List all available backup files",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"list_backups\"}'",
+        "json_payload": {
+          "operation": "list_backups"
+        },
+        "expected_response": {
+          "success": true,
+          "total_backups": "number",
+          "backups": "array of backup files"
+        }
+      },
+      {
+        "name": "4. Restore Configuration",
+        "description": "Restore from a backup file (use actual filename from list_backups)",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"restore\", \"switch_ip\": \"192.168.1.100\", \"restore_file\": \"pre_maintenance_backup.json.gz\"}'",
+        "json_payload": {
+          "operation": "restore",
+          "switch_ip": "192.168.1.100",
+          "restore_file": "pre_maintenance_backup.json.gz"
+        },
+        "expected_response": {
+          "success": true,
+          "operation": "restore",
+          "verification": "completed"
+        }
+      },
+      {
+        "name": "5. Compare Configurations",
+        "description": "Compare current config with backup",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"compare\", \"switch_ip\": \"192.168.1.100\", \"backup_name\": \"pre_maintenance_backup.json.gz\"}'",
+        "json_payload": {
+          "operation": "compare",
+          "switch_ip": "192.168.1.100",
+          "backup_name": "pre_maintenance_backup.json.gz"
+        },
+        "expected_response": {
+          "success": true,
+          "comparison_result": {
+            "identical": "boolean",
+            "differences": "number"
+          }
+        }
+      },
+      {
+        "name": "6. Create Checkpoint",
+        "description": "Create a configuration checkpoint",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"create_checkpoint\", \"switch_ip\": \"192.168.1.100\"}'",
+        "json_payload": {
+          "operation": "create_checkpoint",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_response": {
+          "success": true,
+          "checkpoint_created": true
+        }
+      }
+    ],
+    "error_test_examples": [
+      {
+        "name": "Invalid IP Address",
+        "description": "Test validation error handling",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"backup\", \"switch_ip\": \"invalid.ip\", \"backup_type\": \"running\"}'",
+        "json_payload": {
+          "operation": "backup",
+          "switch_ip": "invalid.ip",
+          "backup_type": "running"
+        },
+        "expected_response": {
+          "success": false,
+          "error": "Invalid IP address format"
+        }
+      },
+      {
+        "name": "Missing Required Parameter",
+        "description": "Test missing switch_ip parameter",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"backup\", \"backup_type\": \"running\"}'",
+        "json_payload": {
+          "operation": "backup",
+          "backup_type": "running"
+        },
+        "expected_response": {
+          "success": false,
+          "error": "switch_ip is required"
+        }
+      },
+      {
+        "name": "Invalid Operation",
+        "description": "Test invalid operation parameter",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"invalid_op\", \"switch_ip\": \"192.168.1.100\"}'",
+        "json_payload": {
+          "operation": "invalid_op",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_response": {
+          "success": false,
+          "error": "Invalid operation"
+        }
+      }
+    ],
+    "advanced_examples": [
+      {
+        "name": "Startup Config Backup",
+        "description": "Backup startup configuration instead of running",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"backup\", \"switch_ip\": \"192.168.1.100\", \"backup_type\": \"startup\", \"backup_name\": \"startup_config_backup\"}'",
+        "json_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.1.100",
+          "backup_type": "startup",
+          "backup_name": "startup_config_backup"
+        }
+      },
+      {
+        "name": "Uncompressed Backup",
+        "description": "Create backup without compression",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"backup\", \"switch_ip\": \"192.168.1.100\", \"compression_enabled\": false, \"backup_name\": \"uncompressed_backup\"}'",
+        "json_payload": {
+          "operation": "backup",
+          "switch_ip": "192.168.1.100",
+          "compression_enabled": false,
+          "backup_name": "uncompressed_backup"
+        }
+      },
+      {
+        "name": "Restore with Comparison",
+        "description": "Restore with pre-restore configuration comparison",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"restore\", \"switch_ip\": \"192.168.1.100\", \"restore_file\": \"backup_file.json\", \"compare_configs\": true}'",
+        "json_payload": {
+          "operation": "restore",
+          "switch_ip": "192.168.1.100",
+          "restore_file": "backup_file.json",
+          "compare_configs": true
+        }
+      },
+      {
+        "name": "List with Custom Retention",
+        "description": "List backups with custom retention cleanup",
+        "curl_command": "curl -X POST \"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\" -H \"Content-Type: application/json\" -d '{\"operation\": \"list_backups\", \"retention_days\": 7}'",
+        "json_payload": {
+          "operation": "list_backups",
+          "retention_days": 7
+        }
+      }
+    ],
+    "bash_script_examples": [
+      {
+        "name": "Quick Backup Script",
+        "description": "Bash script for quick backup",
+        "script": "#!/bin/bash\n\n# AOS-CX Quick Backup Script\nSWITCH_IP=\"192.168.1.100\"\nWEBHOOK_URL=\"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\"\nBACKUP_NAME=\"manual_backup_$(date +%Y%m%d_%H%M%S)\"\n\necho \"Creating backup: $BACKUP_NAME\"\ncurl -X POST \"$WEBHOOK_URL\" \\\n  -H \"Content-Type: application/json\" \\\n  -d \"{\n    \\\"operation\\\": \\\"backup\\\",\n    \\\"switch_ip\\\": \\\"$SWITCH_IP\\\",\n    \\\"backup_name\\\": \\\"$BACKUP_NAME\\\",\n    \\\"compression_enabled\\\": true\n  }\" \\\n  | jq '.'\n\necho \"Backup completed!\""
+      },
+      {
+        "name": "Emergency Restore Script",
+        "description": "Emergency restore script with user confirmation",
+        "script": "#!/bin/bash\n\n# AOS-CX Emergency Restore Script\nSWITCH_IP=\"192.168.1.100\"\nWEBHOOK_URL=\"http://192.168.40.100:8006/webhook/aos-cx-backup-restore\"\n\nif [ \"$#\" -ne 1 ]; then\n  echo \"Usage: $0 <backup_filename>\"\n  exit 1\nfi\n\nBACKUP_FILE=\"$1\"\n\n# List available backups\necho \"Available backups:\"\ncurl -s -X POST \"$WEBHOOK_URL\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"operation\": \"list_backups\"}' \\\n  | jq -r '.backups[].filename'\n\necho \"\"\nread -p \"Are you sure you want to restore from $BACKUP_FILE? (yes/no): \" confirm\n\nif [ \"$confirm\" = \"yes\" ]; then\n  echo \"Restoring configuration from $BACKUP_FILE...\"\n  curl -X POST \"$WEBHOOK_URL\" \\\n    -H \"Content-Type: application/json\" \\\n    -d \"{\n      \\\"operation\\\": \\\"restore\\\",\n      \\\"switch_ip\\\": \\\"$SWITCH_IP\\\",\n      \\\"restore_file\\\": \\\"$BACKUP_FILE\\\",\n      \\\"compare_configs\\\": true\n    }\" \\\n    | jq '.'\n  echo \"Restore completed!\"\nelse\n  echo \"Restore cancelled.\"\nfi"
+      }
+    ],
+    "python_examples": [
+      {
+        "name": "Python Backup Manager",
+        "description": "Python script for managing backups",
+        "script": "#!/usr/bin/env python3\n\nimport requests\nimport json\nfrom datetime import datetime\nimport argparse\n\nclass AOSCXBackupManager:\n    def __init__(self, webhook_url):\n        self.webhook_url = webhook_url\n    \n    def send_request(self, payload):\n        \"\"\"Send request to n8n webhook\"\"\"\n        headers = {'Content-Type': 'application/json'}\n        response = requests.post(self.webhook_url, \n                               json=payload, \n                               headers=headers)\n        return response.json()\n    \n    def backup(self, switch_ip, backup_type='running', custom_name=None):\n        \"\"\"Create a backup\"\"\"\n        payload = {\n            'operation': 'backup',\n            'switch_ip': switch_ip,\n            'backup_type': backup_type,\n            'compression_enabled': True\n        }\n        \n        if custom_name:\n            payload['backup_name'] = custom_name\n        \n        return self.send_request(payload)\n    \n    def restore(self, switch_ip, backup_file, compare=False):\n        \"\"\"Restore from backup\"\"\"\n        payload = {\n            'operation': 'restore',\n            'switch_ip': switch_ip,\n            'restore_file': backup_file,\n            'compare_configs': compare\n        }\n        \n        return self.send_request(payload)\n    \n    def list_backups(self, retention_days=None):\n        \"\"\"List all backups\"\"\"\n        payload = {'operation': 'list_backups'}\n        \n        if retention_days:\n            payload['retention_days'] = retention_days\n        \n        return self.send_request(payload)\n    \n    def compare(self, switch_ip, backup_file):\n        \"\"\"Compare current config with backup\"\"\"\n        payload = {\n            'operation': 'compare',\n            'switch_ip': switch_ip,\n            'backup_name': backup_file\n        }\n        \n        return self.send_request(payload)\n\n# Example usage\nif __name__ == '__main__':\n    manager = AOSCXBackupManager('http://192.168.40.100:8006/webhook/aos-cx-backup-restore')\n    \n    # Create a backup\n    result = manager.backup('192.168.1.100', custom_name=f'python_backup_{datetime.now().strftime(\"%Y%m%d_%H%M%S\")}')\n    print(json.dumps(result, indent=2))\n    \n    # List backups\n    backups = manager.list_backups()\n    print(f\"Total backups: {backups.get('total_backups', 0)}\")"
+      }
+    ],
+    "troubleshooting_tests": [
+      {
+        "name": "Check Switch Connectivity",
+        "description": "Test basic switch connectivity",
+        "commands": [
+          "ping -c 3 192.168.1.100",
+          "curl -k -m 10 https://192.168.1.100/rest/v10.08/system"
+        ]
+      },
+      {
+        "name": "Verify Backup Directory",
+        "description": "Check backup directory status",
+        "commands": [
+          "ls -la /Users/jeangiet/Documents/Claude/aruba-workflows/aos-cx-config-management/backups/",
+          "df -h /Users/jeangiet/Documents/Claude/aruba-workflows/"
+        ]
+      },
+      {
+        "name": "Test Webhook Endpoint",
+        "description": "Verify webhook is responding",
+        "commands": [
+          "curl -X POST http://192.168.40.100:8006/webhook/aos-cx-backup-restore -H 'Content-Type: application/json' -d '{\"operation\": \"list_backups\"}'"
+        ]
+      }
+    ]
+  }
+}

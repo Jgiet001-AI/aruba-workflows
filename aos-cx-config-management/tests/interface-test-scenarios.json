@@ -1,0 +1,533 @@
+{
+  "interface_configuration_test_scenarios": {
+    "test_metadata": {
+      "workflow_name": "AOS-CX Interface Configuration",
+      "version": "1.0.0",
+      "created": "2025-01-16",
+      "purpose": "Comprehensive test scenarios for interface configuration workflow"
+    },
+    
+    "test_environment": {
+      "test_switch_ip": "192.168.1.100",
+      "n8n_webhook_url": "http://192.168.40.100:8006/webhook/aos-cx-interface-config",
+      "notification_channels": ["#network-config", "#network-alerts"],
+      "test_interfaces": ["1/1/1", "1/1/2", "1/1/24", "lag1"]
+    },
+    
+    "basic_operation_tests": {
+      "1_list_all_interfaces": {
+        "description": "List all interfaces on the switch",
+        "method": "POST",
+        "payload": {
+          "operation": "list",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_result": {
+          "status": "success",
+          "response_contains": ["interfaces", "interface_count"]
+        },
+        "validation": [
+          "Response includes interface list",
+          "Status code 200",
+          "No authentication errors"
+        ]
+      },
+      
+      "2_read_specific_interface": {
+        "description": "Read configuration of a specific interface",
+        "method": "POST",
+        "payload": {
+          "operation": "read",
+          "interface_name": "1/1/1",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_result": {
+          "status": "success",
+          "response_contains": ["admin", "vlan_mode", "description"]
+        },
+        "validation": [
+          "Interface details returned",
+          "Admin state visible",
+          "VLAN configuration shown"
+        ]
+      },
+      
+      "3_update_interface_description": {
+        "description": "Update interface description only",
+        "method": "POST",
+        "payload": {
+          "operation": "update",
+          "interface_name": "1/1/1",
+          "switch_ip": "192.168.1.100",
+          "description": "Test port - updated via automation",
+          "admin_state": "up"
+        },
+        "expected_result": {
+          "status": "success",
+          "verification": "description_updated"
+        },
+        "validation": [
+          "Description updated successfully",
+          "No VLAN changes",
+          "Interface remains operational"
+        ]
+      }
+    },
+    
+    "access_port_configuration_tests": {
+      "1_basic_access_port": {
+        "description": "Configure basic access port with single VLAN",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "1/1/2",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 100,
+          "admin_state": "up",
+          "description": "Employee workstation access port"
+        },
+        "expected_result": {
+          "status": "success",
+          "template_applied": "access_port",
+          "vlan_mode": "access",
+          "vlan_tag": 100
+        },
+        "validation": [
+          "VLAN mode set to access",
+          "VLAN 100 assigned",
+          "Interface brought up",
+          "Description updated"
+        ]
+      },
+      
+      "2_access_port_with_port_security": {
+        "description": "Configure access port with port security enabled",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "1/1/3",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 150,
+          "admin_state": "up",
+          "description": "Secure access port with MAC limit",
+          "port_security_enable": true,
+          "max_mac_addresses": 1
+        },
+        "expected_result": {
+          "status": "success",
+          "port_security": {
+            "enable": true,
+            "max_addresses": 1
+          }
+        },
+        "validation": [
+          "Port security enabled",
+          "MAC address limit set to 1",
+          "Security violation action configured"
+        ]
+      },
+      
+      "3_wireless_ap_port": {
+        "description": "Configure port for wireless access point with PoE",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "1/1/12",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 200,
+          "admin_state": "up",
+          "description": "Wireless Access Point - PoE enabled",
+          "poe_enable": true,
+          "port_security_enable": false
+        },
+        "expected_result": {
+          "status": "success",
+          "poe": {
+            "enable": true
+          }
+        },
+        "validation": [
+          "PoE enabled for AP power",
+          "Port security disabled for flexibility",
+          "Management VLAN assigned"
+        ]
+      }
+    },
+    
+    "trunk_port_configuration_tests": {
+      "1_basic_trunk_port": {
+        "description": "Configure basic trunk port with multiple VLANs",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_trunk",
+          "interface_name": "1/1/24",
+          "switch_ip": "192.168.1.100",
+          "vlan_trunks": [10, 20, 30, 100],
+          "native_vlan_tag": 1,
+          "admin_state": "up",
+          "description": "Uplink to distribution switch"
+        },
+        "expected_result": {
+          "status": "success",
+          "template_applied": "trunk_port",
+          "vlan_mode": "trunk",
+          "vlan_trunks": [10, 20, 30, 100]
+        },
+        "validation": [
+          "VLAN mode set to trunk",
+          "Multiple VLANs configured",
+          "Native VLAN set",
+          "Trunk description updated"
+        ]
+      },
+      
+      "2_server_trunk_port": {
+        "description": "Configure trunk port for server with many VLANs",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_trunk",
+          "interface_name": "1/1/48",
+          "switch_ip": "192.168.1.100",
+          "vlan_trunks": [100, 200, 300, 400, 500],
+          "native_vlan_tag": 100,
+          "admin_state": "up",
+          "description": "Server trunk - multiple service VLANs",
+          "port_security_enable": false
+        },
+        "expected_result": {
+          "status": "success",
+          "vlan_trunks": [100, 200, 300, 400, 500],
+          "native_vlan_tag": 100
+        },
+        "validation": [
+          "All VLANs configured on trunk",
+          "Native VLAN properly set",
+          "Port security disabled",
+          "High-performance settings applied"
+        ]
+      },
+      
+      "3_inter_switch_link": {
+        "description": "Configure inter-switch link trunk",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_trunk",
+          "interface_name": "1/1/25",
+          "switch_ip": "192.168.1.100",
+          "vlan_trunks": [1, 10, 20, 30, 100, 200, 999],
+          "native_vlan_tag": 1,
+          "admin_state": "up",
+          "description": "ISL to core switch - all VLANs"
+        },
+        "expected_result": {
+          "status": "success",
+          "vlan_trunks": [1, 10, 20, 30, 100, 200, 999]
+        },
+        "validation": [
+          "Management and data VLANs trunked",
+          "Native VLAN matches standard",
+          "ISL description applied"
+        ]
+      }
+    },
+    
+    "lag_interface_tests": {
+      "1_create_lag_interface": {
+        "description": "Configure LAG interface",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_trunk",
+          "interface_name": "lag1",
+          "switch_ip": "192.168.1.100",
+          "vlan_trunks": [10, 20, 30],
+          "native_vlan_tag": 1,
+          "admin_state": "up",
+          "description": "Link Aggregation Group 1"
+        },
+        "expected_result": {
+          "status": "success",
+          "interface_type": "lag"
+        },
+        "validation": [
+          "LAG interface created",
+          "Trunk configuration applied",
+          "Load balancing configured"
+        ]
+      }
+    },
+    
+    "error_handling_tests": {
+      "1_invalid_interface_name": {
+        "description": "Test with invalid interface name format",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "invalid-interface",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 100
+        },
+        "expected_result": {
+          "status": "error",
+          "error_type": "VALIDATION",
+          "message_contains": "Invalid interface_name format"
+        },
+        "validation": [
+          "Input validation catches error",
+          "Helpful error message provided",
+          "No API calls made"
+        ]
+      },
+      
+      "2_invalid_vlan_range": {
+        "description": "Test with VLAN ID outside valid range",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "1/1/5",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 5000
+        },
+        "expected_result": {
+          "status": "error",
+          "error_type": "VALIDATION",
+          "message_contains": "VLAN ID"
+        },
+        "validation": [
+          "VLAN range validation works",
+          "Error caught before API call",
+          "Clear error message"
+        ]
+      },
+      
+      "3_missing_required_parameters": {
+        "description": "Test with missing required parameters",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_access",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_result": {
+          "status": "error",
+          "error_type": "VALIDATION",
+          "message_contains": "interface_name is required"
+        },
+        "validation": [
+          "Required parameter validation",
+          "Informative error message",
+          "Request rejected early"
+        ]
+      },
+      
+      "4_port_security_validation": {
+        "description": "Test port security parameter validation",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "1/1/6",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 100,
+          "port_security_enable": true,
+          "max_mac_addresses": 2000
+        },
+        "expected_result": {
+          "status": "error",
+          "error_type": "VALIDATION",
+          "message_contains": "max_mac_addresses"
+        },
+        "validation": [
+          "MAC address limit validation",
+          "Range checking works",
+          "Security parameter validation"
+        ]
+      },
+      
+      "5_nonexistent_interface": {
+        "description": "Test with interface that doesn't exist on switch",
+        "method": "POST",
+        "payload": {
+          "operation": "read",
+          "interface_name": "99/99/99",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_result": {
+          "status": "error",
+          "error_type": "NOT_FOUND",
+          "http_code": 404
+        },
+        "validation": [
+          "API returns 404 for missing interface",
+          "Error properly categorized",
+          "No rollback triggered"
+        ]
+      },
+      
+      "6_authentication_failure": {
+        "description": "Test with invalid credentials",
+        "method": "POST",
+        "payload": {
+          "operation": "list",
+          "switch_ip": "192.168.1.100"
+        },
+        "expected_result": {
+          "status": "error",
+          "error_type": "AUTHENTICATION",
+          "http_code": 401
+        },
+        "validation": [
+          "Authentication error detected",
+          "No rollback attempted",
+          "Error notification sent"
+        ],
+        "notes": "Requires temporarily invalid credentials"
+      }
+    },
+    
+    "rollback_tests": {
+      "1_simulate_server_error": {
+        "description": "Test rollback on server error",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_access",
+          "interface_name": "1/1/7",
+          "switch_ip": "192.168.1.100",
+          "vlan_tag": 100
+        },
+        "expected_result": {
+          "status": "error",
+          "rollback_executed": true,
+          "rollback_status": "success"
+        },
+        "validation": [
+          "Rollback triggered on server error",
+          "Interface brought down safely",
+          "Rollback notification sent"
+        ],
+        "notes": "Requires simulated server error"
+      },
+      
+      "2_simulate_timeout": {
+        "description": "Test rollback on request timeout",
+        "method": "POST",
+        "payload": {
+          "operation": "configure_trunk",
+          "interface_name": "1/1/8",
+          "switch_ip": "192.168.1.100",
+          "vlan_trunks": [10, 20, 30]
+        },
+        "expected_result": {
+          "status": "error",
+          "error_type": "TIMEOUT",
+          "rollback_executed": true
+        },
+        "validation": [
+          "Timeout detected and handled",
+          "Emergency rollback executed",
+          "Safe configuration applied"
+        ],
+        "notes": "Requires network delay simulation"
+      }
+    },
+    
+    "performance_tests": {
+      "1_bulk_interface_configuration": {
+        "description": "Configure multiple interfaces sequentially",
+        "interfaces": [
+          {
+            "operation": "configure_access",
+            "interface_name": "1/1/10",
+            "vlan_tag": 100,
+            "description": "Bulk config test 1"
+          },
+          {
+            "operation": "configure_access",
+            "interface_name": "1/1/11",
+            "vlan_tag": 200,
+            "description": "Bulk config test 2"
+          },
+          {
+            "operation": "configure_access",
+            "interface_name": "1/1/12",
+            "vlan_tag": 300,
+            "description": "Bulk config test 3"
+          }
+        ],
+        "expected_result": {
+          "all_successful": true,
+          "total_time": "< 30 seconds"
+        },
+        "validation": [
+          "All interfaces configured",
+          "No rate limit issues",
+          "Reasonable execution time"
+        ]
+      },
+      
+      "2_concurrent_requests": {
+        "description": "Test handling of concurrent configuration requests",
+        "notes": "Send multiple requests simultaneously to test workflow queuing"
+      }
+    },
+    
+    "integration_tests": {
+      "1_vlan_workflow_integration": {
+        "description": "Integrate with VLAN management workflow",
+        "steps": [
+          "Create VLAN 999 using VLAN workflow",
+          "Configure interface for VLAN 999",
+          "Verify end-to-end configuration"
+        ],
+        "validation": [
+          "VLAN exists before interface config",
+          "Interface properly assigned",
+          "Integration works seamlessly"
+        ]
+      },
+      
+      "2_monitoring_integration": {
+        "description": "Verify integration with monitoring systems",
+        "validation": [
+          "Configuration changes logged",
+          "Metrics updated",
+          "Alerts properly routed"
+        ]
+      }
+    },
+    
+    "test_execution_guide": {
+      "preparation": {
+        "1": "Ensure test switch is accessible at 192.168.1.100",
+        "2": "Verify n8n workflow is imported and active",
+        "3": "Configure AOS-CX API credentials in n8n",
+        "4": "Set up Slack notifications for test channels",
+        "5": "Create test VLANs (10, 20, 30, 100, 150, 200, 300, 999)"
+      },
+      
+      "execution_order": [
+        "basic_operation_tests",
+        "access_port_configuration_tests",
+        "trunk_port_configuration_tests",
+        "lag_interface_tests",
+        "error_handling_tests",
+        "rollback_tests",
+        "performance_tests",
+        "integration_tests"
+      ],
+      
+      "cleanup": {
+        "1": "Reset test interfaces to default configuration",
+        "2": "Remove test VLANs",
+        "3": "Clear notification channels",
+        "4": "Document test results"
+      },
+      
+      "success_criteria": {
+        "basic_operations": "All CRUD operations work correctly",
+        "templates": "Access and trunk templates apply properly",
+        "error_handling": "All error scenarios handled gracefully",
+        "rollback": "Emergency rollback functions correctly",
+        "notifications": "All notifications sent appropriately",
+        "validation": "Input validation catches all invalid requests"
+      }
+    }
+  }
+}

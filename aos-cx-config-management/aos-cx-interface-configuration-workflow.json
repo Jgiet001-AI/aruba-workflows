@@ -1,0 +1,793 @@
+{
+  "name": "AOS-CX Interface Configuration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aos-cx-interface-config",
+        "options": {}
+      },
+      "id": "f8b0c8d0-8a5e-4b2a-9f3d-1c2e3f4a5b6c",
+      "name": "Interface Config Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "aos-cx-interface-config"
+    },
+    {
+      "parameters": {
+        "functionCode": "// AOS-CX Interface Configuration Input Validation\nconst item = items[0].json;\n\n// Required parameters\nconst operation = item.operation;\nconst interface_name = item.interface_name;\nconst switch_ip = item.switch_ip;\n\n// Validate operation\nconst validOperations = ['read', 'update', 'list', 'configure_access', 'configure_trunk'];\nif (!operation || !validOperations.includes(operation)) {\n  throw new Error(`Invalid operation. Must be one of: ${validOperations.join(', ')}`);\n}\n\n// Validate interface name format for non-list operations\nif (operation !== 'list' && (!interface_name || interface_name.trim() === '')) {\n  throw new Error('interface_name is required for this operation');\n}\n\n// Interface name validation (supports physical ports and LAGs)\nif (operation !== 'list' && interface_name) {\n  const physicalPortPattern = /^\\d+\\/\\d+\\/\\d+$/; // e.g., 1/1/1\n  const lagPattern = /^lag\\d+$/i; // e.g., lag1\n  const vlanPattern = /^vlan\\d+$/i; // e.g., vlan100\n  \n  if (!physicalPortPattern.test(interface_name) && !lagPattern.test(interface_name) && !vlanPattern.test(interface_name)) {\n    throw new Error('Invalid interface_name format. Use format like \"1/1/1\" for physical ports, \"lag1\" for LAGs, or \"vlan100\" for VLANs');\n  }\n}\n\n// Validate switch IP\nif (!switch_ip || !/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(switch_ip)) {\n  throw new Error('Valid switch_ip is required');\n}\n\n// Operation-specific validations\nif (operation === 'configure_access') {\n  if (!item.vlan_tag || item.vlan_tag < 1 || item.vlan_tag > 4094) {\n    throw new Error('Valid vlan_tag (1-4094) is required for access port configuration');\n  }\n}\n\nif (operation === 'configure_trunk') {\n  if (!item.vlan_trunks || !Array.isArray(item.vlan_trunks) || item.vlan_trunks.length === 0) {\n    throw new Error('vlan_trunks array is required for trunk port configuration');\n  }\n  \n  // Validate each VLAN ID in the array\n  for (const vlan of item.vlan_trunks) {\n    if (vlan < 1 || vlan > 4094) {\n      throw new Error(`Invalid VLAN ID ${vlan}. VLANs must be between 1-4094`);\n    }\n  }\n  \n  // Validate native VLAN if provided\n  if (item.native_vlan_tag && (item.native_vlan_tag < 1 || item.native_vlan_tag > 4094)) {\n    throw new Error('Invalid native_vlan_tag. Must be between 1-4094');\n  }\n}\n\n// Port security validations\nif (item.port_security_enable === true) {\n  if (!item.max_mac_addresses || item.max_mac_addresses < 1 || item.max_mac_addresses > 1024) {\n    throw new Error('max_mac_addresses (1-1024) is required when port_security_enable is true');\n  }\n}\n\n// Set defaults for optional parameters\nconst config = {\n  operation: operation,\n  interface_name: interface_name,\n  switch_ip: switch_ip,\n  admin_state: item.admin_state || 'up',\n  description: item.description || '',\n  vlan_mode: item.vlan_mode || 'access',\n  vlan_tag: item.vlan_tag || null,\n  vlan_trunks: item.vlan_trunks || [],\n  native_vlan_tag: item.native_vlan_tag || 1,\n  port_security_enable: item.port_security_enable || false,\n  max_mac_addresses: item.max_mac_addresses || 1,\n  timestamp: new Date().toISOString(),\n  workflow_id: $workflow.id\n};\n\n// Add operation-specific configuration templates\nswitch(operation) {\n  case 'configure_access':\n    config.template_type = 'access_port';\n    config.port_config = {\n      admin: config.admin_state,\n      description: config.description,\n      vlan_mode: 'access',\n      vlan_tag: config.vlan_tag,\n      port_security: {\n        enable: config.port_security_enable,\n        max_addresses: config.max_mac_addresses\n      }\n    };\n    break;\n    \n  case 'configure_trunk':\n    config.template_type = 'trunk_port';\n    config.port_config = {\n      admin: config.admin_state,\n      description: config.description,\n      vlan_mode: 'trunk',\n      vlan_trunks: config.vlan_trunks,\n      native_vlan_tag: config.native_vlan_tag,\n      port_security: {\n        enable: config.port_security_enable,\n        max_addresses: config.max_mac_addresses\n      }\n    };\n    break;\n}\n\nreturn [{ json: config }];"
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Input Validation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "list"
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+      "name": "Check Operation Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://{{$json.switch_ip}}/rest/v10.08/system/interfaces",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+      "name": "List All Interfaces",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [840, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "read"
+            }
+          ]
+        }
+      },
+      "id": "d4e5f6g7-h8i9-0123-defg-456789012345",
+      "name": "Check Read Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://{{$json.switch_ip}}/rest/v10.08/system/interfaces/{{encodeURIComponent($json.interface_name)}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "e5f6g7h8-i9j0-1234-efgh-567890123456",
+      "name": "Get Specific Interface",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1040, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "update"
+            }
+          ]
+        }
+      },
+      "id": "f6g7h8i9-j0k1-2345-fghi-678901234567",
+      "name": "Check Update Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Build Configuration Payload for AOS-CX Interface Update\nconst item = items[0].json;\n\n// Base interface configuration\nlet interfaceConfig = {\n  admin: item.admin_state || 'up'\n};\n\n// Add description if provided\nif (item.description) {\n  interfaceConfig.description = item.description;\n}\n\n// Configure VLAN settings based on operation\nif (item.operation === 'configure_access') {\n  interfaceConfig.vlan_mode = 'access';\n  interfaceConfig.vlan_tag = item.vlan_tag;\n  \n} else if (item.operation === 'configure_trunk') {\n  interfaceConfig.vlan_mode = 'trunk';\n  interfaceConfig.vlan_trunks = item.vlan_trunks;\n  if (item.native_vlan_tag) {\n    interfaceConfig.native_vlan_tag = item.native_vlan_tag;\n  }\n  \n} else if (item.vlan_mode && item.vlan_tag) {\n  // Generic update with VLAN info\n  interfaceConfig.vlan_mode = item.vlan_mode;\n  if (item.vlan_mode === 'access') {\n    interfaceConfig.vlan_tag = item.vlan_tag;\n  } else if (item.vlan_mode === 'trunk') {\n    interfaceConfig.vlan_trunks = item.vlan_trunks || [];\n    if (item.native_vlan_tag) {\n      interfaceConfig.native_vlan_tag = item.native_vlan_tag;\n    }\n  }\n}\n\n// Port security configuration\nif (item.port_security_enable !== undefined) {\n  interfaceConfig.port_security = {\n    enable: item.port_security_enable\n  };\n  \n  if (item.port_security_enable && item.max_mac_addresses) {\n    interfaceConfig.port_security.max_addresses = item.max_mac_addresses;\n  }\n}\n\n// Speed and duplex settings (commonly used)\nif (item.speed) {\n  interfaceConfig.speeds = [item.speed];\n}\n\nif (item.duplex) {\n  interfaceConfig.duplex = item.duplex;\n}\n\n// PoE settings for access ports\nif (item.poe_enable !== undefined) {\n  interfaceConfig.poe = {\n    enable: item.poe_enable\n  };\n}\n\n// Create the complete payload\nconst payload = {\n  [item.interface_name]: interfaceConfig\n};\n\n// Prepare the output with both original data and payload\nconst output = {\n  ...item,\n  config_payload: payload,\n  config_summary: {\n    interface: item.interface_name,\n    admin_state: interfaceConfig.admin,\n    vlan_mode: interfaceConfig.vlan_mode,\n    vlan_config: interfaceConfig.vlan_tag || interfaceConfig.vlan_trunks,\n    port_security: interfaceConfig.port_security?.enable || false,\n    description: interfaceConfig.description || 'No description'\n  }\n};\n\nreturn [{ json: output }];"
+      },
+      "id": "g7h8i9j0-k1l2-3456-ghij-789012345678",
+      "name": "Build Config Payload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1040, 400]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "https://{{$json.switch_ip}}/rest/v10.08/system/interfaces/{{encodeURIComponent($json.interface_name)}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "jsonBody": "={{JSON.stringify($json.config_payload)}}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "h8i9j0k1-l2m3-4567-hijk-890123456789",
+      "name": "Update Interface Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1240, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "configure_access"
+            }
+          ]
+        }
+      },
+      "id": "i9j0k1l2-m3n4-5678-ijkl-901234567890",
+      "name": "Check Access Config",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Access Port Configuration Template\nconst item = items[0].json;\n\n// Access port specific configuration\nconst accessConfig = {\n  [item.interface_name]: {\n    admin: item.admin_state,\n    description: item.description || `Access port for VLAN ${item.vlan_tag}`,\n    vlan_mode: 'access',\n    vlan_tag: item.vlan_tag,\n    // Common access port settings\n    speeds: ['auto'],\n    duplex: 'auto',\n    // Port security if enabled\n    ...(item.port_security_enable && {\n      port_security: {\n        enable: true,\n        max_addresses: item.max_mac_addresses || 1,\n        violation_action: 'shutdown' // Common default\n      }\n    }),\n    // PoE for access ports (common requirement)\n    ...(item.poe_enable !== undefined && {\n      poe: {\n        enable: item.poe_enable\n      }\n    })\n  }\n};\n\nconst output = {\n  ...item,\n  config_payload: accessConfig,\n  template_applied: 'access_port',\n  config_summary: {\n    type: 'Access Port',\n    interface: item.interface_name,\n    vlan: item.vlan_tag,\n    admin_state: item.admin_state,\n    port_security: item.port_security_enable || false,\n    description: accessConfig[item.interface_name].description\n  }\n};\n\nreturn [{ json: output }];"
+      },
+      "id": "j0k1l2m3-n4o5-6789-jklm-012345678901",
+      "name": "Access Port Template",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1040, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.operation}}",
+              "operation": "equal",
+              "value2": "configure_trunk"
+            }
+          ]
+        }
+      },
+      "id": "k1l2m3n4-o5p6-7890-klmn-123456789012",
+      "name": "Check Trunk Config",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [840, 600]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Trunk Port Configuration Template\nconst item = items[0].json;\n\n// Trunk port specific configuration\nconst trunkConfig = {\n  [item.interface_name]: {\n    admin: item.admin_state,\n    description: item.description || `Trunk port - VLANs: ${item.vlan_trunks.join(',')}`,\n    vlan_mode: 'trunk',\n    vlan_trunks: item.vlan_trunks,\n    native_vlan_tag: item.native_vlan_tag || 1,\n    // Common trunk port settings\n    speeds: ['auto'],\n    duplex: 'auto',\n    // Port security (typically disabled on trunks but configurable)\n    ...(item.port_security_enable && {\n      port_security: {\n        enable: true,\n        max_addresses: item.max_mac_addresses || 10 // Higher default for trunks\n      }\n    })\n  }\n};\n\nconst output = {\n  ...item,\n  config_payload: trunkConfig,\n  template_applied: 'trunk_port',\n  config_summary: {\n    type: 'Trunk Port',\n    interface: item.interface_name,\n    vlan_trunks: item.vlan_trunks,\n    native_vlan: item.native_vlan_tag || 1,\n    admin_state: item.admin_state,\n    port_security: item.port_security_enable || false,\n    description: trunkConfig[item.interface_name].description\n  }\n};\n\nreturn [{ json: output }];"
+      },
+      "id": "l2m3n4o5-p6q7-8901-lmno-234567890123",
+      "name": "Trunk Port Template",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1040, 600]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "https://{{$json.switch_ip}}/rest/v10.08/system/interfaces/{{encodeURIComponent($json.interface_name)}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={{JSON.stringify($json.config_payload)}}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "m3n4o5p6-q7r8-9012-mnop-345678901234",
+      "name": "Apply Template Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1240, 550]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://{{$json.switch_ip}}/rest/v10.08/system/interfaces/{{encodeURIComponent($json.interface_name)}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "n4o5p6q7-r8s9-0123-nopq-456789012345",
+      "name": "Verify Configuration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1440, 550]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process Success Response and Prepare Notification\nconst configData = items[0].json;\nconst verificationData = items[1]?.json;\n\n// Extract response data\nconst statusCode = $node['Apply Template Config'].json.statusCode || $node['Update Interface Config'].json.statusCode;\nconst configApplied = configData.config_summary || configData;\nconst verifiedConfig = verificationData || {};\n\n// Determine success status\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\n// Build comprehensive response\nconst response = {\n  success: isSuccess,\n  workflow_id: configData.workflow_id,\n  timestamp: new Date().toISOString(),\n  operation: configData.operation,\n  interface: configData.interface_name,\n  switch_ip: configData.switch_ip,\n  \n  // Configuration details\n  configuration: {\n    template_used: configData.template_applied || 'custom',\n    admin_state: configApplied.admin_state || configApplied.admin,\n    description: configApplied.description,\n    vlan_mode: configApplied.vlan_mode,\n    vlan_config: configApplied.vlan_config || configApplied.vlan || configApplied.vlan_trunks,\n    port_security: configApplied.port_security,\n    applied_at: new Date().toISOString()\n  },\n  \n  // Verification results\n  verification: {\n    verified: !!verificationData,\n    current_status: verifiedConfig.admin || 'unknown',\n    operational_status: verifiedConfig.link_state || 'unknown',\n    verified_at: verificationData ? new Date().toISOString() : null\n  },\n  \n  // Status message\n  message: isSuccess \n    ? `Interface ${configData.interface_name} configured successfully`\n    : `Failed to configure interface ${configData.interface_name}`,\n    \n  // Detailed summary for notifications\n  summary: {\n    interface: configData.interface_name,\n    switch: configData.switch_ip,\n    operation: configData.operation,\n    template: configData.template_applied || 'custom',\n    status: isSuccess ? 'SUCCESS' : 'FAILED',\n    details: configApplied\n  }\n};\n\nreturn [{ json: response }];"
+      },
+      "id": "o5p6q7r8-s9t0-1234-opqr-567890123456",
+      "name": "Process Success Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1640, 550]
+    },
+    {
+      "parameters": {
+        "channel": "#network-config",
+        "text": "✅ AOS-CX Interface Configuration Success",
+        "otherOptions": {},
+        "attachments": [
+          {
+            "color": "good",
+            "fields": [
+              {
+                "title": "Interface",
+                "value": "={{$json.interface}}",
+                "short": true
+              },
+              {
+                "title": "Switch",
+                "value": "={{$json.switch_ip}}",
+                "short": true
+              },
+              {
+                "title": "Operation",
+                "value": "={{$json.operation}}",
+                "short": true
+              },
+              {
+                "title": "Template",
+                "value": "={{$json.configuration.template_used}}",
+                "short": true
+              },
+              {
+                "title": "VLAN Config",
+                "value": "={{$json.configuration.vlan_mode}}: {{$json.configuration.vlan_config}}",
+                "short": false
+              },
+              {
+                "title": "Admin State",
+                "value": "={{$json.configuration.admin_state}}",
+                "short": true
+              },
+              {
+                "title": "Port Security",
+                "value": "={{$json.configuration.port_security ? 'Enabled' : 'Disabled'}}",
+                "short": true
+              }
+            ],
+            "footer": "AOS-CX Interface Management Workflow",
+            "ts": "={{Math.floor(Date.now() / 1000)}}"
+          }
+        ]
+      },
+      "id": "p6q7r8s9-t0u1-2345-pqrs-678901234567",
+      "name": "Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1840, 550],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-webhook-config",
+          "name": "Slack Webhook for Network Alerts"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process Error Response and Prepare Error Notification\nconst item = items[0].json;\nconst error = $node.error || {};\n\n// Extract error information\nconst errorMessage = error.message || 'Unknown error occurred';\nconst statusCode = error.httpCode || error.status || 'unknown';\nconst errorDetails = error.description || error.details || '';\n\n// Categorize error type\nlet errorType = 'UNKNOWN';\nlet severity = 'HIGH';\nlet rollbackRequired = false;\n\nif (statusCode === 401 || statusCode === 403) {\n  errorType = 'AUTHENTICATION';\n  severity = 'HIGH';\n} else if (statusCode === 404) {\n  errorType = 'NOT_FOUND';\n  severity = 'MEDIUM';\n} else if (statusCode === 400) {\n  errorType = 'VALIDATION';\n  severity = 'MEDIUM';\n} else if (statusCode >= 500) {\n  errorType = 'SERVER_ERROR';\n  severity = 'HIGH';\n  rollbackRequired = true;\n} else if (errorMessage.includes('timeout')) {\n  errorType = 'TIMEOUT';\n  severity = 'MEDIUM';\n  rollbackRequired = true;\n} else if (errorMessage.includes('network') || errorMessage.includes('connection')) {\n  errorType = 'CONNECTIVITY';\n  severity = 'HIGH';\n  rollbackRequired = true;\n}\n\n// Build error response\nconst errorResponse = {\n  success: false,\n  workflow_id: item.workflow_id,\n  timestamp: new Date().toISOString(),\n  operation: item.operation,\n  interface: item.interface_name,\n  switch_ip: item.switch_ip,\n  \n  error: {\n    type: errorType,\n    severity: severity,\n    message: errorMessage,\n    details: errorDetails,\n    status_code: statusCode,\n    rollback_required: rollbackRequired,\n    occurred_at: new Date().toISOString()\n  },\n  \n  context: {\n    attempted_config: item.config_summary || item.config_payload || {},\n    template_used: item.template_applied || 'custom',\n    validation_passed: true // Since it passed input validation\n  },\n  \n  recommendations: {\n    check_credentials: errorType === 'AUTHENTICATION',\n    verify_interface_name: errorType === 'NOT_FOUND',\n    check_network_connectivity: errorType === 'CONNECTIVITY',\n    retry_operation: errorType === 'TIMEOUT' || errorType === 'SERVER_ERROR',\n    manual_verification: rollbackRequired\n  },\n  \n  message: `Failed to configure interface ${item.interface_name}: ${errorMessage}`,\n  \n  // Summary for notifications\n  summary: {\n    interface: item.interface_name,\n    switch: item.switch_ip,\n    operation: item.operation,\n    error_type: errorType,\n    severity: severity,\n    status: 'FAILED'\n  }\n};\n\nreturn [{ json: errorResponse }];"
+      },
+      "id": "q7r8s9t0-u1v2-3456-qrst-789012345678",
+      "name": "Process Error Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1440, 750]
+    },
+    {
+      "parameters": {
+        "channel": "#network-alerts",
+        "text": "🚨 AOS-CX Interface Configuration Error",
+        "otherOptions": {},
+        "attachments": [
+          {
+            "color": "danger",
+            "fields": [
+              {
+                "title": "Interface",
+                "value": "={{$json.interface}}",
+                "short": true
+              },
+              {
+                "title": "Switch",
+                "value": "={{$json.switch_ip}}",
+                "short": true
+              },
+              {
+                "title": "Operation",
+                "value": "={{$json.operation}}",
+                "short": true
+              },
+              {
+                "title": "Error Type",
+                "value": "={{$json.error.type}}",
+                "short": true
+              },
+              {
+                "title": "Severity",
+                "value": "={{$json.error.severity}}",
+                "short": true
+              },
+              {
+                "title": "Rollback Required",
+                "value": "={{$json.error.rollback_required ? 'YES' : 'NO'}}",
+                "short": true
+              },
+              {
+                "title": "Error Message",
+                "value": "={{$json.error.message}}",
+                "short": false
+              },
+              {
+                "title": "Recommendations",
+                "value": "={{Object.entries($json.recommendations).filter(([k,v]) => v).map(([k,v]) => k.replace(/_/g, ' ')).join(', ')}}",
+                "short": false
+              }
+            ],
+            "footer": "AOS-CX Interface Management Workflow - Error Alert",
+            "ts": "={{Math.floor(Date.now() / 1000)}}"
+          }
+        ]
+      },
+      "id": "r8s9t0u1-v2w3-4567-rstu-890123456789",
+      "name": "Error Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1640, 750],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-webhook-config",
+          "name": "Slack Webhook for Network Alerts"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.error.rollback_required}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "s9t0u1v2-w3x4-5678-stuv-901234567890",
+      "name": "Check Rollback Required",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1840, 750]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Configuration Rollback Logic\nconst item = items[0].json;\n\n// Attempt to restore interface to previous state\n// This is a simplified rollback - in production, you might store previous config\nconst rollbackConfig = {\n  [item.interface]: {\n    admin: 'down', // Safe default - bring interface down\n    description: `ROLLBACK: Error occurred during config at ${new Date().toISOString()}`,\n    // Remove any potentially problematic configurations\n    vlan_mode: 'access',\n    vlan_tag: 1, // Default VLAN\n    port_security: {\n      enable: false // Disable port security to avoid lockouts\n    }\n  }\n};\n\nconst rollbackData = {\n  ...item,\n  rollback_config: rollbackConfig,\n  rollback_reason: item.error.message,\n  rollback_timestamp: new Date().toISOString(),\n  original_operation: item.operation,\n  rollback_operation: 'emergency_rollback'\n};\n\nreturn [{ json: rollbackData }];"
+      },
+      "id": "t0u1v2w3-x4y5-6789-tuvw-012345678901",
+      "name": "Prepare Rollback",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2040, 650]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "https://{{$json.switch_ip}}/rest/v10.08/system/interfaces/{{encodeURIComponent($json.interface)}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaAosCxApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={{JSON.stringify($json.rollback_config)}}",
+        "options": {
+          "timeout": 30000,
+          "ignoreHttpStatusErrors": true
+        }
+      },
+      "id": "u1v2w3x4-y5z6-7890-uvwx-123456789012",
+      "name": "Execute Rollback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2240, 650]
+    },
+    {
+      "parameters": {
+        "channel": "#network-alerts",
+        "text": "🔄 Interface Configuration Rollback Executed",
+        "otherOptions": {},
+        "attachments": [
+          {
+            "color": "warning",
+            "fields": [
+              {
+                "title": "Interface",
+                "value": "={{$json.interface}}",
+                "short": true
+              },
+              {
+                "title": "Switch",
+                "value": "={{$json.switch_ip}}",
+                "short": true
+              },
+              {
+                "title": "Original Operation",
+                "value": "={{$json.original_operation}}",
+                "short": true
+              },
+              {
+                "title": "Rollback Status",
+                "value": "={{$json.statusCode < 300 ? 'SUCCESS' : 'FAILED'}}",
+                "short": true
+              },
+              {
+                "title": "Rollback Reason",
+                "value": "={{$json.rollback_reason}}",
+                "short": false
+              }
+            ],
+            "footer": "Emergency Configuration Rollback",
+            "ts": "={{Math.floor(Date.now() / 1000)}}"
+          }
+        ]
+      },
+      "id": "v2w3x4y5-z6a7-8901-vwxy-234567890123",
+      "name": "Rollback Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [2440, 650],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-webhook-config",
+          "name": "Slack Webhook for Network Alerts"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Interface Config Webhook": {
+      "main": [
+        [
+          {
+            "node": "Input Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Validation": {
+      "main": [
+        [
+          {
+            "node": "Check Operation Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Operation Type": {
+      "main": [
+        [
+          {
+            "node": "List All Interfaces",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Read Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Read Operation": {
+      "main": [
+        [
+          {
+            "node": "Get Specific Interface",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Update Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Update Operation": {
+      "main": [
+        [
+          {
+            "node": "Build Config Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Access Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Config Payload": {
+      "main": [
+        [
+          {
+            "node": "Update Interface Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Interface Config": {
+      "main": [
+        [
+          {
+            "node": "Verify Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Access Config": {
+      "main": [
+        [
+          {
+            "node": "Access Port Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Trunk Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Access Port Template": {
+      "main": [
+        [
+          {
+            "node": "Apply Template Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Trunk Config": {
+      "main": [
+        [
+          {
+            "node": "Trunk Port Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trunk Port Template": {
+      "main": [
+        [
+          {
+            "node": "Apply Template Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Template Config": {
+      "main": [
+        [
+          {
+            "node": "Verify Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Configuration": {
+      "main": [
+        [
+          {
+            "node": "Process Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Success Response": {
+      "main": [
+        [
+          {
+            "node": "Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List All Interfaces": {
+      "main": [
+        [
+          {
+            "node": "Process Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Specific Interface": {
+      "main": [
+        [
+          {
+            "node": "Process Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-workflow"
+  },
+  "versionId": "1",
+  "id": "aos-cx-interface-config",
+  "meta": {
+    "templateCreatedBy": "Claude Code",
+    "version": "1.0.0",
+    "description": "Comprehensive AOS-CX interface configuration workflow with templates, validation, and rollback",
+    "created": "2025-01-16",
+    "tags": ["aos-cx", "interface", "configuration", "networking", "aruba"]
+  },
+  "onError": "continueErrorOutput"
+}

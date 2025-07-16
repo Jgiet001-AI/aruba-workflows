@@ -1,0 +1,162 @@
+{
+  "testSwitches": [
+    {
+      "name": "test-switch-01",
+      "ip": "192.168.1.100",
+      "model": "6300M",
+      "version": "10.08.1010",
+      "credentials": "aos-cx-basic-auth"
+    },
+    {
+      "name": "test-switch-02", 
+      "ip": "192.168.1.101",
+      "model": "6200F",
+      "version": "10.08.1010",
+      "credentials": "aos-cx-basic-auth"
+    }
+  ],
+  "sampleVlans": [
+    {
+      "id": 100,
+      "name": "Data_VLAN",
+      "description": "User data traffic",
+      "admin_state": "up"
+    },
+    {
+      "id": 200,
+      "name": "Voice_VLAN", 
+      "description": "VoIP traffic",
+      "admin_state": "up"
+    },
+    {
+      "id": 300,
+      "name": "Guest_VLAN",
+      "description": "Guest network access",
+      "admin_state": "up"
+    }
+  ],
+  "sampleInterfaces": [
+    {
+      "name": "1/1/1",
+      "description": "Server connection",
+      "admin_state": "up",
+      "vlan_mode": "access",
+      "vlan_tag": 100,
+      "port_security": {
+        "enable": true,
+        "max_mac_addresses": 2
+      }
+    },
+    {
+      "name": "1/1/2",
+      "description": "Wireless AP connection",
+      "admin_state": "up", 
+      "vlan_mode": "trunk",
+      "vlan_trunks": [100, 200, 300],
+      "native_vlan_tag": 100
+    },
+    {
+      "name": "1/1/48",
+      "description": "Uplink to core",
+      "admin_state": "up",
+      "vlan_mode": "trunk", 
+      "vlan_trunks": [100, 200, 300, 400],
+      "native_vlan_tag": 1
+    }
+  ],
+  "samplePolicies": {
+    "acl": {
+      "name": "BLOCK_P2P",
+      "type": "ipv4",
+      "rules": [
+        {
+          "sequence_number": 10,
+          "action": "deny",
+          "protocol": "tcp",
+          "src_port": "any", 
+          "dst_port": "6881-6889",
+          "comment": "Block BitTorrent"
+        },
+        {
+          "sequence_number": 20,
+          "action": "permit",
+          "protocol": "any",
+          "comment": "Allow all other traffic"
+        }
+      ]
+    },
+    "qos": {
+      "name": "VOICE_PRIORITY",
+      "classifier": {
+        "name": "voice_traffic",
+        "match_dscp": [46, 34]
+      },
+      "policy": {
+        "class": "voice_traffic",
+        "priority": 1,
+        "bandwidth_percent": 30
+      }
+    }
+  },
+  "configurationTemplates": {
+    "access_port": {
+      "description": "Standard access port configuration",
+      "admin_state": "up",
+      "vlan_mode": "access",
+      "port_security": {
+        "enable": true,
+        "max_mac_addresses": 2
+      },
+      "storm_control": {
+        "broadcast": 10,
+        "multicast": 10,
+        "unknown_unicast": 10
+      }
+    },
+    "trunk_port": {
+      "description": "Standard trunk port configuration", 
+      "admin_state": "up",
+      "vlan_mode": "trunk",
+      "native_vlan_tag": 1,
+      "spanning_tree": {
+        "port_fast": true,
+        "bpdu_guard": true
+      }
+    }
+  },
+  "validationTests": [
+    {
+      "name": "vlan_creation_test",
+      "description": "Test VLAN creation and verification",
+      "steps": [
+        "Create VLAN 999 with name TEST_VLAN",
+        "Verify VLAN exists in running config",
+        "Verify VLAN admin state is up",
+        "Delete VLAN 999",
+        "Verify VLAN is removed"
+      ]
+    },
+    {
+      "name": "interface_config_test",
+      "description": "Test interface configuration changes",
+      "steps": [
+        "Backup current interface config",
+        "Apply test configuration",
+        "Verify configuration applied",
+        "Test connectivity",
+        "Restore original configuration"
+      ]
+    },
+    {
+      "name": "policy_deployment_test",
+      "description": "Test ACL policy deployment",
+      "steps": [
+        "Create test ACL policy",
+        "Apply to test interface",
+        "Verify policy is active", 
+        "Test traffic filtering",
+        "Remove policy and verify cleanup"
+      ]
+    }
+  ]
+}
