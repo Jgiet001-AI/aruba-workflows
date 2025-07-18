@@ -1,0 +1,388 @@
+{
+  "info": {
+    "name": "HPE Aruba Central API Test Collection",
+    "description": "Comprehensive API testing for Aruba Central with OAuth 2.0 authentication, device management, monitoring, and network operations",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.1.0"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "OAuth 2.0 authentication tests with comprehensive error handling",
+      "item": [
+        {
+          "name": "Client Credentials Grant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}"
+                },
+                {
+                  "key": "scope",
+                  "value": "all"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{auth_url}}/oauth2/token",
+              "host": ["{{auth_url}}"],
+              "path": ["oauth2", "token"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response time is less than 5000ms', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+                  "});",
+                  "",
+                  "pm.test('Response has access_token', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('access_token');",
+                  "    pm.expect(jsonData.access_token).to.be.a('string');",
+                  "    pm.globals.set('access_token', jsonData.access_token);",
+                  "});",
+                  "",
+                  "pm.test('Token type is Bearer', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.token_type).to.eql('Bearer');",
+                  "});",
+                  "",
+                  "pm.test('Has expires_in field', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('expires_in');",
+                  "    pm.expect(jsonData.expires_in).to.be.a('number');",
+                  "    pm.expect(jsonData.expires_in).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Device Management",
+      "description": "Device inventory and management API tests",
+      "item": [
+        {
+          "name": "List Devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/platform/device_inventory/v1/devices?limit=100&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["platform", "device_inventory", "v1", "devices"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has devices array', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('devices');",
+                  "    pm.expect(jsonData.devices).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Device has required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.devices && jsonData.devices.length > 0) {",
+                  "        const device = jsonData.devices[0];",
+                  "        pm.expect(device).to.have.property('serial');",
+                  "        pm.expect(device).to.have.property('macaddr');",
+                  "        pm.expect(device).to.have.property('device_type');",
+                  "        pm.globals.set('test_device_serial', device.serial);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Device Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/platform/device_inventory/v1/devices/{{test_device_serial}}",
+              "host": ["{{base_url}}"],
+              "path": ["platform", "device_inventory", "v1", "devices", "{{test_device_serial}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has device details', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('serial');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('firmware_version');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Device Commands",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_list\": [\"{{test_device_serial}}\"],\n  \"command\": \"show version\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/device_management/v1/device/{{test_device_serial}}/action/cli",
+              "host": ["{{base_url}}"],
+              "path": ["device_management", "v1", "device", "{{test_device_serial}}", "action", "cli"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 202', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+                  "});",
+                  "",
+                  "pm.test('Command accepted', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('session_id');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Monitoring",
+      "description": "Monitoring and alerting API tests",
+      "item": [
+        {
+          "name": "Get Device Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitoring/v1/statistics/device?timerange=3H&device_type=ap",
+              "host": ["{{base_url}}"],
+              "path": ["monitoring", "v1", "statistics", "device"],
+              "query": [
+                {
+                  "key": "timerange",
+                  "value": "3H"
+                },
+                {
+                  "key": "device_type",
+                  "value": "ap"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has statistics', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('statistics');",
+                  "    pm.expect(jsonData.statistics).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitoring/v1/alerts?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["monitoring", "v1", "alerts"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has alerts', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('alerts');",
+                  "    pm.expect(jsonData.alerts).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Configuration Management",
+      "description": "Configuration and template management tests",
+      "item": [
+        {
+          "name": "List Templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/configuration/v1/groups/templates",
+              "host": ["{{base_url}}"],
+              "path": ["configuration", "v1", "groups", "templates"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has templates', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('templates');",
+                  "    pm.expect(jsonData.templates).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://apigw-prod2.central.arubanetworks.com"
+    },
+    {
+      "key": "auth_url", 
+      "value": "https://app.central.arubanetworks.com"
+    },
+    {
+      "key": "client_id",
+      "value": "your_client_id"
+    },
+    {
+      "key": "client_secret",
+      "value": "your_client_secret"
+    }
+  ]
+}

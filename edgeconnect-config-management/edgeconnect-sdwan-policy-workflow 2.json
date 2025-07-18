@@ -1,0 +1,641 @@
+{
+  "name": "EdgeConnect SD-WAN Policy Management",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "/edgeconnect-policy",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f84c0a05-ce38-4e4a-b3dd-a20db745c7a4",
+      "name": "Webhook: EdgeConnect Policy",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "edgeconnect-policy-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// EdgeConnect SD-WAN Policy Management Workflow\n// Validates input and routes to appropriate policy operation\n\nconst input = $input.all()[0].json;\n\n// Validate required parameters\nif (!input.operation) {\n  $node.error('Missing required parameter: operation');\n}\n\nif (!input.orchestrator_host) {\n  $node.error('Missing required parameter: orchestrator_host');\n}\n\nif (!input.auth_token) {\n  $node.error('Missing required parameter: auth_token');\n}\n\n// Supported operations\nconst validOperations = [\n  'create_network_segment_policy',\n  'update_network_segment_policy', \n  'delete_network_segment_policy',\n  'list_network_segment_policies',\n  'create_tunnel_policy',\n  'update_tunnel_policy',\n  'delete_tunnel_policy',\n  'list_tunnel_policies',\n  'create_route_policy',\n  'update_route_policy',\n  'delete_route_policy',\n  'list_route_policies',\n  'backup_all_policies',\n  'restore_policies'\n];\n\nif (!validOperations.includes(input.operation)) {\n  $node.error(`Invalid operation: ${input.operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Set defaults\nconst nodeType = input.node_type || 'group';\nconst nodeId = input.node_id || input.group_name || 'Default';\nconst baseUrl = `https://${input.orchestrator_host}/gms/rest`;\n\n// Prepare output for routing\nconst output = {\n  operation: input.operation,\n  baseUrl: baseUrl,\n  authToken: input.auth_token,\n  nodeType: nodeType,\n  nodeId: nodeId,\n  policyName: input.policy_name,\n  policyData: input.policy_data || {},\n  originalInput: input\n};\n\nreturn { json: output };"
+      },
+      "id": "a7b8f9c2-d3e4-5f6a-7b8c-9d0e1f2a3b4c",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create_network_segment_policy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "2", 
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update_network_segment_policy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "3",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "delete_network_segment_policy", 
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "4",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "list_network_segment_policies",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "b9c8a7d6-e5f4-6d7c-8e9f-0a1b2c3d4e5f",
+      "name": "Route: Network Segment Policies",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create_tunnel_policy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update_tunnel_policy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "3",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "delete_tunnel_policy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "4",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "list_tunnel_policies",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "c0d9b8e7-f6a5-7e8d-9f0a-1b2c3d4e5f6a",
+      "name": "Route: Tunnel Policies",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "create_route_policy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "update_route_policy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "3",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "delete_route_policy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "4",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "list_route_policies",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "d1e0c9f8-a7b6-8f9e-0a1b-2c3d4e5f6a7b",
+      "name": "Route: Route Policies",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "backup_all_policies",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.operation }}",
+              "rightValue": "restore_policies",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "e2f1d0a9-b8c7-9a0b-1c2d-3e4f5a6b7c8d",
+      "name": "Route: Backup/Restore",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Network Segment Policy Operations\nconst data = $input.all()[0].json;\nconst operation = data.operation;\n\n// Determine HTTP method and URL path\nlet method = 'GET';\nlet urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/sdwan-global/network-segment-policy/`;\nlet body = null;\n\nswitch (operation) {\n  case 'create_network_segment_policy':\n    if (!data.policyName) {\n      $node.error('Policy name required for create operation');\n    }\n    method = 'POST';\n    urlPath += data.policyName + '/';\n    body = data.policyData;\n    break;\n    \n  case 'update_network_segment_policy':\n    if (!data.policyName) {\n      $node.error('Policy name required for update operation');\n    }\n    method = 'PUT';\n    urlPath += data.policyName + '/';\n    body = data.policyData;\n    break;\n    \n  case 'delete_network_segment_policy':\n    if (!data.policyName) {\n      $node.error('Policy name required for delete operation');\n    }\n    method = 'DELETE';\n    urlPath += data.policyName + '/';\n    break;\n    \n  case 'list_network_segment_policies':\n    method = 'GET';\n    // URL path already set for listing\n    break;\n    \n  default:\n    $node.error(`Unexpected operation: ${operation}`);\n}\n\n// Prepare output for HTTP request\nconst output = {\n  url: data.baseUrl + urlPath,\n  method: method,\n  headers: {\n    'X-AUTH-TOKEN': data.authToken,\n    'Content-Type': 'application/json'\n  },\n  operation: operation,\n  policyName: data.policyName\n};\n\nif (body) {\n  output.body = body;\n}\n\nreturn { json: output };"
+      },
+      "id": "f3a2e1b0-c9d8-0b1c-2d3e-4f5a6b7c8d9e",
+      "name": "Prepare Network Segment API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tunnel Policy Operations\nconst data = $input.all()[0].json;\nconst operation = data.operation;\n\n// Determine HTTP method and URL path\nlet method = 'GET';\nlet urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/tunnel-policy/`;\nlet body = null;\n\nswitch (operation) {\n  case 'create_tunnel_policy':\n    method = 'POST';\n    body = data.policyData;\n    break;\n    \n  case 'update_tunnel_policy':\n    method = 'PUT';\n    body = data.policyData;\n    break;\n    \n  case 'delete_tunnel_policy':\n    method = 'DELETE';\n    break;\n    \n  case 'list_tunnel_policies':\n    method = 'GET';\n    break;\n    \n  default:\n    $node.error(`Unexpected operation: ${operation}`);\n}\n\n// Prepare output for HTTP request\nconst output = {\n  url: data.baseUrl + urlPath,\n  method: method,\n  headers: {\n    'X-AUTH-TOKEN': data.authToken,\n    'Content-Type': 'application/json'\n  },\n  operation: operation\n};\n\nif (body) {\n  output.body = body;\n}\n\nreturn { json: output };"
+      },
+      "id": "a4b3f2e1-d0c9-1c2d-3e4f-5a6b7c8d9e0f",
+      "name": "Prepare Tunnel Policy API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Route Policy Operations\nconst data = $input.all()[0].json;\nconst operation = data.operation;\n\n// Determine HTTP method and URL path\nlet method = 'GET';\nlet urlPath = `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/route-policy/`;\nlet body = null;\n\nswitch (operation) {\n  case 'create_route_policy':\n    method = 'POST';\n    body = data.policyData;\n    break;\n    \n  case 'update_route_policy':\n    method = 'PUT';\n    body = data.policyData;\n    break;\n    \n  case 'delete_route_policy':\n    method = 'DELETE';\n    break;\n    \n  case 'list_route_policies':\n    method = 'GET';\n    break;\n    \n  default:\n    $node.error(`Unexpected operation: ${operation}`);\n}\n\n// Prepare output for HTTP request\nconst output = {\n  url: data.baseUrl + urlPath,\n  method: method,\n  headers: {\n    'X-AUTH-TOKEN': data.authToken,\n    'Content-Type': 'application/json'\n  },\n  operation: operation\n};\n\nif (body) {\n  output.body = body;\n}\n\nreturn { json: output };"
+      },
+      "id": "b5c4a3f2-e1d0-2d3e-4f5a-6b7c8d9e0f1a",
+      "name": "Prepare Route Policy API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Backup and Restore Operations\nconst data = $input.all()[0].json;\nconst operation = data.operation;\n\n// Prepare multiple API calls for backup/restore\nconst outputs = [];\n\nif (operation === 'backup_all_policies') {\n  // Create backup calls for all policy types\n  const backupUrls = [\n    `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/sdwan-global/network-segment-policy/`,\n    `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/tunnel-policy/`,\n    `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/route-policy/`\n  ];\n  \n  backupUrls.forEach((urlPath, index) => {\n    outputs.push({\n      json: {\n        url: data.baseUrl + urlPath,\n        method: 'GET',\n        headers: {\n          'X-AUTH-TOKEN': data.authToken,\n          'Content-Type': 'application/json'\n        },\n        operation: 'backup',\n        backupType: ['network-segment', 'tunnel', 'route'][index]\n      }\n    });\n  });\n} else if (operation === 'restore_policies') {\n  // Restore operation requires policy data\n  if (!data.policyData || !data.policyData.policies) {\n    $node.error('Policy data required for restore operation');\n  }\n  \n  // This would typically be multiple PUT requests\n  outputs.push({\n    json: {\n      url: data.baseUrl + `/sdwan-config/v1/node_list/${data.nodeType}/${data.nodeId}/config/`,\n      method: 'PUT',\n      headers: {\n        'X-AUTH-TOKEN': data.authToken,\n        'Content-Type': 'application/json'\n      },\n      body: data.policyData,\n      operation: 'restore'\n    }\n  });\n}\n\nreturn outputs;"
+      },
+      "id": "c6d5b4a3-f2e1-3e4f-5a6b-7c8d9e0f1a2b",
+      "name": "Prepare Backup/Restore API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-AUTH-TOKEN",
+              "value": "={{ $json.headers['X-AUTH-TOKEN'] }}"
+            },
+            {
+              "name": "Content-Type", 
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "jsonBody": "={{ $json.body || '{}' }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "responseFormat": "autodetect"
+            }
+          }
+        }
+      },
+      "id": "d7e6c5b4-a3f2-4f5a-6b7c-8d9e0f1a2b3c",
+      "name": "Execute EdgeConnect API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process API Response and Handle Errors\nconst items = $input.all();\nconst responses = [];\n\nfor (const item of items) {\n  const response = item.json;\n  const statusCode = item.json.$response?.statusCode || 200;\n  \n  // Determine success/failure\n  const isSuccess = statusCode >= 200 && statusCode < 300;\n  \n  const processedResponse = {\n    success: isSuccess,\n    statusCode: statusCode,\n    operation: response.operation || 'unknown',\n    timestamp: new Date().toISOString(),\n    data: response\n  };\n  \n  // Handle different response types\n  if (!isSuccess) {\n    processedResponse.error = {\n      code: statusCode,\n      message: response.message || response.error || 'Unknown error',\n      details: response\n    };\n    \n    // Categorize error for better handling\n    if (statusCode === 401) {\n      processedResponse.errorCategory = 'authentication';\n    } else if (statusCode === 403) {\n      processedResponse.errorCategory = 'authorization';\n    } else if (statusCode === 404) {\n      processedResponse.errorCategory = 'not_found';\n    } else if (statusCode === 409) {\n      processedResponse.errorCategory = 'conflict';\n    } else if (statusCode >= 500) {\n      processedResponse.errorCategory = 'server_error';\n    } else {\n      processedResponse.errorCategory = 'client_error';\n    }\n  } else {\n    // Success - format response based on operation\n    if (response.operation && response.operation.includes('list')) {\n      processedResponse.count = Array.isArray(response.data) ? response.data.length : 0;\n      processedResponse.policies = response.data;\n    } else if (response.operation === 'backup') {\n      processedResponse.backupData = response.data;\n      processedResponse.backupSize = JSON.stringify(response.data).length;\n    }\n  }\n  \n  responses.push({ json: processedResponse });\n}\n\nreturn responses;"
+      },
+      "id": "e8f7d6c5-b4a3-5a6b-7c8d-9e0f1a2b3c4d",
+      "name": "Process Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "f9a8e7d6-c5b4-6b7c-8d9e-0f1a2b3c4d5e",
+      "name": "Check Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "chatId": "#network-automation",
+        "text": "✅ **EdgeConnect SD-WAN Policy Operation Successful**\n\n**Operation:** {{ $json.operation }}\n**Status:** {{ $json.statusCode }}\n**Timestamp:** {{ $json.timestamp }}\n\n{% if $json.count %}**Policies Found:** {{ $json.count }}{% endif %}\n{% if $json.backupSize %}**Backup Size:** {{ $json.backupSize }} bytes{% endif %}\n\n**Details:** Operation completed successfully",
+        "options": {}
+      },
+      "id": "a0b9f8e7-d6c5-7c8d-9e0f-1a2b3c4d5e6f",
+      "name": "Notify Success",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1780,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "chatId": "#network-alerts",
+        "text": "❌ **EdgeConnect SD-WAN Policy Operation Failed**\n\n**Operation:** {{ $json.operation }}\n**Error Category:** {{ $json.errorCategory }}\n**Status Code:** {{ $json.statusCode }}\n**Error Message:** {{ $json.error.message }}\n**Timestamp:** {{ $json.timestamp }}\n\n**Recommended Action:**\n{% if $json.errorCategory == 'authentication' %}• Check authentication token validity\n• Verify EdgeConnect Orchestrator connectivity{% endif %}\n{% if $json.errorCategory == 'authorization' %}• Verify user permissions for policy operations\n• Check group/node access rights{% endif %}\n{% if $json.errorCategory == 'not_found' %}• Verify policy name and node configuration\n• Check if policy exists before update/delete{% endif %}\n{% if $json.errorCategory == 'conflict' %}• Policy may already exist or conflict with existing config\n• Review policy configuration for conflicts{% endif %}\n{% if $json.errorCategory == 'server_error' %}• EdgeConnect Orchestrator may be experiencing issues\n• Retry operation or contact administrator{% endif %}",
+        "options": {}
+      },
+      "id": "b1c0a9f8-e7d6-8d9e-0f1a-2b3c4d5e6f7a",
+      "name": "Notify Failure",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1780,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}",
+        "options": {}
+      },
+      "id": "c2d1b0a9-f8e7-9e0f-1a2b-3c4d5e6f7a8b",
+      "name": "Return Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: EdgeConnect Policy": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Route: Network Segment Policies",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route: Tunnel Policies",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route: Route Policies",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route: Backup/Restore",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Network Segment Policies": {
+      "main": [
+        [
+          {
+            "node": "Prepare Network Segment API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Tunnel Policies": {
+      "main": [
+        [
+          {
+            "node": "Prepare Tunnel Policy API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Route Policies": {
+      "main": [
+        [
+          {
+            "node": "Prepare Route Policy API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Backup/Restore": {
+      "main": [
+        [
+          {
+            "node": "Prepare Backup/Restore API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Network Segment API": {
+      "main": [
+        [
+          {
+            "node": "Execute EdgeConnect API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Tunnel Policy API": {
+      "main": [
+        [
+          {
+            "node": "Execute EdgeConnect API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Route Policy API": {
+      "main": [
+        [
+          {
+            "node": "Execute EdgeConnect API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Backup/Restore API": {
+      "main": [
+        [
+          {
+            "node": "Execute EdgeConnect API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute EdgeConnect API": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Response": {
+      "main": [
+        [
+          {
+            "node": "Check Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Success": {
+      "main": [
+        [
+          {
+            "node": "Notify Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Success": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Failure": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-16T00:00:00.000Z",
+      "updatedAt": "2025-01-16T00:00:00.000Z",
+      "id": "edgeconnect-policies",
+      "name": "EdgeConnect Policies"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-16T00:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,22 +1,61 @@
-# CLAUDE.md - Claude Code Guide for Building HPE Aruba n8n Workflows
+# CLAUDE.md - HPE Aruba n8n Workflows Guide
 
-This guide helps Claude Code build intelligent n8n workflows for HPE Aruba network automation based on user requirements.
+Comprehensive guide for building intelligent n8n workflows that automate HPE Aruba networking tasks.
 
-## Start of Every Conversation
+## Table of Contents
+1. [Quick Start](#quick-start)
+2. [Session Management](#session-management)
+3. [Workflow Development Process](#workflow-development-process)
+4. [API Reference & Testing](#api-reference--testing)
+5. [Common Patterns](#common-patterns)
+6. [Development Methodologies](#development-methodologies)
+7. [Quality Assurance](#quality-assurance)
+8. [Project Management](#project-management)
+9. [Reference & Templates](#reference--templates)
 
-**IMPORTANT: At the beginning of each session, Claude Code must:**
-1. **Read PLANNING.md** - Check for project context and strategic direction
-2. **Check TASKS.md** - Review pending tasks and current milestone
-3. **Verify environment** - Confirm n8n connectivity and MCP availability
-4. **Check workflow directory** - See existing workflows to avoid duplication
+---
+
+## Quick Start
+
+### Session Initialization Checklist
+At the beginning of each session, execute these steps:
+
+1. **Read Planning Documents**: Check project context and strategy
+2. **Review Tasks**: Check pending tasks and current milestone
+3. **Verify Environment**: Confirm n8n connectivity and MCP availability
+4. **Check Workflows**: See existing workflows to avoid duplication
 
 ```javascript
-// Start of session checklist
+// Required startup sequence
 await read_file("/Users/jeangiet/Documents/Claude/aruba-workflows/PLANNING.md");
 await read_file("/Users/jeangiet/Documents/Claude/aruba-workflows/TASKS.md");
 await n8n_health_check();
 await list_directory("/Users/jeangiet/Documents/Claude/aruba-workflows");
 ```
+
+### Project Overview
+- **Role**: Build n8n workflows for HPE Aruba network automation
+- **Tools**: n8n-mcp (workflows), postman-mcp (API testing), filesystem (exports)
+- **Goal**: Production-ready workflows with monitoring, error handling, and documentation
+
+### Available MCP Servers
+```yaml
+n8n-mcp: 
+  url: "http://192.168.40.100:8006"
+  purpose: "Create, update, execute workflows"
+  
+postman-mcp:
+  location: "/Users/jeangiet/Documents/postman-mcp-server/"
+  purpose: "Test HPE Aruba APIs before implementation"
+  
+filesystem:
+  paths: ["/Users/jeangiet/Downloads", "/Users/jeangiet/Documents/Claude"]
+  purpose: "Save workflow exports, documentation"
+```
+
+---
+
+## Session Management
 
 ## Task Management
 
@@ -117,16 +156,76 @@ await write_file(`${baseDir}/${workflowName}/config/parameters.json`, defaultPar
 
 ### 3. Test APIs First
 ```javascript
-// Use postman-mcp to validate:
-await testArubaAPI({
-  collection: "HPE Aruba Networking Central",
-  endpoint: "/api/v2/devices",
-  method: "GET",
-  auth: "Bearer token"
+// Use postman-mcp to validate APIs before implementation:
+
+// Test API authentication and basic connectivity
+const authTest = await mcp__postman_mcp__send_message_to_claude({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1000,
+  content: `Test Aruba Central API authentication for endpoint GET /api/v2/devices with proper OAuth 2.0 flow and explain response structure`
 });
 
-// Save API test results
-await write_file(`${baseDir}/${workflowName}/tests/api-validation.json`, testResults);
+// Create comprehensive API test collection
+const collectionTest = await mcp__postman_mcp__create_message_batch({
+  requests: [
+    {
+      custom_id: "aruba_central_auth",
+      params: {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 800,
+        messages: [{
+          role: "user", 
+          content: "Create OAuth 2.0 authentication test for Aruba Central API"
+        }]
+      }
+    },
+    {
+      custom_id: "aruba_devices_endpoint",
+      params: {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 800,
+        messages: [{
+          role: "user",
+          content: "Design comprehensive tests for /api/v2/devices endpoint including error scenarios"
+        }]
+      }
+    }
+  ]
+});
+
+// Test specific API scenarios
+const deviceHealthTest = await mcp__postman_mcp__send_message_to_claude({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1200,
+  content: `Create test scenarios for Aruba device health monitoring API:
+    - Normal device status check
+    - High CPU/memory usage scenarios 
+    - Network connectivity issues
+    - Authentication failures
+    - Rate limiting responses`
+});
+
+// Save comprehensive API test results
+await write_file(`${baseDir}/${workflowName}/tests/api-validation.json`, {
+  authentication: authTest,
+  collection_tests: collectionTest,
+  device_health_scenarios: deviceHealthTest,
+  timestamp: new Date().toISOString()
+});
+
+// Create validation report
+const validationReport = await mcp__postman_mcp__send_message_to_claude({
+  model: "claude-sonnet-4-20250514", 
+  max_tokens: 1000,
+  content: `Generate API validation report for Aruba Central integration including:
+    - Endpoint availability
+    - Authentication methods
+    - Rate limits discovered
+    - Error response formats
+    - Recommended retry strategies`
+});
+
+await write_file(`${baseDir}/${workflowName}/tests/validation-report.md`, validationReport.content[0].text);
 ```
 
 ### 4. Design Workflow Structure
@@ -227,97 +326,231 @@ GET /api/v1/metrics/network - Network metrics
 GET /api/v1/metrics/application - App performance
 ```
 
-## Common Workflow Patterns
+## Common Patterns
 
-### Pattern 1: Scheduled Health Monitoring
-```javascript
+### Pattern 1: Scheduled Health Monitoring (TESTED & WORKING)
+**File**: `monitoring-alerting-workflows/device-health-monitoring-workflow-WORKING.json`
+
+```json
 {
+  "name": "Device Health Monitor",
   "nodes": [
     {
+      "id": "node-1",
       "name": "Every 5 minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
       "parameters": {
         "rule": {
-          "interval": [{ "field": "minutes", "minutesInterval": 5 }]
-        }
-      },
-      "position": [250, 300]
-    },
-    {
-      "name": "Get Device Health",
-      "type": "n8n-nodes-base.httpRequest",
-      "parameters": {
-        "url": "https://{{region}}.central.arubanetworks.com/api/v2/monitoring/stats",
-        "authentication": "predefinedCredentialType",
-        "credentialsName": "Aruba Central API",
-        "options": {
-          "timeout": 30000,
-          "retry": {
-            "maxTries": 3,
-            "waitBetweenTries": 2000
-          }
-        }
-      },
-      "position": [450, 300]
-    },
-    {
-      "name": "Check Thresholds",
-      "type": "n8n-nodes-base.if",
-      "parameters": {
-        "conditions": {
-          "number": [
+          "interval": [
             {
-              "value1": "={{$json.cpu_usage}}",
-              "operation": "larger",
-              "value2": 80
+              "field": "minutes",
+              "minutesInterval": 5
             }
           ]
         }
-      },
-      "position": [650, 300]
+      }
     },
     {
-      "name": "Send Alert",
-      "type": "n8n-nodes-base.slack",
+      "id": "node-2",
+      "name": "Get Device Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300],
       "parameters": {
-        "channel": "#network-alerts",
-        "text": "High CPU usage detected on {{$json.device_name}}: {{$json.cpu_usage}}%"
-      },
-      "position": [850, 200]
+        "method": "GET",
+        "url": "https://central.arubanetworks.com/api/v2/monitoring/stats",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "node-3",
+      "name": "Check CPU Threshold",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$json.cpu_usage}}",
+              "rightValue": 80,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "node-4",
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "parameters": {
+        "functionCode": "// Send alert notification\nconst deviceName = $input.first().json.device_name || 'Unknown Device';\nconst cpuUsage = $input.first().json.cpu_usage || 0;\n\nreturn [{\n  json: {\n    message: `High CPU usage detected on ${deviceName}: ${cpuUsage}%`,\n    severity: 'warning',\n    timestamp: new Date().toISOString(),\n    device: deviceName,\n    metric: 'cpu_usage',\n    value: cpuUsage,\n    threshold: 80\n  }\n}];"
+      }
     }
-  ]
+  ],
+  "connections": {
+    "Every 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Get Device Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Device Health": {
+      "main": [
+        [
+          {
+            "node": "Check CPU Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check CPU Threshold": {
+      "main": [
+        [
+          {
+            "node": "Send Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "active": false
 }
 ```
 
-### Pattern 2: Event-Driven Response
-```javascript
+**Key Requirements for n8n Workflows:**
+- All nodes must have `id`, `typeVersion`, and `position`
+- Connections use node **names**, not IDs
+- Use proper parameter structure for each node type
+
+### Pattern 2: Event-Driven Response (TESTED & WORKING)
+**File**: `security-event-response-automation/edgeconnect-alert-handler-WORKING.json`
+
+This webhook-based workflow processes EdgeConnect alerts with validation and routing:
+
+```json
 {
-  "trigger": {
-    "type": "webhook",
-    "path": "/aruba-alert",
-    "method": "POST"
-  },
-  "processor": {
-    "type": "function",
-    "code": `
-      // Parse alert data
-      const alert = items[0].json;
-      
-      // Determine severity
-      const severity = alert.level || 'info';
-      
-      // Route based on type
-      if (alert.type === 'security') {
-        return [{ json: { ...alert, action: 'immediate' } }];
-      } else if (alert.type === 'performance') {
-        return [{ json: { ...alert, action: 'monitor' } }];
+  "name": "EdgeConnect Alert Handler",
+  "nodes": [
+    {
+      "id": "webhook-1",
+      "name": "EdgeConnect Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "parameters": {
+        "path": "edgeconnect-alert",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
       }
-      
-      return items;
-    `
+    },
+    {
+      "id": "validate-1", 
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "parameters": {
+        "functionCode": "// Validate EdgeConnect alert payload\nconst payload = $input.first().json;\n\nif (!payload.alert_type || !payload.device_id || !payload.severity) {\n  throw new Error('Invalid EdgeConnect alert payload: missing required fields');\n}\n\n// Parse and enrich the alert\nreturn [{\n  json: {\n    ...payload,\n    processed_at: new Date().toISOString(),\n    source: 'EdgeConnect',\n    validated: true\n  }\n}];"
+      }
+    },
+    {
+      "id": "route-1",
+      "name": "Route by Severity", 
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "parameters": {
+        "values": {
+          "options": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.severity}}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputIndex": 0
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.severity}}",
+                    "rightValue": "warning", 
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputIndex": 1
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "EdgeConnect Webhook": {
+      "main": [[{"node": "Validate Input", "type": "main", "index": 0}]]
+    },
+    "Validate Input": {
+      "main": [[{"node": "Route by Severity", "type": "main", "index": 0}]]
+    },
+    "Route by Severity": {
+      "main": [
+        [{"node": "Handle Critical", "type": "main", "index": 0}],
+        [{"node": "Handle Warning", "type": "main", "index": 0}]
+      ]
+    }
   }
 }
 ```
+
+**Webhook URL**: `http://192.168.40.100:8006/webhook/edgeconnect-alert`
 
 ### Pattern 3: Bulk Configuration
 ```javascript
@@ -524,6 +757,13 @@ if (!validateSchema(items[0].json, schema)) {
 ## Quick Commands
 
 ```javascript
+// CONTEXT MANAGEMENT: Check usage before major operations
+const contextUsage = getCurrentContextUsage();
+if (contextUsage >= 0.75) {
+  // Provide summary and compact immediately
+  console.log(`Context at ${Math.round(contextUsage * 100)}% - Compacting now`);
+}
+
 // Create workflow directory structure
 const workflowName = "my-new-workflow";
 const dirs = [
@@ -537,6 +777,9 @@ for (const dir of dirs) {
   await create_directory(dir);
 }
 
+// After completing workflow creation - USE /clear
+console.log("Workflow creation complete - Ready for /clear command");
+
 // List available nodes for Aruba automation
 await search_nodes({ query: "http webhook schedule" });
 
@@ -546,11 +789,55 @@ await get_node_documentation({ nodeType: "nodes-base.httpRequest" });
 // Validate workflow
 await validate_workflow({ workflow: myWorkflow });
 
-// Test API endpoint
-await send_message_to_claude({
-  model: "claude-3-sonnet",
-  max_tokens: 1000,
-  content: "Test Aruba Central API endpoint /api/v2/devices"
+// Test API endpoint with comprehensive scenarios
+const apiTest = await mcp__postman_mcp__send_message_to_claude({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1500,
+  content: "Test Aruba Central API endpoint /api/v2/devices with authentication, pagination, filtering, and error handling scenarios"
+});
+
+// Create batch tests for multiple API endpoints
+const batchApiTests = await mcp__postman_mcp__create_message_batch({
+  requests: [
+    {
+      custom_id: "devices_test",
+      params: {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: "Test /api/v2/devices endpoint" }]
+      }
+    },
+    {
+      custom_id: "alerts_test", 
+      params: {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: "Test /api/v2/alerts endpoint" }]
+      }
+    },
+    {
+      custom_id: "stats_test",
+      params: {
+        model: "claude-sonnet-4-20250514", 
+        max_tokens: 1000,
+        messages: [{ role: "user", content: "Test /api/v2/monitoring/stats endpoint" }]
+      }
+    }
+  ]
+});
+
+// Debug code issues with Python Bug Buster
+const debugAssistance = await mcp__postman_mcp__python_bug_buster({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1200
+});
+
+// Count tokens for API documentation
+const tokenCount = await mcp__postman_mcp__count_message_tokens({
+  model: "claude-sonnet-4-20250514",
+  messages: [
+    { role: "user", content: "Generate comprehensive API documentation for Aruba Central device management" }
+  ]
 });
 ```
 
@@ -601,6 +888,10 @@ const rateLimiter = {
 8. **Monitor execution** with proper logging
 9. **Create reusable patterns** for common tasks
 10. **Export and version** all workflows
+11. **AUTO-COMPACT at 75% context usage** (25% remaining)
+12. **Use `/clear` after completing major tasks** (workflows, collections, documentation)
+13. **Monitor context continuously** and provide summaries before limits
+14. **Create session handoffs** for complex multi-session work
 
 ## Directory Structure Templates
 
@@ -671,6 +962,31 @@ This guide ensures you can efficiently build reliable, secure, and maintainable 
 
 ## New Discoveries Log
 
+### 2025-07-17: Enhanced Postman MCP Integration for API Testing
+- **Discovery**: Postman MCP provides comprehensive API testing capabilities through Claude AI
+- **Details**: Available tools include message batching, conversational testing, debugging, and documentation generation
+- **Implementation**: Integrated mcp__postman_mcp__ tools throughout CLAUDE.md for complete API testing workflows
+- **Key Features**: 
+  - `send_message_to_claude()` for single API test scenarios
+  - `create_message_batch()` for parallel endpoint testing
+  - `multiple_conversational_turns()` for workflow testing
+  - `python_bug_buster()` for debugging API integration code
+  - `create_website()` for generating API documentation
+  - `count_message_tokens()` for optimization
+- **Impact**: Enables comprehensive TDD workflows for Aruba API integration with n8n workflows
+
+### 2025-07-17: Advanced Context Management with Auto-Compact and Clear Rules
+- **Discovery**: Implemented automated context management for complex workflow development sessions
+- **Details**: Auto-compact triggers at 75% context usage (25% remaining) with mandatory /clear after major tasks
+- **Implementation**: Added comprehensive context monitoring, session handoff protocols, and auto-clear triggers
+- **Key Features**:
+  - Automatic context compaction when usage reaches 75%
+  - Mandatory `/clear` after major workflow implementations, API testing, documentation updates
+  - Session handoff summaries for complex multi-session work
+  - Context size monitoring with 200+ line triggers
+  - Big task completion markers (workflows, collections, validations)
+- **Impact**: Prevents context overflow, maintains session efficiency, enables complex long-running automation projects
+
 ### [Add new patterns, solutions, and learnings here with dates]
 
 <!-- Example format:
@@ -703,17 +1019,103 @@ This guide ensures you can efficiently build reliable, secure, and maintainable 
 
 ### Monitor Context Usage
 - Track context usage continuously
-- Alert at 75% utilization (25% remaining)
+- **AUTO-COMPACT at 75% utilization (25% remaining)**
 - Provide work summary before limits
 - Be proactive about context management
 
+### Automatic Context Compaction (25% Rule)
+When context usage reaches 75% (25% remaining):
+```javascript
+// Auto-compact trigger
+const contextUsage = getCurrentContextUsage();
+if (contextUsage >= 0.75) {
+  // Immediately provide summary and compact
+  return `## Context Usage Alert: ${Math.round(contextUsage * 100)}%
+
+### Work Summary
+- Current task: ${currentTask}
+- Completed: ${completedItems}
+- In progress: ${inProgressItems}
+- Next steps: ${nextSteps}
+
+### Key Discoveries
+${keyFindings}
+
+### Files Modified
+${modifiedFiles}
+
+**COMPACTING NOW** - Context at ${Math.round(contextUsage * 100)}%`;
+}
+```
+
 ### Use `/clear` Command
+**MANDATORY `/clear` after completing:**
+- Major workflow implementations (like our n8n workflow builds)
+- Large-scale API testing and collection creation
+- Multi-file documentation updates
+- Complex debugging sessions spanning multiple files
+- Any task that generates 50+ lines of code/configuration
+- Project milestone completions
+
 Use `/clear` between:
 - Unrelated tasks or features
 - Completed TDD cycles
 - Different codebase sections
 - Lengthy debugging sessions
 - Cluttered context
+
+### Auto-Clear Triggers
+**Immediately use `/clear` after:**
+```javascript
+// Big task completion triggers
+const bigTaskMarkers = [
+  'Successfully created n8n workflow',
+  'Completed comprehensive API testing',
+  'Generated multiple Postman collections', 
+  'Updated extensive documentation',
+  'Implemented complex automation',
+  'Finished multi-step validation',
+  'Completed project milestone'
+];
+
+// Context size triggers
+const contextLines = getContextLineCount();
+if (contextLines > 200 || taskComplexity === 'high') {
+  executeCommand('/clear');
+}
+```
+
+### Context Compaction Strategy
+When approaching 75% context usage:
+1. **Immediate Summary**: Provide comprehensive work summary
+2. **Key Findings**: Document important discoveries
+3. **File Status**: List all modified files and locations
+4. **Next Steps**: Clear action items for continuation
+5. **Execute Compact**: Use tools to reduce context while preserving essential information
+
+### Session Handoff Protocol
+Before context limits or after major completions:
+```markdown
+## Session Handoff Summary
+### Project: [Name]
+### Completed in This Session:
+- [List major accomplishments]
+- [Files created/modified]
+- [Workflows implemented]
+- [Tests completed]
+
+### Current Status:
+- [What's working]
+- [What needs fixes]
+- [Immediate next steps]
+
+### Context for Next Session:
+- [Key information to remember]
+- [Important file locations]
+- [Specific implementation details]
+
+**Ready for `/clear` - Major milestone completed**
+```
 
 ### Create Snapshots at Milestones
 When completing significant work:
@@ -832,17 +1234,146 @@ Use Markdown for rich documentation:
 
 ### 1. Write Tests First
 - Comprehensive tests from input/output pairs
-- **For APIs**: Create Postman collections with test scripts
+- **For APIs**: Create Postman collections with test scripts using MCP
 - **Do NOT** create implementations or mocks
 - Cover happy paths, edge cases, errors
 - Make tests independent and repeatable
 
+```javascript
+// Example: Create comprehensive API test collection for Aruba Central
+const apiTestCollection = await mcp__postman_mcp__create_message_batch({
+  requests: [
+    {
+      custom_id: "auth_flow_test",
+      params: {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: `Create complete OAuth 2.0 authentication test suite for Aruba Central API including:
+            - Valid credentials test
+            - Invalid credentials test
+            - Token expiration handling
+            - Refresh token flow
+            - Rate limiting scenarios`
+        }]
+      }
+    },
+    {
+      custom_id: "device_management_tests",
+      params: {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1200,
+        messages: [{
+          role: "user", 
+          content: `Create device management API test scenarios:
+            - List all devices (GET /api/v2/devices)
+            - Get device details by serial (GET /api/v2/devices/{serial})
+            - Device command execution (POST /api/v2/devices/command)
+            - Filter devices by type and status
+            - Pagination testing
+            - Invalid device serial handling
+            - Permission denied scenarios`
+        }]
+      }
+    },
+    {
+      custom_id: "monitoring_tests",
+      params: {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: `Create monitoring API test scenarios:
+            - Performance metrics retrieval
+            - Alert management
+            - Webhook configuration
+            - Real-time data streaming
+            - Historical data queries`
+        }]
+      }
+    }
+  ]
+});
+
+// Get batch results and create test files
+const batchResults = await mcp__postman_mcp__get_message_batch_result({
+  msg_batch_id: apiTestCollection.id
+});
+
+// Save test collection for TDD workflow
+await write_file(`${baseDir}/${workflowName}/tests/tdd-api-collection.json`, 
+  JSON.stringify(batchResults, null, 2));
+```
+
 ### 2. Confirm Test Failures
 - Run tests, confirm expected failures
-- **For APIs**: Execute Postman collections
+- **For APIs**: Execute Postman collections using MCP testing tools
 - **Do NOT** write implementation code
 - Show test failures for verification
 - Ensure clear, informative output
+
+```javascript
+// Execute API tests and confirm failures before implementation
+const testExecution = await mcp__postman_mcp__send_message_to_claude({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1500,
+  content: `Execute the test collection for Aruba Central API and show expected failures:
+    1. Authentication should fail with invalid credentials
+    2. Device endpoints should return 401 without auth
+    3. Monitoring endpoints should handle rate limiting
+    4. Error responses should match expected format
+    
+    Show test results with clear failure messages and expected vs actual outcomes.`
+});
+
+// Create multiple conversational test scenarios
+const testConversation = await mcp__postman_mcp__multiple_conversational_turns({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1000,
+  messages: [
+    {
+      role: "user",
+      content: "Run authentication test for Aruba Central API"
+    },
+    {
+      role: "assistant", 
+      content: "Test failed as expected - no authentication credentials provided"
+    },
+    {
+      role: "user",
+      content: "Now test device listing endpoint without auth"
+    },
+    {
+      role: "assistant",
+      content: "401 Unauthorized returned as expected"
+    },
+    {
+      role: "user",
+      content: "Test monitoring stats with invalid device ID"
+    }
+  ]
+});
+
+// Document test failures for verification
+await write_file(`${baseDir}/${workflowName}/tests/test-failures-log.md`, `
+# Test Execution Results - Expected Failures
+
+## Test Execution: ${new Date().toISOString()}
+
+${testExecution.content[0].text}
+
+## Conversational Test Results
+
+${JSON.stringify(testConversation, null, 2)}
+
+## Next Steps
+- Implement authentication flow
+- Create device management endpoints
+- Add monitoring capabilities
+- Implement error handling
+`);
+```
 
 ### 3. Commit Tests
 - Commit with messages like "Add tests for [feature]"
@@ -981,11 +1512,184 @@ Use Markdown for rich documentation:
 **Architecture**: ADRs, system diagrams, integration points, deployment requirements
 
 ### API Documentation with Postman
-1. Create working collections
+1. Create working collections using MCP tools
 2. Add rich Markdown descriptions
 3. Include realistic examples
 4. Document scenarios and edge cases
 5. Generate and publish documentation
+
+```javascript
+// Generate comprehensive API documentation
+const apiDocs = await mcp__postman_mcp__send_message_to_claude({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 2000,
+  content: `Generate comprehensive API documentation for HPE Aruba Central including:
+    - Authentication guide with OAuth 2.0 flow
+    - All device management endpoints
+    - Monitoring and alerting APIs
+    - Configuration management APIs
+    - Rate limiting and error handling
+    - SDK examples in Python and JavaScript
+    - Common use cases and workflows`
+});
+
+// Create website with API documentation
+const websiteDocs = await mcp__postman_mcp__create_website({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 2000
+});
+
+// Save documentation
+await write_file(`${baseDir}/docs/api-documentation.md`, apiDocs.content[0].text);
+await write_file(`${baseDir}/docs/api-website.html`, websiteDocs.content[0].text);
+```
+
+### Aruba API Testing Patterns with Postman MCP
+
+#### Pattern 1: Authentication Flow Testing
+```javascript
+// Test complete OAuth 2.0 flow for Aruba Central
+const authFlowTest = await mcp__postman_mcp__send_message_to_claude({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1500,
+  content: `Create comprehensive OAuth 2.0 test flow for Aruba Central API:
+    1. Client credentials grant request
+    2. Access token validation
+    3. Token refresh handling
+    4. Expired token scenarios
+    5. Invalid credentials handling
+    6. Rate limiting on auth endpoints
+    
+    Include proper error handling and retry logic.`
+});
+```
+
+#### Pattern 2: Device Management API Testing
+```javascript
+// Batch test device management endpoints
+const deviceTestBatch = await mcp__postman_mcp__create_message_batch({
+  requests: [
+    {
+      custom_id: "list_devices",
+      params: {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 800,
+        messages: [{
+          role: "user",
+          content: "Test GET /api/v2/devices with pagination, filtering by device_type, status, and location"
+        }]
+      }
+    },
+    {
+      custom_id: "device_details",
+      params: {
+        model: "claude-sonnet-4-20250514", 
+        max_tokens: 800,
+        messages: [{
+          role: "user",
+          content: "Test GET /api/v2/devices/{serial} with valid and invalid serial numbers"
+        }]
+      }
+    },
+    {
+      custom_id: "device_commands",
+      params: {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: "Test POST /api/v2/devices/command for reboot, config sync, and firmware update commands"
+        }]
+      }
+    }
+  ]
+});
+```
+
+#### Pattern 3: Monitoring and Alerting API Testing
+```javascript
+// Test monitoring endpoints with performance scenarios
+const monitoringTests = await mcp__postman_mcp__send_message_to_claude({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1500,
+  content: `Design monitoring API test scenarios for Aruba Central:
+    
+    Performance Metrics Testing:
+    - CPU, memory, temperature thresholds
+    - Interface utilization stats
+    - Radio performance metrics
+    - Historical data queries
+    
+    Alert Management Testing:
+    - Create/update alert rules
+    - Test alert firing conditions  
+    - Webhook delivery testing
+    - Alert acknowledgment and clearing
+    
+    Include edge cases for high-volume data and rate limiting.`
+});
+```
+
+#### Pattern 4: Configuration Management Testing
+```javascript
+// Test configuration management workflows
+const configTests = await mcp__postman_mcp__multiple_conversational_turns({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1200,
+  messages: [
+    {
+      role: "user",
+      content: "Test configuration template creation for Aruba APs"
+    },
+    {
+      role: "assistant",
+      content: "Creating template test with SSID, security, and radio settings..."
+    },
+    {
+      role: "user", 
+      content: "Now test template application to device groups"
+    },
+    {
+      role: "assistant",
+      content: "Testing bulk template deployment with rollback scenarios..."
+    },
+    {
+      role: "user",
+      content: "Test configuration validation and conflict detection"
+    }
+  ]
+});
+```
+
+#### Pattern 5: Error Handling and Edge Cases
+```javascript
+// Comprehensive error scenario testing
+const errorHandlingTests = await mcp__postman_mcp__send_message_to_claude({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1800,
+  content: `Create comprehensive error handling tests for Aruba APIs:
+    
+    Authentication Errors:
+    - Invalid credentials (401)
+    - Expired tokens (401) 
+    - Insufficient permissions (403)
+    - Rate limiting (429)
+    
+    Request Errors:
+    - Invalid device serial (404)
+    - Malformed JSON (400)
+    - Missing required fields (400)
+    - Invalid enum values (400)
+    
+    Server Errors:
+    - Service unavailable (503)
+    - Internal server error (500)
+    - Timeout scenarios
+    - Network connectivity issues
+    
+    Include retry strategies and exponential backoff patterns.`
+});
+```
 
 ---
 

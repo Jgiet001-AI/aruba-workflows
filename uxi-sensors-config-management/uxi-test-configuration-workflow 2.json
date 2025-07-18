@@ -1,0 +1,641 @@
+{
+  "name": "UXI Test Configuration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "uxi-test-configuration",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "UXI Test Config Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "uxi-test-config-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// UXI Test Configuration Workflow\n// Operations: create_test, update_test, delete_test, list_tests, run_test, schedule_test\n\nconst operation = $input.item(0).json.operation;\nconst testData = $input.item(0).json.test_data || {};\nconst uxiApiUrl = $input.item(0).json.uxi_api_url || 'https://api.uxi.aruba.com';\nconst testId = $input.item(0).json.test_id;\nconst sensorId = $input.item(0).json.sensor_id;\nconst testType = $input.item(0).json.test_type || 'network_performance';\n\n// Validate required parameters\nif (!operation) {\n  throw new Error('Operation is required. Valid operations: create_test, update_test, delete_test, list_tests, run_test, schedule_test');\n}\n\nif (['update_test', 'delete_test', 'run_test'].includes(operation) && !testId) {\n  throw new Error('Test ID is required for update, delete, and run operations');\n}\n\nif (['create_test', 'run_test', 'schedule_test'].includes(operation) && !sensorId) {\n  throw new Error('Sensor ID is required for create, run, and schedule operations');\n}\n\n// Test type configurations\nconst testTypeConfigs = {\n  'network_performance': {\n    name: 'Network Performance Test',\n    description: 'Comprehensive network performance testing',\n    tests: [\n      {\n        name: 'WiFi Connectivity',\n        type: 'connectivity',\n        parameters: {\n          target_ssid: 'auto_detect',\n          connection_timeout: 30,\n          retry_attempts: 3\n        },\n        thresholds: {\n          signal_strength: -70,\n          connection_time: 10\n        }\n      },\n      {\n        name: 'Internet Speed Test',\n        type: 'speed',\n        parameters: {\n          download_servers: ['auto'],\n          upload_servers: ['auto'],\n          test_duration: 10,\n          parallel_connections: 4\n        },\n        thresholds: {\n          download_speed: 25,\n          upload_speed: 5,\n          latency: 50,\n          jitter: 20\n        }\n      },\n      {\n        name: 'DNS Resolution',\n        type: 'dns',\n        parameters: {\n          dns_servers: ['8.8.8.8', '1.1.1.1'],\n          test_domains: ['google.com', 'microsoft.com', 'aruba.com'],\n          timeout: 5\n        },\n        thresholds: {\n          resolution_time: 2,\n          success_rate: 95\n        }\n      }\n    ],\n    frequency: 300, // 5 minutes\n    timeout: 60\n  },\n  'application_performance': {\n    name: 'Application Performance Test',\n    description: 'Real-world application performance testing',\n    tests: [\n      {\n        name: 'Web Browsing',\n        type: 'http',\n        parameters: {\n          target_urls: ['https://www.google.com', 'https://www.microsoft.com'],\n          browser_type: 'chrome',\n          page_load_timeout: 30,\n          follow_redirects: true\n        },\n        thresholds: {\n          page_load_time: 3,\n          dns_lookup_time: 1,\n          tcp_connect_time: 1,\n          ssl_handshake_time: 1\n        }\n      },\n      {\n        name: 'Email Performance',\n        type: 'email',\n        parameters: {\n          email_server: 'outlook.office365.com',\n          protocol: 'imap',\n          port: 993,\n          ssl_enabled: true\n        },\n        thresholds: {\n          login_time: 5,\n          message_download_time: 3,\n          sync_time: 10\n        }\n      },\n      {\n        name: 'Video Conference',\n        type: 'video',\n        parameters: {\n          service: 'teams',\n          test_duration: 60,\n          video_quality: '720p',\n          audio_quality: 'high'\n        },\n        thresholds: {\n          video_latency: 100,\n          audio_latency: 50,\n          packet_loss: 1,\n          jitter: 20\n        }\n      }\n    ],\n    frequency: 600, // 10 minutes\n    timeout: 120\n  },\n  'user_experience': {\n    name: 'User Experience Test',\n    description: 'Comprehensive user experience monitoring',\n    tests: [\n      {\n        name: 'WiFi Roaming',\n        type: 'roaming',\n        parameters: {\n          roaming_path: 'auto_detect',\n          roaming_threshold: -75,\n          test_duration: 300\n        },\n        thresholds: {\n          roaming_time: 2,\n          connection_drops: 0,\n          data_continuity: 99\n        }\n      },\n      {\n        name: 'Authentication',\n        type: 'auth',\n        parameters: {\n          auth_method: 'wpa2_enterprise',\n          certificate_validation: true,\n          timeout: 30\n        },\n        thresholds: {\n          auth_time: 10,\n          success_rate: 98\n        }\n      },\n      {\n        name: 'Device Onboarding',\n        type: 'onboarding',\n        parameters: {\n          device_types: ['mobile', 'laptop', 'iot'],\n          onboarding_method: 'automatic',\n          test_duration: 180\n        },\n        thresholds: {\n          onboarding_time: 60,\n          success_rate: 95\n        }\n      }\n    ],\n    frequency: 900, // 15 minutes\n    timeout: 300\n  },\n  'security_compliance': {\n    name: 'Security Compliance Test',\n    description: 'Network security and compliance validation',\n    tests: [\n      {\n        name: 'Network Security',\n        type: 'security',\n        parameters: {\n          vulnerability_scan: true,\n          port_scan: true,\n          ssl_validation: true,\n          certificate_check: true\n        },\n        thresholds: {\n          vulnerabilities: 0,\n          open_ports: 'whitelist_only',\n          ssl_grade: 'A',\n          cert_expiry_days: 30\n        }\n      },\n      {\n        name: 'Compliance Check',\n        type: 'compliance',\n        parameters: {\n          standards: ['pci_dss', 'hipaa', 'gdpr'],\n          policy_validation: true,\n          access_control_test: true\n        },\n        thresholds: {\n          compliance_score: 95,\n          policy_violations: 0,\n          access_failures: 0\n        }\n      }\n    ],\n    frequency: 3600, // 1 hour\n    timeout: 180\n  },\n  'iot_connectivity': {\n    name: 'IoT Connectivity Test',\n    description: 'IoT device connectivity and performance',\n    tests: [\n      {\n        name: 'IoT Device Discovery',\n        type: 'discovery',\n        parameters: {\n          discovery_protocols: ['mdns', 'upnp', 'bluetooth'],\n          scan_duration: 60,\n          device_categories: ['sensors', 'actuators', 'gateways']\n        },\n        thresholds: {\n          discovery_time: 30,\n          device_response_rate: 90\n        }\n      },\n      {\n        name: 'IoT Data Transmission',\n        type: 'data_transmission',\n        parameters: {\n          protocols: ['mqtt', 'coap', 'http'],\n          message_size: 1024,\n          frequency: 60,\n          encryption: true\n        },\n        thresholds: {\n          transmission_time: 1,\n          message_loss: 1,\n          encryption_overhead: 10\n        }\n      }\n    ],\n    frequency: 1800, // 30 minutes\n    timeout: 120\n  },\n  'voice_quality': {\n    name: 'Voice Quality Test',\n    description: 'VoIP and voice quality assessment',\n    tests: [\n      {\n        name: 'VoIP Call Quality',\n        type: 'voip',\n        parameters: {\n          codec: 'g711',\n          call_duration: 60,\n          test_scenarios: ['local', 'remote', 'international']\n        },\n        thresholds: {\n          mos_score: 4.0,\n          latency: 100,\n          jitter: 20,\n          packet_loss: 1\n        }\n      },\n      {\n        name: 'Voice Recognition',\n        type: 'voice_recognition',\n        parameters: {\n          test_phrases: ['standard_phrases'],\n          noise_levels: ['quiet', 'moderate', 'noisy'],\n          languages: ['en-US']\n        },\n        thresholds: {\n          recognition_accuracy: 95,\n          response_time: 2,\n          confidence_score: 85\n        }\n      }\n    ],\n    frequency: 1200, // 20 minutes\n    timeout: 180\n  }\n};\n\n// Generate test configuration based on test type\nlet testConfig = testData;\nif (operation === 'create_test' && testType && testTypeConfigs[testType]) {\n  const typeConfig = testTypeConfigs[testType];\n  testConfig = {\n    ...testData,\n    name: testData.name || typeConfig.name,\n    description: testData.description || typeConfig.description,\n    test_type: testType,\n    tests: typeConfig.tests,\n    frequency: testData.frequency || typeConfig.frequency,\n    timeout: testData.timeout || typeConfig.timeout,\n    enabled: testData.enabled !== undefined ? testData.enabled : true\n  };\n}\n\n// Add scheduling configuration\nif (operation === 'schedule_test') {\n  testConfig.schedule = {\n    type: testData.schedule_type || 'interval',\n    interval: testData.interval || 300, // 5 minutes\n    start_time: testData.start_time || new Date().toISOString(),\n    end_time: testData.end_time || null,\n    timezone: testData.timezone || 'UTC',\n    enabled: testData.schedule_enabled !== undefined ? testData.schedule_enabled : true\n  };\n}\n\n// Prepare output data\nconst outputData = {\n  operation,\n  test_id: testId,\n  sensor_id: sensorId,\n  test_config: testConfig,\n  test_type: testType,\n  uxi_api_url: uxiApiUrl,\n  timestamp: new Date().toISOString(),\n  validation_rules: {\n    test_id_required: ['update_test', 'delete_test', 'run_test'].includes(operation),\n    sensor_id_required: ['create_test', 'run_test', 'schedule_test'].includes(operation),\n    test_config_required: ['create_test', 'update_test', 'schedule_test'].includes(operation)\n  }\n};\n\n// Add operation-specific data\nif (operation === 'list_tests') {\n  outputData.list_filters = {\n    sensor_id: testData.sensor_id || 'all',\n    test_type: testData.test_type || 'all',\n    status: testData.status || 'all',\n    limit: testData.limit || 100\n  };\n}\n\nif (operation === 'run_test') {\n  outputData.execution_options = {\n    immediate: testData.immediate || true,\n    timeout: testData.timeout || 60,\n    retry_on_failure: testData.retry_on_failure || true,\n    max_retries: testData.max_retries || 3\n  };\n}\n\nreturn [{ json: outputData }];"
+      },
+      "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+      "name": "Prepare Test Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "create_test",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition2",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "update_test",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition3",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "delete_test",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition4",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "list_tests",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition5",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "run_test",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition6",
+              "leftValue": "={{$json.operation}}",
+              "rightValue": "schedule_test",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+      "name": "Route Test Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.uxi_api_url}}/api/v1/sensors/{{$json.sensor_id}}/tests",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "uxiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.uxiApi.token}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{$json.test_config.name}}"
+            },
+            {
+              "name": "description",
+              "value": "={{$json.test_config.description}}"
+            },
+            {
+              "name": "test_type",
+              "value": "={{$json.test_type}}"
+            },
+            {
+              "name": "tests",
+              "value": "={{$json.test_config.tests}}"
+            },
+            {
+              "name": "frequency",
+              "value": "={{$json.test_config.frequency}}"
+            },
+            {
+              "name": "timeout",
+              "value": "={{$json.test_config.timeout}}"
+            },
+            {
+              "name": "enabled",
+              "value": "={{$json.test_config.enabled}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "d4e5f6g7-h8i9-0123-defg-456789012345",
+      "name": "Create Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.uxi_api_url}}/api/v1/tests/{{$json.test_id}}",
+        "method": "PUT",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "uxiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.uxiApi.token}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{$json.test_config.name}}"
+            },
+            {
+              "name": "description",
+              "value": "={{$json.test_config.description}}"
+            },
+            {
+              "name": "test_type",
+              "value": "={{$json.test_type}}"
+            },
+            {
+              "name": "tests",
+              "value": "={{$json.test_config.tests}}"
+            },
+            {
+              "name": "frequency",
+              "value": "={{$json.test_config.frequency}}"
+            },
+            {
+              "name": "timeout",
+              "value": "={{$json.test_config.timeout}}"
+            },
+            {
+              "name": "enabled",
+              "value": "={{$json.test_config.enabled}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "e5f6g7h8-i9j0-1234-efgh-567890123456",
+      "name": "Update Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.uxi_api_url}}/api/v1/tests/{{$json.test_id}}",
+        "method": "DELETE",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "uxiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.uxiApi.token}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "f6g7h8i9-j0k1-2345-fghi-678901234567",
+      "name": "Delete Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.uxi_api_url}}/api/v1/tests",
+        "method": "GET",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "uxiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.uxiApi.token}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "sensor_id",
+              "value": "={{$json.list_filters.sensor_id}}"
+            },
+            {
+              "name": "test_type",
+              "value": "={{$json.list_filters.test_type}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.list_filters.status}}"
+            },
+            {
+              "name": "limit",
+              "value": "={{$json.list_filters.limit}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "g7h8i9j0-k1l2-3456-ghij-789012345678",
+      "name": "List Tests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.uxi_api_url}}/api/v1/tests/{{$json.test_id}}/execute",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "uxiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.uxiApi.token}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "execution_options",
+              "value": "={{$json.execution_options}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 5000
+          }
+        }
+      },
+      "id": "h8i9j0k1-l2m3-4567-hijk-890123456789",
+      "name": "Run Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.uxi_api_url}}/api/v1/sensors/{{$json.sensor_id}}/tests/{{$json.test_id}}/schedule",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "uxiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.uxiApi.token}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "schedule",
+              "value": "={{$json.test_config.schedule}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "i9j0k1l2-m3n4-5678-ijkl-901234567890",
+      "name": "Schedule Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process UXI Test API response and prepare success response\nconst operation = $input.item(0).json.operation;\nconst apiResponse = $input.item(0).json;\n\nlet successMessage = '';\nlet responseData = {};\n\nswitch (operation) {\n  case 'create_test':\n    successMessage = `Test '${apiResponse.name}' created successfully`;\n    responseData = {\n      test_id: apiResponse.id,\n      name: apiResponse.name,\n      test_type: apiResponse.test_type,\n      sensor_id: apiResponse.sensor_id,\n      frequency: apiResponse.frequency,\n      status: 'created'\n    };\n    break;\n    \n  case 'update_test':\n    successMessage = `Test '${apiResponse.name}' updated successfully`;\n    responseData = {\n      test_id: apiResponse.id,\n      name: apiResponse.name,\n      changes_applied: apiResponse.changes_applied,\n      status: 'updated'\n    };\n    break;\n    \n  case 'delete_test':\n    successMessage = `Test deleted successfully`;\n    responseData = {\n      test_id: apiResponse.id,\n      status: 'deleted',\n      cleanup_completed: true\n    };\n    break;\n    \n  case 'list_tests':\n    successMessage = `Retrieved ${apiResponse.tests.length} tests`;\n    responseData = {\n      total_tests: apiResponse.tests.length,\n      tests: apiResponse.tests,\n      filters_applied: apiResponse.filters\n    };\n    break;\n    \n  case 'run_test':\n    successMessage = `Test execution started successfully`;\n    responseData = {\n      test_id: apiResponse.test_id,\n      execution_id: apiResponse.execution_id,\n      status: 'running',\n      estimated_duration: apiResponse.estimated_duration,\n      started_at: apiResponse.started_at\n    };\n    break;\n    \n  case 'schedule_test':\n    successMessage = `Test scheduled successfully`;\n    responseData = {\n      test_id: apiResponse.test_id,\n      schedule_id: apiResponse.schedule_id,\n      schedule: apiResponse.schedule,\n      status: 'scheduled',\n      next_execution: apiResponse.next_execution\n    };\n    break;\n    \n  default:\n    successMessage = 'Test operation completed successfully';\n    responseData = apiResponse;\n}\n\nreturn [{\n  json: {\n    success: true,\n    operation: operation,\n    message: successMessage,\n    data: responseData,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "j0k1l2m3-n4o5-6789-jklm-012345678901",
+      "name": "Process Test Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling for UXI test operations\nconst operation = $input.item(0).json.operation || 'unknown';\nconst error = $input.item(0).json.error || {};\nconst testId = $input.item(0).json.test_id;\nconst sensorId = $input.item(0).json.sensor_id;\n\n// Categorize error types\nlet errorCategory = 'unknown';\nlet errorMessage = error.message || 'Unknown error occurred';\nlet shouldRetry = false;\nlet rollbackRequired = false;\n\nif (error.code) {\n  switch (error.code) {\n    case 'AUTHENTICATION_ERROR':\n    case 401:\n      errorCategory = 'authentication';\n      errorMessage = 'UXI API authentication failed. Please check credentials.';\n      shouldRetry = false;\n      break;\n      \n    case 'AUTHORIZATION_ERROR':\n    case 403:\n      errorCategory = 'authorization';\n      errorMessage = 'Insufficient permissions for UXI test operations.';\n      shouldRetry = false;\n      break;\n      \n    case 'TEST_NOT_FOUND':\n    case 'SENSOR_NOT_FOUND':\n    case 404:\n      errorCategory = 'not_found';\n      errorMessage = `Test or sensor not found. Test ID: ${testId}, Sensor ID: ${sensorId}`;\n      shouldRetry = false;\n      break;\n      \n    case 'VALIDATION_ERROR':\n    case 400:\n      errorCategory = 'validation';\n      errorMessage = 'Invalid test configuration parameters.';\n      shouldRetry = false;\n      break;\n      \n    case 'TEST_EXECUTION_ERROR':\n      errorCategory = 'execution';\n      errorMessage = 'Test execution failed. Check sensor connectivity and configuration.';\n      shouldRetry = true;\n      break;\n      \n    case 'SENSOR_OFFLINE':\n      errorCategory = 'sensor_offline';\n      errorMessage = 'Sensor is offline or unreachable.';\n      shouldRetry = true;\n      break;\n      \n    case 'NETWORK_ERROR':\n    case 'TIMEOUT':\n      errorCategory = 'network';\n      errorMessage = 'Network connectivity issue with UXI API.';\n      shouldRetry = true;\n      break;\n      \n    case 'RATE_LIMIT_EXCEEDED':\n    case 429:\n      errorCategory = 'rate_limit';\n      errorMessage = 'UXI API rate limit exceeded. Please retry later.';\n      shouldRetry = true;\n      break;\n      \n    case 'TEST_CONFLICT':\n    case 409:\n      errorCategory = 'conflict';\n      errorMessage = 'Test name conflicts with existing test or sensor is busy.';\n      shouldRetry = false;\n      break;\n      \n    case 'INTERNAL_ERROR':\n    case 500:\n      errorCategory = 'server';\n      errorMessage = 'UXI API internal server error.';\n      shouldRetry = true;\n      break;\n      \n    default:\n      errorCategory = 'unknown';\n      shouldRetry = false;\n  }\n}\n\n// Determine if rollback is required\nif (['create_test', 'update_test', 'schedule_test'].includes(operation)) {\n  rollbackRequired = true;\n}\n\n// Generate error response\nconst errorResponse = {\n  success: false,\n  operation: operation,\n  error: {\n    category: errorCategory,\n    message: errorMessage,\n    code: error.code,\n    details: error.details || {}\n  },\n  test_id: testId,\n  sensor_id: sensorId,\n  should_retry: shouldRetry,\n  rollback_required: rollbackRequired,\n  timestamp: new Date().toISOString(),\n  troubleshooting: {\n    authentication: 'Verify UXI API credentials and token validity',\n    authorization: 'Check UXI API permissions and user roles',\n    not_found: 'Verify test ID and sensor ID exist in UXI dashboard',\n    validation: 'Check test configuration parameters against API schema',\n    execution: 'Verify sensor connectivity and test configuration',\n    sensor_offline: 'Check sensor network connectivity and power status',\n    network: 'Verify network connectivity to UXI API endpoint',\n    rate_limit: 'Implement exponential backoff and retry logic',\n    conflict: 'Use unique test names and ensure sensor is not busy',\n    server: 'Contact UXI support if issue persists'\n  }\n};\n\nreturn [{ json: errorResponse }];"
+      },
+      "id": "k1l2m3n4-o5p6-7890-klmn-123456789012",
+      "name": "Handle Test Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#network-alerts",
+        "text": "🟢 UXI Test Operation Success\n*Operation*: {{$json.operation}}\n*Message*: {{$json.message}}\n*Test ID*: {{$json.data.test_id}}\n*Sensor ID*: {{$json.data.sensor_id}}\n*Status*: {{$json.data.status}}\n*Timestamp*: {{$json.timestamp}}",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "l2m3n4o5-p6q7-8901-lmno-234567890123",
+      "name": "Test Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#network-alerts",
+        "text": "🔴 UXI Test Operation Failed\n*Operation*: {{$json.operation}}\n*Error*: {{$json.error.message}}\n*Category*: {{$json.error.category}}\n*Test ID*: {{$json.test_id}}\n*Sensor ID*: {{$json.sensor_id}}\n*Should Retry*: {{$json.should_retry}}\n*Rollback Required*: {{$json.rollback_required}}\n*Timestamp*: {{$json.timestamp}}",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "m3n4o5p6-q7r8-9012-mnop-345678901234",
+      "name": "Test Error Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "UXI Test Config Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Test Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Test Configuration": {
+      "main": [
+        [
+          {
+            "node": "Route Test Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Test Operation": {
+      "main": [
+        [
+          {
+            "node": "Create Test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete Test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "List Tests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schedule Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Test": {
+      "main": [
+        [
+          {
+            "node": "Process Test Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Test": {
+      "main": [
+        [
+          {
+            "node": "Process Test Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Test": {
+      "main": [
+        [
+          {
+            "node": "Process Test Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Tests": {
+      "main": [
+        [
+          {
+            "node": "Process Test Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Test": {
+      "main": [
+        [
+          {
+            "node": "Process Test Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Test": {
+      "main": [
+        [
+          {
+            "node": "Process Test Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Test Success": {
+      "main": [
+        [
+          {
+            "node": "Test Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Test Error": {
+      "main": [
+        [
+          {
+            "node": "Test Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

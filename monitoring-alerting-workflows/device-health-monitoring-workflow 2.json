@@ -572,15 +572,8 @@
       ]
     }
   },
-  "settings": {
-    "executionOrder": "v1",
-    "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
-    "saveManualExecutions": true,
-    "saveExecutionProgress": true
-  },
-  "active": false,
   "pinData": {},
+  "versionId": "1.0.0",
   "meta": {
     "templateCreatedBy": "Claude Code",
     "description": "Comprehensive device health monitoring workflow that tracks CPU, memory, temperature, and connectivity status across all Aruba network devices. Includes intelligent alerting, health scoring, and automated remediation suggestions.",

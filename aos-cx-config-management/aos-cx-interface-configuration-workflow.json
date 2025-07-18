@@ -774,9 +774,15 @@
       ]
     }
   },
+  "pinData": {},
   "active": false,
   "settings": {
+    "executionOrder": "v1",
     "saveManualExecutions": true,
+    "saveExecutionProgress": false,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "UTC",
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": "error-handler-workflow"
   },

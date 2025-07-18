@@ -1,0 +1,233 @@
+{
+  "environment": {
+    "description": "Target environment for network services automation",
+    "default": "production",
+    "options": ["development", "staging", "production"]
+  },
+  "idsIpsConfiguration": {
+    "autoDeployment": {
+      "description": "Enable automatic IDS/IPS rule deployment",
+      "default": true
+    },
+    "ruleValidation": {
+      "description": "Enable rule validation before deployment",
+      "default": true
+    },
+    "rollbackTimeout": {
+      "description": "Automatic rollback timeout in minutes",
+      "default": 60,
+      "min": 15,
+      "max": 240
+    },
+    "threatScoreThreshold": {
+      "description": "Minimum threat score for automatic rule creation",
+      "default": 70,
+      "min": 50,
+      "max": 100
+    }
+  },
+  "siemIntegration": {
+    "enabled": {
+      "description": "Enable SIEM integration",
+      "default": true
+    },
+    "logLevel": {
+      "description": "SIEM logging level",
+      "default": "info",
+      "options": ["debug", "info", "warning", "error", "critical"]
+    },
+    "retentionPeriod": {
+      "description": "Log retention period in days",
+      "default": 90,
+      "min": 30,
+      "max": 365
+    },
+    "correlationRules": {
+      "description": "Enable automated correlation rule creation",
+      "default": true
+    }
+  },
+  "ipamConfiguration": {
+    "autoExpansion": {
+      "description": "Enable automatic IP pool expansion",
+      "default": true
+    },
+    "utilizationThreshold": {
+      "description": "Pool utilization threshold for expansion (%)",
+      "default": 85,
+      "min": 70,
+      "max": 95
+    },
+    "expansionSize": {
+      "description": "Default expansion size (number of IPs)",
+      "default": 50,
+      "min": 10,
+      "max": 254
+    },
+    "leaseTime": {
+      "description": "Default DHCP lease time in seconds",
+      "default": 86400,
+      "min": 3600,
+      "max": 604800
+    }
+  },
+  "monitoringConfiguration": {
+    "healthCheckInterval": {
+      "description": "Service health check interval in minutes",
+      "default": 5,
+      "min": 1,
+      "max": 60
+    },
+    "alertThresholds": {
+      "cpuUsage": {
+        "description": "CPU usage alert threshold (%)",
+        "default": 80,
+        "min": 50,
+        "max": 95
+      },
+      "memoryUsage": {
+        "description": "Memory usage alert threshold (%)",
+        "default": 85,
+        "min": 50,
+        "max": 95
+      },
+      "diskUsage": {
+        "description": "Disk usage alert threshold (%)",
+        "default": 90,
+        "min": 70,
+        "max": 98
+      }
+    },
+    "retryAttempts": {
+      "description": "Number of retry attempts for failed health checks",
+      "default": 3,
+      "min": 1,
+      "max": 10
+    }
+  },
+  "notificationChannels": {
+    "slack": {
+      "idsIpsChannel": {
+        "description": "Slack channel for IDS/IPS notifications",
+        "default": "#security-ids-ips"
+      },
+      "siemChannel": {
+        "description": "Slack channel for SIEM notifications", 
+        "default": "#security-siem"
+      },
+      "ipamChannel": {
+        "description": "Slack channel for IPAM notifications",
+        "default": "#network-ipam"
+      },
+      "monitoringChannel": {
+        "description": "Slack channel for monitoring notifications",
+        "default": "#network-monitoring"
+      }
+    },
+    "email": {
+      "securityTeam": {
+        "description": "Email addresses for security team notifications",
+        "default": ["security-team@company.com", "ids-admins@company.com"]
+      },
+      "networkTeam": {
+        "description": "Email addresses for network team notifications",
+        "default": ["network-team@company.com", "ipam-admins@company.com"]
+      },
+      "operationsTeam": {
+        "description": "Email addresses for operations team notifications",
+        "default": ["ops-team@company.com", "monitoring@company.com"]
+      }
+    }
+  },
+  "integrations": {
+    "externalSiem": {
+      "enabled": {
+        "description": "Enable external SIEM integration",
+        "default": true
+      },
+      "webhookUrl": {
+        "description": "External SIEM webhook URL",
+        "default": "https://siem.company.com/api/events"
+      }
+    },
+    "threatIntelligence": {
+      "enabled": {
+        "description": "Enable threat intelligence feeds",
+        "default": true
+      },
+      "updateInterval": {
+        "description": "Threat intelligence update interval in hours",
+        "default": 6,
+        "min": 1,
+        "max": 24
+      }
+    },
+    "servicenow": {
+      "enabled": {
+        "description": "Enable ServiceNow integration",
+        "default": false
+      },
+      "instanceUrl": {
+        "description": "ServiceNow instance URL",
+        "default": "https://company.service-now.com"
+      }
+    }
+  },
+  "compliance": {
+    "auditLogging": {
+      "description": "Enable comprehensive audit logging",
+      "default": true
+    },
+    "dataRetention": {
+      "configChanges": {
+        "description": "Configuration change retention period in days",
+        "default": 365,
+        "min": 90,
+        "max": 2555
+      },
+      "securityEvents": {
+        "description": "Security event retention period in days", 
+        "default": 365,
+        "min": 90,
+        "max": 2555
+      }
+    },
+    "encryption": {
+      "enabled": {
+        "description": "Enable encryption for all communications",
+        "default": true
+      },
+      "algorithm": {
+        "description": "Encryption algorithm",
+        "default": "AES-256",
+        "options": ["AES-256", "AES-128"]
+      }
+    }
+  },
+  "performance": {
+    "batchSize": {
+      "description": "Batch size for bulk operations",
+      "default": 50,
+      "min": 10,
+      "max": 100
+    },
+    "apiTimeout": {
+      "description": "API timeout in seconds",
+      "default": 30,
+      "min": 10,
+      "max": 120
+    },
+    "retryDelay": {
+      "description": "Retry delay in milliseconds",
+      "default": 2000,
+      "min": 1000,
+      "max": 10000
+    },
+    "maxConcurrentRequests": {
+      "description": "Maximum concurrent API requests",
+      "default": 10,
+      "min": 1,
+      "max": 50
+    }
+  }
+}

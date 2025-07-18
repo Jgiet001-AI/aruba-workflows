@@ -1,0 +1,539 @@
+{
+  "name": "ServiceNow Service Request Automation",
+  "id": "xtIOLCaKBxKdKj3G",
+  "active": false,
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "ServiceNow Service Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {
+        "path": "servicenow-service-request",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Service Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "parameters": {
+        "functionCode": "// ServiceNow Service Request Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation', 'request_type'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'submit_request', 'get_request_status', 'update_request', 'cancel_request',\n  'approve_request', 'reject_request', 'fulfill_request', 'get_catalog_items',\n  'get_approval_status', 'add_request_comments'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}`);\n}\n\n// Valid request types\nconst validRequestTypes = ['network_access', 'hardware_provision', 'software_install', 'access_rights', 'network_config'];\nif (!validRequestTypes.includes(input.request_type)) {\n  throw new Error(`Invalid request type: ${input.request_type}`);\n}\n\n// Operation-specific validation\nif (input.operation === 'submit_request') {\n  if (!input.catalog_item && !input.short_description) {\n    throw new Error('submit_request requires catalog_item or short_description');\n  }\n  if (!input.requested_for) {\n    throw new Error('submit_request requires requested_for field');\n  }\n}\n\nif (input.operation === 'approve_request' || input.operation === 'reject_request') {\n  if (!input.request_id && !input.approval_id) {\n    throw new Error('Approval operations require request_id or approval_id');\n  }\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: input.request_id || `snow-req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed',\n  \n  // Set ServiceNow defaults\n  priority: input.priority || '3',\n  urgency: input.urgency || '3',\n  requested_for: input.requested_for || 'network.admin@company.com',\n  opened_by: input.opened_by || 'aruba.automation@company.com',\n  assignment_group: input.assignment_group || 'Network Operations',\n  approval_required: input.approval_required !== false, // Default to true\n  state: input.state || 'open'\n};\n\nreturn [{ json: validatedInput }];"
+      }
+    },
+    {
+      "id": "set-servicenow-config",
+      "name": "Set ServiceNow Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "snow_base_url",
+              "name": "snow_base_url",
+              "value": "{{$json.instance_url || 'https://company.service-now.com'}}",
+              "type": "string"
+            },
+            {
+              "id": "snow_username",
+              "name": "snow_username",
+              "value": "{{$json.username || 'aruba_automation'}}",
+              "type": "string"
+            },
+            {
+              "id": "snow_password",
+              "name": "snow_password",
+              "value": "{{$json.password || 'default-password'}}",
+              "type": "string"
+            },
+            {
+              "id": "catalog_id",
+              "name": "catalog_id",
+              "value": "{{$json.catalog_id || 'network_services_catalog'}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "route-request-operation",
+      "name": "Route Service Request Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "equals",
+                    "value2": "submit_request"
+                  }
+                ]
+              },
+              "renameOutput": "Submit Request"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "catalog"
+                  }
+                ]
+              },
+              "renameOutput": "Catalog Operations"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "status"
+                  }
+                ]
+              },
+              "renameOutput": "Status Operations"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "approve"
+                  }
+                ]
+              },
+              "renameOutput": "Approval Operations"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "equals",
+                    "value2": "fulfill_request"
+                  }
+                ]
+              },
+              "renameOutput": "Fulfillment"
+            }
+          ]
+        },
+        "fallbackOutput": "defaultOutput"
+      }
+    },
+    {
+      "id": "submit-service-request",
+      "name": "Submit Service Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 100],
+      "parameters": {
+        "method": "POST",
+        "url": "{{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/sn_sc/servicecatalog/items/{{$json.catalog_item_id || 'network_access_request'}}/order_now",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"sysparm_quantity\": {{JSON.stringify($json.quantity || \"1\")}},\n  \"variables\": {\n    \"u_network_location\": {{JSON.stringify($json.location || \"Default Location\")}},\n    \"u_access_point_model\": {{JSON.stringify($json.device_model)}},\n    \"u_vlan_requirement\": {{JSON.stringify($json.vlan_id)}},\n    \"u_ssid_configuration\": {{JSON.stringify($json.ssid_name)}},\n    \"u_business_justification\": {{JSON.stringify($json.justification || \"Network infrastructure request\")}},\n    \"u_requested_by\": {{JSON.stringify($json.requested_for)}},\n    \"u_priority\": {{JSON.stringify($json.priority)}},\n    \"u_urgency\": {{JSON.stringify($json.urgency)}},\n    \"u_device_type\": {{JSON.stringify($json.device_type)}},\n    \"u_ip_requirements\": {{JSON.stringify($json.ip_requirements)}},\n    \"u_security_requirements\": {{JSON.stringify($json.security_requirements)}},\n    \"u_compliance_needed\": {{JSON.stringify($json.compliance_needed || false)}},\n    \"u_aruba_central_group\": {{JSON.stringify($json.central_group)}},\n    \"u_deployment_timeline\": {{JSON.stringify($json.deployment_timeline)}}\n  }\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "get-catalog-items",
+      "name": "Get Service Catalog Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/sn_sc/servicecatalog/items?sysparm_category={{$json.category || 'Network Services'}}&sysparm_limit={{$json.limit || 50}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "get-request-status",
+      "name": "Get Request Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "{{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/now/table/sc_request/{{$json.request_id || $json.sys_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "process-approval",
+      "name": "Process Request Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 400],
+      "parameters": {
+        "method": "PUT",
+        "url": "{{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/now/table/sysapproval_approver/{{$json.approval_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"state\": {{JSON.stringify($json.operation === 'approve_request' ? 'approved' : 'rejected')}},\n  \"comments\": {{JSON.stringify($json.approval_comments || `Request ${$json.operation === 'approve_request' ? 'approved' : 'rejected'} via automation`)}},\n  \"approver\": {{JSON.stringify($json.approver || 'aruba.automation@company.com')}},\n  \"approval_date\": {{JSON.stringify(new Date().toISOString())}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "fulfill-request",
+      "name": "Fulfill Service Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 500],
+      "parameters": {
+        "method": "PUT",
+        "url": "{{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/now/table/sc_req_item/{{$json.request_item_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"state\": \"3\",\n  \"work_notes\": {{JSON.stringify($json.fulfillment_notes || `Request fulfilled via Aruba automation at ${new Date().toISOString()}`)}},\n  \"u_deployment_status\": {{JSON.stringify($json.deployment_status || \"Completed\")}},\n  \"u_aruba_device_serial\": {{JSON.stringify($json.device_serial)}},\n  \"u_aruba_device_ip\": {{JSON.stringify($json.device_ip)}},\n  \"u_aruba_central_url\": {{JSON.stringify($json.central_url)}},\n  \"u_configuration_applied\": {{JSON.stringify($json.configuration_applied || true)}},\n  \"u_fulfillment_timestamp\": {{JSON.stringify(new Date().toISOString())}},\n  \"close_notes\": {{JSON.stringify($json.close_notes || \"Request completed successfully\")}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "process-request-results",
+      "name": "Process Request Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1350, 300],
+      "parameters": {
+        "functionCode": "// Process ServiceNow service request operation results\nconst input = items[0].json;\nconst originalRequest = $('Validate Service Request').first().json;\n\nlet result = {\n  request_id: originalRequest.request_id,\n  operation: originalRequest.operation,\n  request_type: originalRequest.request_type,\n  timestamp: new Date().toISOString(),\n  status: 'success',\n  message: 'ServiceNow service request operation completed successfully'\n};\n\ntry {\n  if (input.error) {\n    result.status = 'error';\n    result.message = input.error.message || input.error;\n    result.error_details = input.error;\n  } else {\n    result.data = input;\n    \n    // Operation-specific processing\n    switch (originalRequest.operation) {\n      case 'submit_request':\n        result.message = `Service request submitted successfully: ${input.result?.number || 'Unknown'}`;\n        result.request_number = input.result?.number;\n        result.request_sys_id = input.result?.sys_id;\n        result.request_state = input.result?.state;\n        result.requested_for = originalRequest.requested_for;\n        break;\n        \n      case 'get_request_status':\n        result.message = `Request status retrieved: ${input.result?.state || 'Unknown'}`;\n        result.request_sys_id = originalRequest.request_id;\n        result.current_state = input.result?.state;\n        result.approval_status = input.result?.approval;\n        result.stage = input.result?.stage;\n        break;\n        \n      case 'get_catalog_items':\n        result.message = `Found ${input.result?.length || 0} catalog items`;\n        result.catalog_count = input.result?.length || 0;\n        result.catalog_items = input.result?.map(item => ({\n          sys_id: item.sys_id,\n          name: item.name,\n          short_description: item.short_description,\n          category: item.category,\n          price: item.price\n        })) || [];\n        break;\n        \n      case 'approve_request':\n      case 'reject_request':\n        const action = originalRequest.operation === 'approve_request' ? 'approved' : 'rejected';\n        result.message = `Request ${action} successfully`;\n        result.approval_id = originalRequest.approval_id;\n        result.approval_action = action;\n        result.approver = originalRequest.approver;\n        break;\n        \n      case 'fulfill_request':\n        result.message = `Request ${originalRequest.request_item_id} fulfilled successfully`;\n        result.request_item_id = originalRequest.request_item_id;\n        result.deployment_status = originalRequest.deployment_status;\n        result.device_serial = originalRequest.device_serial;\n        result.device_ip = originalRequest.device_ip;\n        break;\n        \n      default:\n        result.message = `${originalRequest.operation} completed successfully`;\n    }\n    \n    // Add request details if available\n    if (originalRequest.device_type || originalRequest.location) {\n      result.request_details = {\n        device_type: originalRequest.device_type,\n        location: originalRequest.location,\n        vlan_id: originalRequest.vlan_id,\n        ssid_name: originalRequest.ssid_name,\n        justification: originalRequest.justification\n      };\n    }\n  }\n} catch (error) {\n  result.status = 'error';\n  result.message = 'Error processing ServiceNow service request operation result';\n  result.error_details = error.message;\n}\n\nreturn [{ json: result }];"
+      }
+    },
+    {
+      "id": "generate-request-alerts",
+      "name": "Generate Request Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1550, 300],
+      "parameters": {
+        "functionCode": "// Generate intelligent service request alerts\nconst result = items[0].json;\nconst originalRequest = $('Validate Service Request').first().json;\n\nlet notifications = [];\n\n// Determine alert level and channels\nlet alertLevel = 'info';\nlet channels = ['#servicenow-requests'];\n\nif (result.status === 'error') {\n  alertLevel = 'error';\n  channels.push('#network-alerts');\n} else if (originalRequest.priority === '1' || originalRequest.priority === '2') {\n  alertLevel = 'warning';\n  channels.push('#network-operations');\n}\n\n// Create notifications for each channel\nchannels.forEach(channel => {\n  let icon = '📋';\n  if (alertLevel === 'error') icon = '❌';\n  else if (alertLevel === 'warning') icon = '⚠️';\n  else if (result.status === 'success') icon = '✅';\n  \n  let message = `${icon} **ServiceNow Service Request Operation**\\\\n`;\n  message += `**Operation**: ${result.operation}\\\\n`;\n  message += `**Status**: ${result.status.toUpperCase()}\\\\n`;\n  message += `**Message**: ${result.message}\\\\n`;\n  message += `**Time**: ${result.timestamp}\\\\n`;\n  message += `**Request ID**: ${result.request_id}\\\\n`;\n  \n  // Add operation-specific details\n  if (result.request_number) {\n    message += `**Request Number**: ${result.request_number}\\\\n`;\n  }\n  \n  if (result.request_sys_id) {\n    message += `**Request System ID**: ${result.request_sys_id}\\\\n`;\n  }\n  \n  if (result.requested_for) {\n    message += `**Requested For**: ${result.requested_for}\\\\n`;\n  }\n  \n  if (result.current_state) {\n    message += `**Current State**: ${result.current_state}\\\\n`;\n  }\n  \n  if (result.approval_action) {\n    message += `**Approval Action**: ${result.approval_action.toUpperCase()}\\\\n`;\n    message += `**Approver**: ${result.approver || 'System'}\\\\n`;\n  }\n  \n  if (result.catalog_count !== undefined) {\n    message += `**Catalog Items Found**: ${result.catalog_count}\\\\n`;\n  }\n  \n  // Add request details\n  if (result.request_details) {\n    message += `\\\\n**Request Details**:\\\\n`;\n    if (result.request_details.device_type) {\n      message += `• **Device Type**: ${result.request_details.device_type}\\\\n`;\n    }\n    if (result.request_details.location) {\n      message += `• **Location**: ${result.request_details.location}\\\\n`;\n    }\n    if (result.request_details.vlan_id) {\n      message += `• **VLAN**: ${result.request_details.vlan_id}\\\\n`;\n    }\n    if (result.request_details.ssid_name) {\n      message += `• **SSID**: ${result.request_details.ssid_name}\\\\n`;\n    }\n    if (result.request_details.justification) {\n      message += `• **Justification**: ${result.request_details.justification}\\\\n`;\n    }\n  }\n  \n  // Add fulfillment details\n  if (result.deployment_status) {\n    message += `\\\\n**Fulfillment Details**:\\\\n`;\n    message += `• **Deployment Status**: ${result.deployment_status}\\\\n`;\n    if (result.device_serial) {\n      message += `• **Device Serial**: ${result.device_serial}\\\\n`;\n    }\n    if (result.device_ip) {\n      message += `• **Device IP**: ${result.device_ip}\\\\n`;\n    }\n  }\n  \n  // Add catalog items for catalog operations\n  if (result.catalog_items && result.catalog_items.length > 0) {\n    message += `\\\\n**Available Catalog Items**:\\\\n`;\n    result.catalog_items.slice(0, 5).forEach(item => {\n      message += `• ${item.name}: ${item.short_description}\\\\n`;\n    });\n    if (result.catalog_items.length > 5) {\n      message += `• ... and ${result.catalog_items.length - 5} more items\\\\n`;\n    }\n  }\n  \n  // Add error details if applicable\n  if (result.status === 'error' && result.error_details) {\n    message += `\\\\n**Error Details**: ${JSON.stringify(result.error_details)}\\\\n`;\n  }\n  \n  notifications.push({\n    json: {\n      channel: channel,\n      message: message,\n      alert_level: alertLevel,\n      result: result\n    }\n  });\n});\n\nreturn notifications;"
+      }
+    },
+    {
+      "id": "send-slack-notification",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1750, 300],
+      "parameters": {
+        "channel": "={{$json.channel}}",
+        "text": "={{$json.message}}",
+        "attachments": [],
+        "otherOptions": {}
+      }
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1950, 300],
+      "parameters": {
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "ServiceNow Service Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Service Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Service Request": {
+      "main": [
+        [
+          {
+            "node": "Set ServiceNow Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set ServiceNow Config": {
+      "main": [
+        [
+          {
+            "node": "Route Service Request Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Service Request Operation": {
+      "main": [
+        [
+          {
+            "node": "Submit Service Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Service Catalog Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Request Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Request Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fulfill Service Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Request Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Service Request": {
+      "main": [
+        [
+          {
+            "node": "Process Request Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Service Catalog Items": {
+      "main": [
+        [
+          {
+            "node": "Process Request Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Request Status": {
+      "main": [
+        [
+          {
+            "node": "Process Request Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Request Approval": {
+      "main": [
+        [
+          {
+            "node": "Process Request Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fulfill Service Request": {
+      "main": [
+        [
+          {
+            "node": "Process Request Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Request Results": {
+      "main": [
+        [
+          {
+            "node": "Generate Request Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Request Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "createdAt": "2025-07-17T22:51:00.001Z",
+  "updatedAt": "2025-07-17T22:51:00.001Z"
+}

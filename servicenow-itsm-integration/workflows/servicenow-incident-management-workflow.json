@@ -1,0 +1,547 @@
+{
+  "name": "ServiceNow Incident Management Automation",
+  "id": "xSsc878vFu5nG8OX",
+  "active": false,
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "ServiceNow Incident Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {
+        "path": "servicenow-incident",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Incident Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "parameters": {
+        "functionCode": "// ServiceNow Incident Management Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation', 'incident_type'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'create_incident', 'update_incident', 'close_incident', 'assign_incident',\n  'add_work_notes', 'add_attachment', 'get_incident', 'query_incidents',\n  'escalate_incident', 'reopen_incident'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}`);\n}\n\n// Valid incident types\nconst validIncidentTypes = ['network', 'security', 'hardware', 'software', 'performance'];\nif (!validIncidentTypes.includes(input.incident_type)) {\n  throw new Error(`Invalid incident type: ${input.incident_type}`);\n}\n\n// Operation-specific validation\nif (input.operation === 'create_incident') {\n  if (!input.short_description) {\n    throw new Error('create_incident requires short_description');\n  }\n  if (!input.device_name && !input.description) {\n    throw new Error('create_incident requires either device_name or description');\n  }\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `snow-inc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed',\n  \n  // Set ServiceNow defaults\n  priority: input.priority || '3',\n  impact: input.impact || '2',\n  urgency: input.urgency || '2',\n  category: input.category || 'Network',\n  subcategory: input.subcategory || (input.incident_type === 'network' ? 'Wireless' : 'General'),\n  assignment_group: input.assignment_group || 'Network Operations',\n  caller_id: input.caller_id || 'aruba.automation@company.com'\n};\n\nreturn [{ json: validatedInput }];"
+      }
+    },
+    {
+      "id": "set-servicenow-config",
+      "name": "Set ServiceNow Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "snow_base_url",
+              "name": "snow_base_url",
+              "value": "{{$json.instance_url || 'https://company.service-now.com'}}",
+              "type": "string"
+            },
+            {
+              "id": "snow_auth_token",
+              "name": "snow_auth_token",
+              "value": "{{$json.auth_token || 'default-token'}}",
+              "type": "string"
+            },
+            {
+              "id": "snow_username",
+              "name": "snow_username",
+              "value": "{{$json.username || 'aruba_automation'}}",
+              "type": "string"
+            },
+            {
+              "id": "snow_password",
+              "name": "snow_password",
+              "value": "{{$json.password || 'default-password'}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "route-incident-operation",
+      "name": "Route Incident Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "equals",
+                    "value2": "create_incident"
+                  }
+                ]
+              },
+              "renameOutput": "Create Incident"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "equals",
+                    "value2": "update_incident"
+                  }
+                ]
+              },
+              "renameOutput": "Update Incident"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "equals",
+                    "value2": "query_incidents"
+                  }
+                ]
+              },
+              "renameOutput": "Query Incidents"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "work_notes"
+                  }
+                ]
+              },
+              "renameOutput": "Work Notes"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "assign"
+                  }
+                ]
+              },
+              "renameOutput": "Assignment"
+            }
+          ]
+        },
+        "fallbackOutput": "defaultOutput"
+      }
+    },
+    {
+      "id": "create-incident",
+      "name": "Create ServiceNow Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 100],
+      "parameters": {
+        "method": "POST",
+        "url": "{{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/now/table/incident",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"short_description\": {{JSON.stringify($json.short_description)}},\n  \"description\": {{JSON.stringify($json.description || `Automated incident for ${$json.device_name || 'network device'}: ${$json.short_description}`)}},\n  \"category\": {{JSON.stringify($json.category)}},\n  \"subcategory\": {{JSON.stringify($json.subcategory)}},\n  \"priority\": {{JSON.stringify($json.priority)}},\n  \"impact\": {{JSON.stringify($json.impact)}},\n  \"urgency\": {{JSON.stringify($json.urgency)}},\n  \"caller_id\": {{JSON.stringify($json.caller_id)}},\n  \"assignment_group\": {{JSON.stringify($json.assignment_group)}},\n  \"business_service\": {{JSON.stringify($json.business_service || \"Network Infrastructure\")}},\n  \"cmdb_ci\": {{JSON.stringify($json.device_name || $json.cmdb_ci)}},\n  \"location\": {{JSON.stringify($json.location)}},\n  \"u_aruba_device_type\": {{JSON.stringify($json.device_type)}},\n  \"u_aruba_device_name\": {{JSON.stringify($json.device_name)}},\n  \"u_aruba_ip_address\": {{JSON.stringify($json.device_ip)}},\n  \"u_aruba_mac_address\": {{JSON.stringify($json.device_mac)}},\n  \"u_aruba_serial\": {{JSON.stringify($json.device_serial)}},\n  \"u_aruba_central_url\": {{JSON.stringify($json.central_url)}},\n  \"u_automation_source\": \"Aruba Network Automation\",\n  \"state\": \"1\"\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "update-incident",
+      "name": "Update ServiceNow Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 200],
+      "parameters": {
+        "method": "PUT",
+        "url": "{{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/now/table/incident/{{$json.incident_id || $json.sys_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"state\": {{JSON.stringify($json.state || \"2\")}},\n  \"work_notes\": {{JSON.stringify($json.work_notes || `Incident updated via Aruba automation at ${new Date().toISOString()}`)}},\n  \"assigned_to\": {{JSON.stringify($json.assigned_to)}},\n  \"assignment_group\": {{JSON.stringify($json.assignment_group)}},\n  \"priority\": {{JSON.stringify($json.priority)}},\n  \"resolution_code\": {{JSON.stringify($json.resolution_code)}},\n  \"close_notes\": {{JSON.stringify($json.close_notes)}},\n  \"u_automation_update\": {{JSON.stringify(new Date().toISOString())}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "query-incidents",
+      "name": "Query ServiceNow Incidents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/now/table/incident?sysparm_query={{$json.query || `category=${$json.category || 'Network'}^state!=6^state!=7`}}&sysparm_limit={{$json.limit || 50}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "add-work-notes",
+      "name": "Add Work Notes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "{{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/now/table/sys_journal_field",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"element\": \"work_notes\",\n  \"element_id\": {{JSON.stringify($json.incident_id || $json.sys_id)}},\n  \"table\": \"incident\",\n  \"value\": {{JSON.stringify($json.work_notes || `Automated update from Aruba system: ${$json.message || 'Status updated'}`)}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "assign-incident",
+      "name": "Assign Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 500],
+      "parameters": {
+        "method": "PUT",
+        "url": "{{$node[\"Set ServiceNow Config\"].json[\"snow_base_url\"]}}/api/now/table/incident/{{$json.incident_id || $json.sys_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"assignment_group\": {{JSON.stringify($json.assignment_group)}},\n  \"assigned_to\": {{JSON.stringify($json.assigned_to)}},\n  \"state\": {{JSON.stringify($json.state || \"2\")}},\n  \"work_notes\": {{JSON.stringify($json.work_notes || `Incident assigned to ${$json.assignment_group} via automation`)}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "process-incident-results",
+      "name": "Process Incident Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1350, 300],
+      "parameters": {
+        "functionCode": "// Process ServiceNow incident operation results\nconst input = items[0].json;\nconst originalRequest = $('Validate Incident Request').first().json;\n\nlet result = {\n  request_id: originalRequest.request_id,\n  operation: originalRequest.operation,\n  incident_type: originalRequest.incident_type,\n  timestamp: new Date().toISOString(),\n  status: 'success',\n  message: 'ServiceNow incident operation completed successfully'\n};\n\ntry {\n  if (input.error) {\n    result.status = 'error';\n    result.message = input.error.message || input.error;\n    result.error_details = input.error;\n  } else {\n    result.data = input;\n    \n    // Operation-specific processing\n    switch (originalRequest.operation) {\n      case 'create_incident':\n        result.message = `Incident created successfully: ${input.result?.number || 'Unknown'}`;\n        result.incident_number = input.result?.number;\n        result.incident_sys_id = input.result?.sys_id;\n        result.incident_state = input.result?.state;\n        break;\n        \n      case 'update_incident':\n        result.message = `Incident ${originalRequest.incident_id} updated successfully`;\n        result.incident_sys_id = originalRequest.incident_id;\n        result.updated_fields = Object.keys(input.result || {});\n        break;\n        \n      case 'query_incidents':\n        result.message = `Found ${input.result?.length || 0} incidents`;\n        result.incident_count = input.result?.length || 0;\n        result.incidents = input.result?.map(inc => ({\n          number: inc.number,\n          sys_id: inc.sys_id,\n          short_description: inc.short_description,\n          state: inc.state,\n          priority: inc.priority\n        })) || [];\n        break;\n        \n      case 'add_work_notes':\n        result.message = `Work notes added to incident ${originalRequest.incident_id}`;\n        result.incident_sys_id = originalRequest.incident_id;\n        result.journal_entry = input.result?.sys_id;\n        break;\n        \n      case 'assign_incident':\n        result.message = `Incident ${originalRequest.incident_id} assigned to ${originalRequest.assignment_group}`;\n        result.incident_sys_id = originalRequest.incident_id;\n        result.assignment_group = originalRequest.assignment_group;\n        result.assigned_to = originalRequest.assigned_to;\n        break;\n        \n      case 'close_incident':\n        result.message = `Incident ${originalRequest.incident_id} closed successfully`;\n        result.incident_sys_id = originalRequest.incident_id;\n        result.resolution_code = originalRequest.resolution_code;\n        break;\n        \n      default:\n        result.message = `${originalRequest.operation} completed successfully`;\n    }\n    \n    // Add device information if available\n    if (originalRequest.device_name) {\n      result.device_info = {\n        name: originalRequest.device_name,\n        type: originalRequest.device_type,\n        ip: originalRequest.device_ip,\n        location: originalRequest.location\n      };\n    }\n  }\n} catch (error) {\n  result.status = 'error';\n  result.message = 'Error processing ServiceNow incident operation result';\n  result.error_details = error.message;\n}\n\nreturn [{ json: result }];"
+      }
+    },
+    {
+      "id": "generate-incident-alerts",
+      "name": "Generate Incident Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1550, 300],
+      "parameters": {
+        "functionCode": "// Generate intelligent incident alerts\nconst result = items[0].json;\nconst originalRequest = $('Validate Incident Request').first().json;\n\nlet notifications = [];\n\n// Determine alert level and channels\nlet alertLevel = 'info';\nlet channels = ['#servicenow-integration'];\n\nif (result.status === 'error') {\n  alertLevel = 'error';\n  channels.push('#network-alerts');\n} else if (originalRequest.priority === '1' || originalRequest.priority === '2') {\n  alertLevel = 'warning';\n  channels.push('#network-operations');\n}\n\n// Create notifications for each channel\nchannels.forEach(channel => {\n  let icon = '🎫';\n  if (alertLevel === 'error') icon = '❌';\n  else if (alertLevel === 'warning') icon = '⚠️';\n  else if (result.status === 'success') icon = '✅';\n  \n  let message = `${icon} **ServiceNow Incident Operation**\\\\n`;\n  message += `**Operation**: ${result.operation}\\\\n`;\n  message += `**Status**: ${result.status.toUpperCase()}\\\\n`;\n  message += `**Message**: ${result.message}\\\\n`;\n  message += `**Time**: ${result.timestamp}\\\\n`;\n  message += `**Request ID**: ${result.request_id}\\\\n`;\n  \n  // Add operation-specific details\n  if (result.incident_number) {\n    message += `**Incident Number**: ${result.incident_number}\\\\n`;\n  }\n  \n  if (result.incident_sys_id) {\n    message += `**Incident ID**: ${result.incident_sys_id}\\\\n`;\n  }\n  \n  if (result.incident_count !== undefined) {\n    message += `**Incidents Found**: ${result.incident_count}\\\\n`;\n  }\n  \n  if (result.assignment_group) {\n    message += `**Assigned To**: ${result.assignment_group}\\\\n`;\n  }\n  \n  // Add device information\n  if (result.device_info) {\n    message += `\\\\n**Device Information**:\\\\n`;\n    message += `• **Name**: ${result.device_info.name}\\\\n`;\n    if (result.device_info.type) {\n      message += `• **Type**: ${result.device_info.type}\\\\n`;\n    }\n    if (result.device_info.ip) {\n      message += `• **IP**: ${result.device_info.ip}\\\\n`;\n    }\n    if (result.device_info.location) {\n      message += `• **Location**: ${result.device_info.location}\\\\n`;\n    }\n  }\n  \n  // Add incident list for queries\n  if (result.incidents && result.incidents.length > 0) {\n    message += `\\\\n**Recent Incidents**:\\\\n`;\n    result.incidents.slice(0, 5).forEach(incident => {\n      message += `• ${incident.number}: ${incident.short_description}\\\\n`;\n    });\n    if (result.incidents.length > 5) {\n      message += `• ... and ${result.incidents.length - 5} more\\\\n`;\n    }\n  }\n  \n  // Add error details if applicable\n  if (result.status === 'error' && result.error_details) {\n    message += `\\\\n**Error Details**: ${JSON.stringify(result.error_details)}\\\\n`;\n  }\n  \n  notifications.push({\n    json: {\n      channel: channel,\n      message: message,\n      alert_level: alertLevel,\n      result: result\n    }\n  });\n});\n\nreturn notifications;"
+      }
+    },
+    {
+      "id": "send-slack-notification",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1750, 300],
+      "parameters": {
+        "channel": "={{$json.channel}}",
+        "text": "={{$json.message}}",
+        "attachments": [],
+        "otherOptions": {}
+      }
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1950, 300],
+      "parameters": {
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "ServiceNow Incident Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Incident Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Incident Request": {
+      "main": [
+        [
+          {
+            "node": "Set ServiceNow Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set ServiceNow Config": {
+      "main": [
+        [
+          {
+            "node": "Route Incident Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Incident Operation": {
+      "main": [
+        [
+          {
+            "node": "Create ServiceNow Incident",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update ServiceNow Incident",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Query ServiceNow Incidents",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Add Work Notes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Assign Incident",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Incident Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create ServiceNow Incident": {
+      "main": [
+        [
+          {
+            "node": "Process Incident Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update ServiceNow Incident": {
+      "main": [
+        [
+          {
+            "node": "Process Incident Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query ServiceNow Incidents": {
+      "main": [
+        [
+          {
+            "node": "Process Incident Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Work Notes": {
+      "main": [
+        [
+          {
+            "node": "Process Incident Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assign Incident": {
+      "main": [
+        [
+          {
+            "node": "Process Incident Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Incident Results": {
+      "main": [
+        [
+          {
+            "node": "Generate Incident Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Incident Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "createdAt": "2025-07-17T22:36:51.420Z",
+  "updatedAt": "2025-07-17T22:36:51.420Z"
+}

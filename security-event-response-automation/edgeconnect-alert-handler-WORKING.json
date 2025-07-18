@@ -1,0 +1,187 @@
+{
+  "name": "EdgeConnect Alert Handler",
+  "nodes": [
+    {
+      "id": "webhook-1",
+      "name": "EdgeConnect Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "parameters": {
+        "path": "edgeconnect-alert",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "validate-1",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "parameters": {
+        "functionCode": "// Validate EdgeConnect alert payload\nconst payload = $input.first().json;\n\nif (!payload.alert_type || !payload.device_id || !payload.severity) {\n  throw new Error('Invalid EdgeConnect alert payload: missing required fields');\n}\n\n// Parse and enrich the alert\nreturn [{\n  json: {\n    ...payload,\n    processed_at: new Date().toISOString(),\n    source: 'EdgeConnect',\n    validated: true\n  }\n}];"
+      }
+    },
+    {
+      "id": "route-1",
+      "name": "Route by Severity",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "parameters": {
+        "values": {
+          "options": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "condition-1",
+                    "leftValue": "={{$json.severity}}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 0
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "condition-2",
+                    "leftValue": "={{$json.severity}}",
+                    "rightValue": "warning",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "critical-1",
+      "name": "Handle Critical",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "parameters": {
+        "functionCode": "// Handle critical alerts immediately\nconst alert = $input.first().json;\n\nreturn [{\n  json: {\n    action: 'immediate_escalation',\n    message: `CRITICAL EdgeConnect Alert: ${alert.alert_type} on device ${alert.device_id}`,\n    notify: ['ops-team', 'network-team', 'management'],\n    priority: 'P1',\n    ...alert\n  }\n}];"
+      }
+    },
+    {
+      "id": "warning-1",
+      "name": "Handle Warning",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "parameters": {
+        "functionCode": "// Handle warning alerts\nconst alert = $input.first().json;\n\nreturn [{\n  json: {\n    action: 'standard_notification',\n    message: `Warning EdgeConnect Alert: ${alert.alert_type} on device ${alert.device_id}`,\n    notify: ['network-team'],\n    priority: 'P3',\n    ...alert\n  }\n}];"
+      }
+    },
+    {
+      "id": "response-1",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"received\", \"message\": \"Alert processed successfully\", \"alert_id\": $json.device_id + \"-\" + $json.processed_at } }}"
+      }
+    }
+  ],
+  "connections": {
+    "EdgeConnect Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Route by Severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Severity": {
+      "main": [
+        [
+          {
+            "node": "Handle Critical",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Warning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Critical": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Warning": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "active": false
+}

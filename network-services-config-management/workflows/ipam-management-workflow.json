@@ -1,0 +1,522 @@
+{
+  "name": "IPAM Management Automation",
+  "id": "mwlNopavc6S6g9zq",
+  "active": false,
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "IPAM Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {
+        "path": "ipam-management",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate IPAM Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "parameters": {
+        "functionCode": "// IPAM Management Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation', 'resource_type'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'create_pool', 'update_pool', 'delete_pool', 'list_pools',\n  'allocate_ip', 'release_ip', 'reserve_ip', 'list_allocations',\n  'create_dhcp_scope', 'update_dhcp_scope', 'delete_dhcp_scope',\n  'create_dns_zone', 'update_dns_record', 'delete_dns_record',\n  'create_vlan_mapping', 'update_subnet', 'list_utilization'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}`);\n}\n\n// Valid resource types\nconst validResourceTypes = ['ip_pool', 'dhcp_scope', 'dns_zone', 'vlan_mapping', 'ip_allocation'];\nif (!validResourceTypes.includes(input.resource_type)) {\n  throw new Error(`Invalid resource type: ${input.resource_type}`);\n}\n\n// Operation-specific validation\nif (input.operation.includes('create') || input.operation.includes('update')) {\n  if (input.resource_type === 'ip_pool') {\n    if (!input.network || !input.pool_name) {\n      throw new Error('IP pool operations require network and pool_name');\n    }\n    \n    // Validate CIDR notation\n    const cidrRegex = /^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/([0-9]|[1-2][0-9]|3[0-2])$/;\n    if (!cidrRegex.test(input.network)) {\n      throw new Error('Invalid CIDR notation for network');\n    }\n  }\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `ipam-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      }
+    },
+    {
+      "id": "set-ipam-config",
+      "name": "Set IPAM Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ipam_base_url",
+              "name": "ipam_base_url",
+              "value": "ipms-config/v1/node_list/group/default/config",
+              "type": "string"
+            },
+            {
+              "id": "ipam_api_token",
+              "name": "ipam_api_token",
+              "value": "{{$json.api_token || 'default-token'}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "route-operation",
+      "name": "Route IPAM Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "startsWith",
+                    "value2": "create_pool"
+                  }
+                ]
+              },
+              "renameOutput": "IP Pool Creation"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "startsWith",
+                    "value2": "allocate_ip"
+                  }
+                ]
+              },
+              "renameOutput": "IP Allocation"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "dhcp"
+                  }
+                ]
+              },
+              "renameOutput": "DHCP Management"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "dns"
+                  }
+                ]
+              },
+              "renameOutput": "DNS Management"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "vlan"
+                  }
+                ]
+              },
+              "renameOutput": "VLAN Management"
+            }
+          ]
+        },
+        "fallbackOutput": "defaultOutput"
+      }
+    },
+    {
+      "id": "ip-pool-management",
+      "name": "IP Pool Management",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 100],
+      "parameters": {
+        "method": "={{$json.operation.includes('create') ? 'POST' : $json.operation.includes('update') ? 'PUT' : $json.operation.includes('delete') ? 'DELETE' : 'GET'}}",
+        "url": "https://aruba-central.example.com/ipms-config/v1/node_list/group/default/config/address_pool={{$json.pool_name ? '/' + $json.pool_name : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set IPAM Config\"].json[\"ipam_api_token\"]}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"pool_name\": {{JSON.stringify($json.pool_name)}},\n  \"description\": {{JSON.stringify($json.description || \"Automated IP pool\")}},\n  \"network\": {{JSON.stringify($json.network)}},\n  \"gateway\": {{JSON.stringify($json.gateway)}},\n  \"dns_servers\": {{JSON.stringify($json.dns_servers || [\"8.8.8.8\", \"8.8.4.4\"])}},\n  \"domain\": {{JSON.stringify($json.domain || \"local\")}},\n  \"pool_type\": {{JSON.stringify($json.pool_type || \"dynamic\")}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "ip-allocation-management",
+      "name": "IP Allocation Management",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 200],
+      "parameters": {
+        "method": "={{$json.operation === 'allocate_ip' ? 'POST' : $json.operation === 'release_ip' ? 'DELETE' : 'GET'}}",
+        "url": "https://aruba-central.example.com/ipms-config/v1/node_list/group/default/config/address_pool/{{$json.pool_name}}/ip_range={{$json.range_id ? '/' + $json.range_id : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set IPAM Config\"].json[\"ipam_api_token\"]}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"start_ip\": {{JSON.stringify($json.start_ip)}},\n  \"end_ip\": {{JSON.stringify($json.end_ip)}},\n  \"allocation_type\": {{JSON.stringify($json.allocation_type || \"dynamic\")}},\n  \"description\": {{JSON.stringify($json.description || \"Automated allocation\")}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "dhcp-management",
+      "name": "DHCP Scope Management",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 300],
+      "parameters": {
+        "method": "={{$json.operation.includes('create') ? 'POST' : $json.operation.includes('update') ? 'PUT' : $json.operation.includes('delete') ? 'DELETE' : 'GET'}}",
+        "url": "https://aruba-central.example.com/dhcp-config/v1/node_list/group/default/config/dhcp_scope={{$json.scope_name ? '/' + $json.scope_name : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set IPAM Config\"].json[\"ipam_api_token\"]}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"scope_name\": {{JSON.stringify($json.scope_name)}},\n  \"description\": {{JSON.stringify($json.description || \"Automated DHCP scope\")}},\n  \"start_ip\": {{JSON.stringify($json.start_ip)}},\n  \"end_ip\": {{JSON.stringify($json.end_ip)}},\n  \"gateway\": {{JSON.stringify($json.gateway)}},\n  \"dns_servers\": {{JSON.stringify($json.dns_servers || [\"8.8.8.8\", \"8.8.4.4\"])}},\n  \"lease_time\": {{JSON.stringify($json.lease_time || 86400)}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "dns-management",
+      "name": "DNS Zone Management",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 400],
+      "parameters": {
+        "method": "={{$json.operation.includes('create') ? 'POST' : $json.operation.includes('update') ? 'PUT' : $json.operation.includes('delete') ? 'DELETE' : 'GET'}}",
+        "url": "https://aruba-central.example.com/dns-config/v1/node_list/group/default/config/dns_zone={{$json.zone_name ? '/' + $json.zone_name : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set IPAM Config\"].json[\"ipam_api_token\"]}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"zone_name\": {{JSON.stringify($json.zone_name)}},\n  \"zone_type\": {{JSON.stringify($json.zone_type || \"forward\")}},\n  \"description\": {{JSON.stringify($json.description || \"Automated DNS zone\")}},\n  \"primary_server\": {{JSON.stringify($json.primary_server)}},\n  \"admin_email\": {{JSON.stringify($json.admin_email || \"admin@company.local\")}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "vlan-subnet-management",
+      "name": "VLAN Subnet Management",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 500],
+      "parameters": {
+        "method": "={{$json.operation.includes('create') ? 'POST' : $json.operation.includes('update') ? 'PUT' : $json.operation.includes('delete') ? 'DELETE' : 'GET'}}",
+        "url": "https://aruba-central.example.com/vlan-config/v1/node_list/group/default/config/vlan_mapping={{$json.vlan_id ? '/' + $json.vlan_id : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$node[\"Set IPAM Config\"].json[\"ipam_api_token\"]}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vlan_id\": {{JSON.stringify($json.vlan_id)}},\n  \"vlan_name\": {{JSON.stringify($json.vlan_name)}},\n  \"subnet\": {{JSON.stringify($json.subnet)}},\n  \"gateway\": {{JSON.stringify($json.gateway)}},\n  \"dhcp_enabled\": {{JSON.stringify($json.dhcp_enabled !== false)}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "process-results",
+      "name": "Process IPAM Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1350, 300],
+      "parameters": {
+        "functionCode": "// Process IPAM operation results\nconst input = items[0].json;\nconst originalRequest = $('Validate IPAM Request').first().json;\n\nlet result = {\n  request_id: originalRequest.request_id,\n  operation: originalRequest.operation,\n  resource_type: originalRequest.resource_type,\n  timestamp: new Date().toISOString(),\n  status: 'success',\n  message: 'IPAM operation completed successfully'\n};\n\ntry {\n  if (input.error) {\n    result.status = 'error';\n    result.message = input.error;\n    result.error_details = input;\n  } else {\n    result.data = input;\n    \n    switch (originalRequest.operation) {\n      case 'create_pool':\n        result.message = `IP pool '${originalRequest.pool_name}' created successfully`;\n        result.pool_id = input.pool_id || input.id;\n        result.network = originalRequest.network;\n        break;\n        \n      case 'allocate_ip':\n        result.message = `IP allocation completed successfully`;\n        result.allocated_range = `${originalRequest.start_ip} - ${originalRequest.end_ip}`;\n        break;\n        \n      case 'create_dhcp_scope':\n        result.message = `DHCP scope '${originalRequest.scope_name}' created successfully`;\n        result.scope_id = input.scope_id || input.id;\n        break;\n        \n      case 'create_dns_zone':\n        result.message = `DNS zone '${originalRequest.zone_name}' created successfully`;\n        result.zone_id = input.zone_id || input.id;\n        break;\n        \n      case 'create_vlan_mapping':\n        result.message = `VLAN ${originalRequest.vlan_id} mapped successfully`;\n        result.vlan_id = originalRequest.vlan_id;\n        break;\n        \n      default:\n        result.message = `${originalRequest.operation} completed successfully`;\n    }\n  }\n} catch (error) {\n  result.status = 'error';\n  result.message = 'Error processing IPAM operation result';\n  result.error_details = error.message;\n}\n\nreturn [{ json: result }];"
+      }
+    },
+    {
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1550, 300],
+      "parameters": {
+        "channel": "#network-operations",
+        "text": "🔧 **IPAM Operation Report**\n**Operation**: {{$json.operation}}\n**Status**: {{$json.status.toUpperCase()}}\n**Message**: {{$json.message}}\n**Time**: {{$json.timestamp}}\n**Request ID**: {{$json.request_id}}",
+        "attachments": [],
+        "otherOptions": {}
+      }
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1750, 300],
+      "parameters": {
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "IPAM Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate IPAM Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate IPAM Request": {
+      "main": [
+        [
+          {
+            "node": "Set IPAM Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set IPAM Config": {
+      "main": [
+        [
+          {
+            "node": "Route IPAM Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route IPAM Operation": {
+      "main": [
+        [
+          {
+            "node": "IP Pool Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IP Allocation Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DHCP Scope Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DNS Zone Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "VLAN Subnet Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process IPAM Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IP Pool Management": {
+      "main": [
+        [
+          {
+            "node": "Process IPAM Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IP Allocation Management": {
+      "main": [
+        [
+          {
+            "node": "Process IPAM Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DHCP Scope Management": {
+      "main": [
+        [
+          {
+            "node": "Process IPAM Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DNS Zone Management": {
+      "main": [
+        [
+          {
+            "node": "Process IPAM Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VLAN Subnet Management": {
+      "main": [
+        [
+          {
+            "node": "Process IPAM Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process IPAM Results": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "createdAt": "2025-07-17T19:03:34.248Z",
+  "updatedAt": "2025-07-17T19:03:34.248Z"
+}

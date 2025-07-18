@@ -1,0 +1,42 @@
+{
+  "name": "SIEM Integration Management",
+  "id": "FxmGHmsX7t6EDzxo",
+  "webhook_url": "http://192.168.40.100:8006/webhook/siem-integration-management",
+  "created_at": "2025-07-17T15:12:48.940Z",
+  "description": "Comprehensive SIEM integration management workflow supporting connector setup, log collection, correlation rules, and deployment operations",
+  "features": [
+    "Multi-SIEM support (Splunk, QRadar, ArcSight, Sentinel, Elastic)",
+    "Connector lifecycle management",
+    "Log collector configuration and management", 
+    "Event correlation rule automation",
+    "Configuration deployment with rollback",
+    "Integration testing and validation",
+    "Comprehensive audit trail logging",
+    "Multi-channel notifications",
+    "Error handling and recovery"
+  ],
+  "supported_actions": [
+    "create_connector",
+    "update_connector", 
+    "delete_connector",
+    "test_connector",
+    "create_log_collector",
+    "update_log_collector",
+    "delete_log_collector",
+    "create_correlation_rule",
+    "update_correlation_rule",
+    "delete_correlation_rule",
+    "deploy_configuration",
+    "test_integration"
+  ],
+  "nodes": {
+    "total": 14,
+    "validation": 1,
+    "routing": 1,
+    "business_logic": 4,
+    "api_execution": 4,
+    "audit_logging": 1,
+    "notifications": 2,
+    "error_handling": 1
+  }
+}

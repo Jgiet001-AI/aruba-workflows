@@ -1,0 +1,572 @@
+{
+  "test_suite": "IPAM Management Test Examples",
+  "version": "1.0",
+  "created": "2025-01-17",
+  "webhook_endpoint": "/ipam-management",
+  "base_url": "http://your-n8n-instance:8006/webhook",
+  
+  "test_categories": {
+    "ip_pool_management": {
+      "description": "Test cases for IP pool operations",
+      "tests": {
+        "create_ip_pool_success": {
+          "description": "Successfully create a new IP pool",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_pool",
+            "resource_type": "ip_pool",
+            "pool_name": "Production-Pool-01",
+            "network": "10.0.0.0/16",
+            "gateway": "10.0.0.1",
+            "dns_servers": ["8.8.8.8", "8.8.4.4"],
+            "domain": "company.local",
+            "pool_type": "dynamic",
+            "description": "Production network pool for main office",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success",
+          "expected_fields": ["pool_id", "network", "message"]
+        },
+        
+        "create_ip_pool_invalid_cidr": {
+          "description": "Fail to create pool with invalid CIDR",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_pool",
+            "resource_type": "ip_pool",
+            "pool_name": "Invalid-Pool",
+            "network": "10.0.0.0/33",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "error",
+          "expected_error": "Invalid CIDR notation for network"
+        },
+        
+        "update_ip_pool": {
+          "description": "Update existing IP pool configuration",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "update_pool",
+            "resource_type": "ip_pool",
+            "pool_name": "Production-Pool-01",
+            "description": "Updated production network pool",
+            "dns_servers": ["1.1.1.1", "1.0.0.1"],
+            "domain": "updated.company.local",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "list_ip_pools": {
+          "description": "List all available IP pools",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "list_pools",
+            "resource_type": "ip_pool",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "delete_ip_pool": {
+          "description": "Delete IP pool",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "delete_pool",
+            "resource_type": "ip_pool",
+            "pool_name": "Test-Pool-Delete",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        }
+      }
+    },
+    
+    "ip_allocation_management": {
+      "description": "Test cases for IP allocation operations",
+      "tests": {
+        "allocate_ip_range": {
+          "description": "Allocate IP range within a pool",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "allocate_ip",
+            "resource_type": "ip_allocation",
+            "pool_name": "Production-Pool-01",
+            "start_ip": "10.0.1.100",
+            "end_ip": "10.0.1.200",
+            "allocation_type": "dynamic",
+            "description": "DHCP range for office devices",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success",
+          "expected_fields": ["allocated_range"]
+        },
+        
+        "allocate_static_ip": {
+          "description": "Allocate static IP addresses",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "allocate_ip",
+            "resource_type": "ip_allocation",
+            "pool_name": "Production-Pool-01",
+            "start_ip": "10.0.1.10",
+            "end_ip": "10.0.1.20",
+            "allocation_type": "static",
+            "description": "Static IPs for servers",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "release_ip_range": {
+          "description": "Release allocated IP range",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "release_ip",
+            "resource_type": "ip_allocation",
+            "pool_name": "Production-Pool-01",
+            "range_id": "range_12345",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "list_allocations": {
+          "description": "List all IP allocations",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "list_allocations",
+            "resource_type": "ip_allocation",
+            "pool_name": "Production-Pool-01",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        }
+      }
+    },
+    
+    "dhcp_scope_management": {
+      "description": "Test cases for DHCP scope operations",
+      "tests": {
+        "create_dhcp_scope": {
+          "description": "Create new DHCP scope",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_dhcp_scope",
+            "resource_type": "dhcp_scope",
+            "scope_name": "Office-DHCP-01",
+            "description": "Office DHCP scope for workstations",
+            "start_ip": "10.0.1.100",
+            "end_ip": "10.0.1.200",
+            "gateway": "10.0.1.1",
+            "dns_servers": ["8.8.8.8", "8.8.4.4"],
+            "lease_time": 86400,
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success",
+          "expected_fields": ["scope_id"]
+        },
+        
+        "create_dhcp_scope_guest": {
+          "description": "Create DHCP scope for guest network",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_dhcp_scope",
+            "resource_type": "dhcp_scope",
+            "scope_name": "Guest-DHCP-01",
+            "description": "Guest network DHCP scope",
+            "start_ip": "192.168.100.10",
+            "end_ip": "192.168.100.100",
+            "gateway": "192.168.100.1",
+            "dns_servers": ["8.8.8.8", "1.1.1.1"],
+            "lease_time": 3600,
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "update_dhcp_scope": {
+          "description": "Update DHCP scope configuration",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "update_dhcp_scope",
+            "resource_type": "dhcp_scope",
+            "scope_name": "Office-DHCP-01",
+            "lease_time": 43200,
+            "dns_servers": ["1.1.1.1", "1.0.0.1"],
+            "description": "Updated office DHCP scope",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "delete_dhcp_scope": {
+          "description": "Delete DHCP scope",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "delete_dhcp_scope",
+            "resource_type": "dhcp_scope",
+            "scope_name": "Test-DHCP-Delete",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        }
+      }
+    },
+    
+    "dns_zone_management": {
+      "description": "Test cases for DNS zone operations",
+      "tests": {
+        "create_forward_dns_zone": {
+          "description": "Create forward DNS zone",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_dns_zone",
+            "resource_type": "dns_zone",
+            "zone_name": "company.local",
+            "zone_type": "forward",
+            "description": "Primary forward DNS zone",
+            "primary_server": "dns1.company.local",
+            "admin_email": "admin@company.local",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success",
+          "expected_fields": ["zone_id"]
+        },
+        
+        "create_reverse_dns_zone": {
+          "description": "Create reverse DNS zone",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_dns_zone",
+            "resource_type": "dns_zone",
+            "zone_name": "0.10.in-addr.arpa",
+            "zone_type": "reverse",
+            "description": "Reverse DNS zone for 10.0.0.0/16",
+            "primary_server": "dns1.company.local",
+            "admin_email": "admin@company.local",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "update_dns_record": {
+          "description": "Update DNS record in zone",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "update_dns_record",
+            "resource_type": "dns_zone",
+            "zone_name": "company.local",
+            "record_name": "server1",
+            "record_type": "A",
+            "record_value": "10.0.1.10",
+            "ttl": 3600,
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "delete_dns_record": {
+          "description": "Delete DNS record from zone",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "delete_dns_record",
+            "resource_type": "dns_zone",
+            "zone_name": "company.local",
+            "record_name": "old-server",
+            "record_type": "A",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        }
+      }
+    },
+    
+    "vlan_subnet_management": {
+      "description": "Test cases for VLAN/subnet operations",
+      "tests": {
+        "create_vlan_mapping": {
+          "description": "Create VLAN to subnet mapping",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_vlan_mapping",
+            "resource_type": "vlan_mapping",
+            "vlan_id": 100,
+            "vlan_name": "Production",
+            "subnet": "10.0.100.0/24",
+            "gateway": "10.0.100.1",
+            "dhcp_enabled": true,
+            "description": "Production VLAN mapping",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success",
+          "expected_fields": ["vlan_id"]
+        },
+        
+        "create_guest_vlan_mapping": {
+          "description": "Create guest VLAN mapping",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_vlan_mapping",
+            "resource_type": "vlan_mapping",
+            "vlan_id": 200,
+            "vlan_name": "Guest",
+            "subnet": "192.168.200.0/24",
+            "gateway": "192.168.200.1",
+            "dhcp_enabled": true,
+            "description": "Guest network VLAN mapping",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "update_subnet_config": {
+          "description": "Update subnet configuration",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "update_subnet",
+            "resource_type": "vlan_mapping",
+            "vlan_id": 100,
+            "gateway": "10.0.100.254",
+            "dhcp_enabled": false,
+            "description": "Updated production VLAN - static only",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        },
+        
+        "list_utilization": {
+          "description": "Get IP utilization statistics",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "list_utilization",
+            "resource_type": "vlan_mapping",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "success"
+        }
+      }
+    },
+    
+    "error_scenarios": {
+      "description": "Test cases for error handling",
+      "tests": {
+        "missing_required_field": {
+          "description": "Test missing required operation field",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "resource_type": "ip_pool",
+            "pool_name": "Test-Pool",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "error",
+          "expected_error": "Missing required field: operation"
+        },
+        
+        "invalid_operation": {
+          "description": "Test invalid operation type",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "invalid_operation",
+            "resource_type": "ip_pool",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "error",
+          "expected_error": "Invalid operation: invalid_operation"
+        },
+        
+        "invalid_resource_type": {
+          "description": "Test invalid resource type",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_pool",
+            "resource_type": "invalid_resource",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "error",
+          "expected_error": "Invalid resource type: invalid_resource"
+        },
+        
+        "missing_pool_name": {
+          "description": "Test missing pool name for pool operation",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_pool",
+            "resource_type": "ip_pool",
+            "network": "10.0.0.0/16",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "error",
+          "expected_error": "IP pool operations require network and pool_name"
+        },
+        
+        "invalid_vlan_id": {
+          "description": "Test invalid VLAN ID (out of range)",
+          "method": "POST",
+          "endpoint": "/ipam-management",
+          "payload": {
+            "operation": "create_vlan_mapping",
+            "resource_type": "vlan_mapping",
+            "vlan_id": 5000,
+            "vlan_name": "Invalid",
+            "subnet": "10.0.0.0/24",
+            "api_token": "test-token-12345"
+          },
+          "expected_status": "error",
+          "expected_error": "VLAN ID must be between 1 and 4094"
+        }
+      }
+    }
+  },
+  
+  "performance_tests": {
+    "description": "Performance and load testing scenarios",
+    "tests": {
+      "bulk_pool_creation": {
+        "description": "Create multiple IP pools for load testing",
+        "test_type": "bulk",
+        "operations": [
+          {
+            "operation": "create_pool",
+            "resource_type": "ip_pool",
+            "pool_name": "Load-Test-Pool-01",
+            "network": "172.16.1.0/24",
+            "api_token": "test-token-12345"
+          },
+          {
+            "operation": "create_pool",
+            "resource_type": "ip_pool",
+            "pool_name": "Load-Test-Pool-02",
+            "network": "172.16.2.0/24",
+            "api_token": "test-token-12345"
+          },
+          {
+            "operation": "create_pool",
+            "resource_type": "ip_pool",
+            "pool_name": "Load-Test-Pool-03",
+            "network": "172.16.3.0/24",
+            "api_token": "test-token-12345"
+          }
+        ]
+      },
+      
+      "concurrent_allocations": {
+        "description": "Test concurrent IP allocations",
+        "test_type": "concurrent",
+        "operations": [
+          {
+            "operation": "allocate_ip",
+            "resource_type": "ip_allocation",
+            "pool_name": "Load-Test-Pool-01",
+            "start_ip": "172.16.1.100",
+            "end_ip": "172.16.1.150",
+            "api_token": "test-token-12345"
+          },
+          {
+            "operation": "allocate_ip",
+            "resource_type": "ip_allocation",
+            "pool_name": "Load-Test-Pool-01",
+            "start_ip": "172.16.1.151",
+            "end_ip": "172.16.1.200",
+            "api_token": "test-token-12345"
+          }
+        ]
+      }
+    }
+  },
+  
+  "integration_tests": {
+    "description": "End-to-end integration testing scenarios",
+    "tests": {
+      "complete_network_setup": {
+        "description": "Complete network setup workflow",
+        "steps": [
+          {
+            "step": 1,
+            "description": "Create IP pool",
+            "operation": "create_pool",
+            "resource_type": "ip_pool",
+            "pool_name": "Integration-Test-Pool",
+            "network": "10.100.0.0/16",
+            "gateway": "10.100.0.1",
+            "api_token": "test-token-12345"
+          },
+          {
+            "step": 2,
+            "description": "Create DHCP scope",
+            "operation": "create_dhcp_scope",
+            "resource_type": "dhcp_scope",
+            "scope_name": "Integration-DHCP",
+            "start_ip": "10.100.1.100",
+            "end_ip": "10.100.1.200",
+            "gateway": "10.100.1.1",
+            "api_token": "test-token-12345"
+          },
+          {
+            "step": 3,
+            "description": "Create DNS zone",
+            "operation": "create_dns_zone",
+            "resource_type": "dns_zone",
+            "zone_name": "test.local",
+            "zone_type": "forward",
+            "primary_server": "10.100.0.10",
+            "admin_email": "admin@test.local",
+            "api_token": "test-token-12345"
+          },
+          {
+            "step": 4,
+            "description": "Create VLAN mapping",
+            "operation": "create_vlan_mapping",
+            "resource_type": "vlan_mapping",
+            "vlan_id": 100,
+            "vlan_name": "Integration-Test",
+            "subnet": "10.100.1.0/24",
+            "gateway": "10.100.1.1",
+            "dhcp_enabled": true,
+            "api_token": "test-token-12345"
+          }
+        ]
+      }
+    }
+  },
+  
+  "curl_examples": {
+    "description": "Ready-to-use cURL commands for testing",
+    "commands": {
+      "create_ip_pool": "curl -X POST http://your-n8n-instance:8006/webhook/ipam-management -H \"Content-Type: application/json\" -d '{\"operation\":\"create_pool\",\"resource_type\":\"ip_pool\",\"pool_name\":\"Test-Pool-01\",\"network\":\"192.168.1.0/24\",\"gateway\":\"192.168.1.1\",\"api_token\":\"test-token\"}'",
+      
+      "create_dhcp_scope": "curl -X POST http://your-n8n-instance:8006/webhook/ipam-management -H \"Content-Type: application/json\" -d '{\"operation\":\"create_dhcp_scope\",\"resource_type\":\"dhcp_scope\",\"scope_name\":\"Test-DHCP\",\"start_ip\":\"192.168.1.100\",\"end_ip\":\"192.168.1.200\",\"gateway\":\"192.168.1.1\",\"api_token\":\"test-token\"}'",
+      
+      "create_dns_zone": "curl -X POST http://your-n8n-instance:8006/webhook/ipam-management -H \"Content-Type: application/json\" -d '{\"operation\":\"create_dns_zone\",\"resource_type\":\"dns_zone\",\"zone_name\":\"test.local\",\"zone_type\":\"forward\",\"primary_server\":\"192.168.1.10\",\"admin_email\":\"admin@test.local\",\"api_token\":\"test-token\"}'",
+      
+      "create_vlan_mapping": "curl -X POST http://your-n8n-instance:8006/webhook/ipam-management -H \"Content-Type: application/json\" -d '{\"operation\":\"create_vlan_mapping\",\"resource_type\":\"vlan_mapping\",\"vlan_id\":100,\"vlan_name\":\"Test\",\"subnet\":\"192.168.1.0/24\",\"gateway\":\"192.168.1.1\",\"api_token\":\"test-token\"}'",
+      
+      "list_pools": "curl -X POST http://your-n8n-instance:8006/webhook/ipam-management -H \"Content-Type: application/json\" -d '{\"operation\":\"list_pools\",\"resource_type\":\"ip_pool\",\"api_token\":\"test-token\"}'"
+    }
+  }
+}

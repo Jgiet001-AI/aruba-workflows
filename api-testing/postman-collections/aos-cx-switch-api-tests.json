@@ -1,0 +1,689 @@
+{
+  "info": {
+    "name": "AOS-CX Switch API Test Collection",
+    "description": "Comprehensive API testing for AOS-CX switches including VLAN management, interface configuration, and policy deployment",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.1.0"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "AOS-CX login and session management tests",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rest/v1/login",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v1", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Session cookie is set', function () {",
+                  "    const sessionCookie = pm.cookies.get('sessionId');",
+                  "    pm.expect(sessionCookie).to.not.be.null;",
+                  "    pm.globals.set('session_id', sessionCookie);",
+                  "});",
+                  "",
+                  "pm.test('Response time is acceptable', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "System Information",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('System info contains required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('hostname');",
+                  "    pm.expect(jsonData).to.have.property('platform_name');",
+                  "    pm.expect(jsonData).to.have.property('software_version');",
+                  "    pm.globals.set('switch_hostname', jsonData.hostname);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VLAN Management",
+      "description": "VLAN CRUD operations and validation tests",
+      "item": [
+        {
+          "name": "List VLANs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/vlans",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "vlans"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is a valid JSON object', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('object');",
+                  "});",
+                  "",
+                  "pm.test('Default VLAN 1 exists', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('1');",
+                  "    pm.expect(jsonData['1']).to.have.property('name');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Test VLAN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test_VLAN_{{$randomInt}}\",\n  \"description\": \"Test VLAN for API validation\",\n  \"admin\": \"up\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/vlans/{{test_vlan_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "vlans", "{{test_vlan_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate random VLAN ID between 100-999",
+                  "const vlanId = Math.floor(Math.random() * 900) + 100;",
+                  "pm.globals.set('test_vlan_id', vlanId);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('VLAN created successfully', function () {",
+                  "    const location = pm.response.headers.get('Location');",
+                  "    pm.expect(location).to.include('/vlans/' + pm.globals.get('test_vlan_id'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get VLAN Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/vlans/{{test_vlan_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "vlans", "{{test_vlan_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('VLAN details are correct', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('name');",
+                  "    pm.expect(jsonData).to.have.property('description');",
+                  "    pm.expect(jsonData).to.have.property('admin');",
+                  "    pm.expect(jsonData.admin).to.eql('up');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update VLAN",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated_Test_VLAN\",\n  \"description\": \"Updated test VLAN description\",\n  \"admin\": \"up\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/vlans/{{test_vlan_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "vlans", "{{test_vlan_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('VLAN updated successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.name).to.eql('Updated_Test_VLAN');",
+                  "    pm.expect(jsonData.description).to.eql('Updated test VLAN description');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Test VLAN",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/vlans/{{test_vlan_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "vlans", "{{test_vlan_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test('VLAN deleted successfully', function () {",
+                  "    pm.expect(pm.response.text()).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Interface Management",
+      "description": "Interface configuration and management tests",
+      "item": [
+        {
+          "name": "List Interfaces",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/interfaces",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "interfaces"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Interfaces list is not empty', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('object');",
+                  "    pm.expect(Object.keys(jsonData).length).to.be.above(0);",
+                  "    ",
+                  "    // Store first interface for testing",
+                  "    const firstInterface = Object.keys(jsonData)[0];",
+                  "    pm.globals.set('test_interface', firstInterface);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Interface Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/interfaces/{{test_interface}}",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "interfaces", "{{test_interface}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Interface details are complete', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('name');",
+                  "    pm.expect(jsonData).to.have.property('type');",
+                  "    pm.expect(jsonData).to.have.property('admin_state');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Configure Interface Description",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"API Test Interface - {{$timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/interfaces/{{test_interface}}",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "interfaces", "{{test_interface}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Interface description updated', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.description).to.include('API Test Interface');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Policy Management",
+      "description": "ACL and QoS policy configuration tests",
+      "item": [
+        {
+          "name": "List ACLs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/acls",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "acls"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('ACL list is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Test ACL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test_ACL_{{$randomInt}}\",\n  \"type\": \"ipv4\",\n  \"cfg_aces\": {\n    \"10\": {\n      \"action\": \"permit\",\n      \"src_ip\": \"10.0.0.0/8\",\n      \"dst_ip\": \"any\",\n      \"protocol\": \"tcp\",\n      \"dst_l4_port_max\": 80,\n      \"dst_l4_port_min\": 80\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/acls/{{test_acl_name}}",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "acls", "{{test_acl_name}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate random ACL name",
+                  "const aclName = 'Test_ACL_' + Math.floor(Math.random() * 1000);",
+                  "pm.globals.set('test_acl_name', aclName);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('ACL created successfully', function () {",
+                  "    const location = pm.response.headers.get('Location');",
+                  "    pm.expect(location).to.include('/acls/' + pm.globals.get('test_acl_name'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Test ACL",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/acls/{{test_acl_name}}",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "acls", "{{test_acl_name}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test('ACL deleted successfully', function () {",
+                  "    pm.expect(pm.response.text()).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "System Configuration",
+      "description": "System configuration and backup tests",
+      "item": [
+        {
+          "name": "Get Running Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/config",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "config"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Config is not empty', function () {",
+                  "    const responseText = pm.response.text();",
+                  "    pm.expect(responseText).to.not.be.empty;",
+                  "    pm.expect(responseText).to.include('hostname');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Startup Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v10.08/system/config?type=startup",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v10.08", "system", "config"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "startup"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Startup config is valid', function () {",
+                  "    const responseText = pm.response.text();",
+                  "    pm.expect(responseText).to.not.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cleanup",
+      "description": "Logout and cleanup tests",
+      "item": [
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "sessionId={{session_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rest/v1/logout",
+              "host": ["{{base_url}}"],
+              "path": ["rest", "v1", "logout"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Session invalidated', function () {",
+                  "    pm.globals.unset('session_id');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://switch-ip-address"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "your_password"
+    }
+  ]
+}

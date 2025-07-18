@@ -1,0 +1,408 @@
+{
+  "name": "EdgeConnect Performance Monitoring",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+      "name": "Schedule: Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// EdgeConnect Performance Monitoring Initialization\n// Set up monitoring parameters and target appliances\n\n// Get current timestamp\nconst timestamp = new Date().toISOString();\n\n// Configuration for EdgeConnect monitoring\nconst config = {\n  orchestratorHost: $vars.EDGECONNECT_ORCHESTRATOR_HOST || 'orchestrator.example.com',\n  authToken: $vars.EDGECONNECT_AUTH_TOKEN || 'your-auth-token',\n  monitoringInterval: 5, // minutes\n  timestamp: timestamp,\n  \n  // Performance thresholds\n  thresholds: {\n    cpu: 80,\n    memory: 85,\n    bandwidth: 90,\n    tunnelLatency: 100, // ms\n    packetLoss: 1.0, // percent\n    jitter: 10 // ms\n  },\n  \n  // Monitoring targets\n  targets: {\n    gateways: [\n      'EC001234567890',\n      'EC001234567891',\n      'EC001234567892'\n    ],\n    clusters: [\n      'primary-hub-cluster',\n      'secondary-hub-cluster'\n    ],\n    policies: [\n      'global-qos-policy',\n      'wan-optimization-policy',\n      'security-policy'\n    ]\n  }\n};\n\n// Base URL for EdgeConnect APIs\nconst baseUrl = `https://${config.orchestratorHost}/gms/rest`;\n\n// Create monitoring tasks\nconst monitoringTasks = [\n  {\n    type: 'gateway_stats',\n    description: 'Monitor gateway performance statistics',\n    priority: 'high'\n  },\n  {\n    type: 'tunnel_monitoring',\n    description: 'Monitor tunnel health and performance',\n    priority: 'high'\n  },\n  {\n    type: 'policy_compliance',\n    description: 'Check SD-WAN policy compliance and performance',\n    priority: 'medium'\n  },\n  {\n    type: 'cluster_health',\n    description: 'Monitor cluster health and availability',\n    priority: 'medium'\n  },\n  {\n    type: 'usage_statistics',\n    description: 'Collect usage and capacity statistics',\n    priority: 'low'\n  }\n];\n\nreturn [{\n  json: {\n    config: config,\n    baseUrl: baseUrl,\n    monitoringTasks: monitoringTasks,\n    operation: 'initialize_monitoring'\n  }\n}];"
+      },
+      "id": "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e",
+      "name": "Initialize Monitoring",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gateway Performance Statistics Collection\nconst data = $input.all()[0].json;\nconst config = data.config;\nconst baseUrl = data.baseUrl;\n\nconst requests = [];\n\n// Create API requests for each gateway\nconfig.targets.gateways.forEach(gatewaySerial => {\n  // WAN compression stats\n  requests.push({\n    json: {\n      url: `${baseUrl}/monitoring/v1/gateways/${gatewaySerial}/uplinks/wan_compression_stats`,\n      method: 'GET',\n      headers: {\n        'X-AUTH-TOKEN': config.authToken,\n        'Content-Type': 'application/json'\n      },\n      gatewaySerial: gatewaySerial,\n      metricType: 'wan_compression',\n      timestamp: config.timestamp\n    }\n  });\n  \n  // Tunnel statistics\n  requests.push({\n    json: {\n      url: `${baseUrl}/monitoring/v1/gateways/${gatewaySerial}/tunnels`,\n      method: 'GET',\n      headers: {\n        'X-AUTH-TOKEN': config.authToken,\n        'Content-Type': 'application/json'\n      },\n      gatewaySerial: gatewaySerial,\n      metricType: 'tunnel_stats',\n      timestamp: config.timestamp\n    }\n  });\n});\n\nreturn requests;"
+      },
+      "id": "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f",
+      "name": "Prepare Gateway Stats Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tunnel Monitoring Collection\nconst data = $input.all()[0].json;\nconst config = data.config;\nconst baseUrl = data.baseUrl;\n\nconst requests = [];\n\n// Create API requests for tunnel monitoring\nconfig.targets.gateways.forEach(gatewaySerial => {\n  // Get tunnel details for each gateway\n  requests.push({\n    json: {\n      url: `${baseUrl}/network-monitoring/v1alpha1/gateways/${gatewaySerial}/tunnels/lan/1/detail`,\n      method: 'GET',\n      headers: {\n        'X-AUTH-TOKEN': config.authToken,\n        'Content-Type': 'application/json'\n      },\n      gatewaySerial: gatewaySerial,\n      metricType: 'tunnel_detail',\n      timestamp: config.timestamp\n    }\n  });\n});\n\n// Add cluster tunnel monitoring\nconfig.targets.clusters.forEach(clusterName => {\n  requests.push({\n    json: {\n      url: `${baseUrl}/network-monitoring/v1alpha1/cluster/${clusterName}/tunnels`,\n      method: 'GET',\n      headers: {\n        'X-AUTH-TOKEN': config.authToken,\n        'Content-Type': 'application/json'\n      },\n      clusterName: clusterName,\n      metricType: 'cluster_tunnels',\n      timestamp: config.timestamp\n    }\n  });\n});\n\nreturn requests;"
+      },
+      "id": "d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a",
+      "name": "Prepare Tunnel Monitoring Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Policy Compliance and Performance Monitoring\nconst data = $input.all()[0].json;\nconst config = data.config;\nconst baseUrl = data.baseUrl;\n\nconst requests = [];\n\n// Create API requests for policy monitoring\nconfig.targets.clusters.forEach(clusterName => {\n  // Get cluster ID (assuming cluster name format)\n  const clusterId = clusterName.replace('-', '_');\n  \n  // Policy compliance percentage\n  requests.push({\n    json: {\n      url: `${baseUrl}/datapoints/v1/cluster/${clusterId}/sdwan_policies/compliance_percentage`,\n      method: 'GET',\n      headers: {\n        'X-AUTH-TOKEN': config.authToken,\n        'Content-Type': 'application/json'\n      },\n      clusterId: clusterId,\n      metricType: 'compliance_percentage',\n      timestamp: config.timestamp\n    }\n  });\n  \n  // Policy status\n  requests.push({\n    json: {\n      url: `${baseUrl}/datapoints/v1/cluster/${clusterId}/sdwan_policies/status`,\n      method: 'GET',\n      headers: {\n        'X-AUTH-TOKEN': config.authToken,\n        'Content-Type': 'application/json'\n      },\n      clusterId: clusterId,\n      metricType: 'policy_status',\n      timestamp: config.timestamp\n    }\n  });\n  \n  // Individual policy statistics\n  config.targets.policies.forEach(policyName => {\n    requests.push({\n      json: {\n        url: `${baseUrl}/datapoints/v1/cluster/${clusterId}/sdwan_policy/policy_stats/${policyName}`,\n        method: 'GET',\n        headers: {\n          'X-AUTH-TOKEN': config.authToken,\n          'Content-Type': 'application/json'\n        },\n        clusterId: clusterId,\n        policyName: policyName,\n        metricType: 'policy_stats',\n        timestamp: config.timestamp\n      }\n    });\n    \n    // Policy event logs for troubleshooting\n    requests.push({\n      json: {\n        url: `${baseUrl}/datapoints/v1/cluster/${clusterId}/sdwan_policy/event_logs/${policyName}`,\n        method: 'GET',\n        headers: {\n          'X-AUTH-TOKEN': config.authToken,\n          'Content-Type': 'application/json'\n        },\n        clusterId: clusterId,\n        policyName: policyName,\n        metricType: 'policy_events',\n        timestamp: config.timestamp\n      }\n    });\n  });\n});\n\nreturn requests;"
+      },
+      "id": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+      "name": "Prepare Policy Monitoring Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Usage and Capacity Statistics Collection\nconst data = $input.all()[0].json;\nconst config = data.config;\nconst baseUrl = data.baseUrl;\n\nconst requests = [];\n\n// MPSK usage statistics (if applicable)\nrequests.push({\n  json: {\n    url: `${baseUrl}/cloudAuth/api/v2/usage/mpsk`,\n    method: 'GET',\n    headers: {\n      'X-AUTH-TOKEN': config.authToken,\n      'Content-Type': 'application/json'\n    },\n    metricType: 'mpsk_usage',\n    timestamp: config.timestamp\n  }\n});\n\n// Site policy statistics for capacity planning\nconst siteNames = ['headquarters', 'branch1', 'branch2']; // Example sites\nsiteNames.forEach(siteName => {\n  requests.push({\n    json: {\n      url: `${baseUrl}/datapoints/v1/sdwan_site/site_policy_stats/${siteName}`,\n      method: 'GET',\n      headers: {\n        'X-AUTH-TOKEN': config.authToken,\n        'Content-Type': 'application/json'\n      },\n      siteName: siteName,\n      metricType: 'site_policy_stats',\n      timestamp: config.timestamp\n    }\n  });\n});\n\nreturn requests;"
+      },
+      "id": "f6a7b8c9-d0e1-2f3a-4b5c-6d7e8f9a0b1c",
+      "name": "Prepare Usage Statistics Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-AUTH-TOKEN",
+              "value": "={{ $json.headers['X-AUTH-TOKEN'] }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 2,
+            "waitBetweenTries": 3000
+          },
+          "response": {
+            "response": {
+              "responseFormat": "autodetect"
+            }
+          }
+        }
+      },
+      "id": "a7b8c9d0-e1f2-3a4b-5c6d-7e8f9a0b1c2d",
+      "name": "Execute Monitoring API Calls",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process and Analyze Performance Metrics\nconst items = $input.all();\nconst timestamp = new Date().toISOString();\n\n// Get config from the first item that should have it\nconst configItem = items.find(item => item.json.config);\nconst thresholds = configItem?.json.config.thresholds || {\n  cpu: 80,\n  memory: 85,\n  bandwidth: 90,\n  tunnelLatency: 100,\n  packetLoss: 1.0,\n  jitter: 10\n};\n\nconst metrics = {\n  timestamp: timestamp,\n  summary: {\n    totalChecks: 0,\n    successfulChecks: 0,\n    failedChecks: 0,\n    warnings: 0,\n    errors: 0\n  },\n  gateways: {},\n  tunnels: {},\n  policies: {},\n  clusters: {},\n  alerts: []\n};\n\n// Process each API response\nitems.forEach(item => {\n  if (!item.json.url) return; // Skip config items\n  \n  const response = item.json;\n  const statusCode = response.$response?.statusCode || 200;\n  const isSuccess = statusCode >= 200 && statusCode < 300;\n  \n  metrics.summary.totalChecks++;\n  \n  if (isSuccess) {\n    metrics.summary.successfulChecks++;\n    \n    // Process based on metric type\n    const metricType = response.metricType;\n    const data = response.data || response;\n    \n    switch (metricType) {\n      case 'wan_compression':\n        if (response.gatewaySerial) {\n          if (!metrics.gateways[response.gatewaySerial]) {\n            metrics.gateways[response.gatewaySerial] = {};\n          }\n          \n          // Process WAN compression statistics\n          const compressionStats = {\n            compressionRatio: data.compression_ratio || 0,\n            bytesCompressed: data.bytes_compressed || 0,\n            bytesSaved: data.bytes_saved || 0,\n            timestamp: timestamp\n          };\n          \n          metrics.gateways[response.gatewaySerial].wanCompression = compressionStats;\n          \n          // Check for compression efficiency alerts\n          if (compressionStats.compressionRatio < 20) {\n            metrics.alerts.push({\n              type: 'warning',\n              category: 'performance',\n              gateway: response.gatewaySerial,\n              message: `Low WAN compression ratio: ${compressionStats.compressionRatio}%`,\n              threshold: '20%',\n              actual: `${compressionStats.compressionRatio}%`,\n              timestamp: timestamp\n            });\n            metrics.summary.warnings++;\n          }\n        }\n        break;\n        \n      case 'tunnel_stats':\n        if (response.gatewaySerial) {\n          if (!metrics.gateways[response.gatewaySerial]) {\n            metrics.gateways[response.gatewaySerial] = {};\n          }\n          \n          // Process tunnel statistics\n          const tunnelStats = {\n            activeTunnels: Array.isArray(data) ? data.length : 0,\n            tunnelHealth: data.map ? data.map(tunnel => ({\n              id: tunnel.tunnel_id,\n              status: tunnel.status,\n              latency: tunnel.latency || 0,\n              packetLoss: tunnel.packet_loss || 0,\n              jitter: tunnel.jitter || 0\n            })) : [],\n            timestamp: timestamp\n          };\n          \n          metrics.gateways[response.gatewaySerial].tunnels = tunnelStats;\n          \n          // Check tunnel health alerts\n          tunnelStats.tunnelHealth.forEach(tunnel => {\n            if (tunnel.latency > thresholds.tunnelLatency) {\n              metrics.alerts.push({\n                type: 'warning',\n                category: 'tunnel_performance',\n                gateway: response.gatewaySerial,\n                tunnel: tunnel.id,\n                message: `High tunnel latency: ${tunnel.latency}ms`,\n                threshold: `${thresholds.tunnelLatency}ms`,\n                actual: `${tunnel.latency}ms`,\n                timestamp: timestamp\n              });\n              metrics.summary.warnings++;\n            }\n            \n            if (tunnel.packetLoss > thresholds.packetLoss) {\n              metrics.alerts.push({\n                type: 'error',\n                category: 'tunnel_reliability',\n                gateway: response.gatewaySerial,\n                tunnel: tunnel.id,\n                message: `High packet loss: ${tunnel.packetLoss}%`,\n                threshold: `${thresholds.packetLoss}%`,\n                actual: `${tunnel.packetLoss}%`,\n                timestamp: timestamp\n              });\n              metrics.summary.errors++;\n            }\n          });\n        }\n        break;\n        \n      case 'compliance_percentage':\n        if (response.clusterId) {\n          if (!metrics.clusters[response.clusterId]) {\n            metrics.clusters[response.clusterId] = {};\n          }\n          \n          const compliancePercent = data.compliance_percentage || 0;\n          metrics.clusters[response.clusterId].compliance = {\n            percentage: compliancePercent,\n            timestamp: timestamp\n          };\n          \n          // Check compliance alerts\n          if (compliancePercent < 95) {\n            metrics.alerts.push({\n              type: 'warning',\n              category: 'compliance',\n              cluster: response.clusterId,\n              message: `Low policy compliance: ${compliancePercent}%`,\n              threshold: '95%',\n              actual: `${compliancePercent}%`,\n              timestamp: timestamp\n            });\n            metrics.summary.warnings++;\n          }\n        }\n        break;\n        \n      case 'policy_stats':\n        if (response.policyName) {\n          if (!metrics.policies[response.policyName]) {\n            metrics.policies[response.policyName] = {};\n          }\n          \n          const policyStats = {\n            bytesTransferred: data.bytes_transferred || 0,\n            packetsProcessed: data.packets_processed || 0,\n            rulesMatched: data.rules_matched || 0,\n            performance: data.performance_score || 0,\n            timestamp: timestamp\n          };\n          \n          metrics.policies[response.policyName].stats = policyStats;\n          \n          // Check policy performance\n          if (policyStats.performance < 80) {\n            metrics.alerts.push({\n              type: 'warning',\n              category: 'policy_performance',\n              policy: response.policyName,\n              cluster: response.clusterId,\n              message: `Low policy performance score: ${policyStats.performance}%`,\n              threshold: '80%',\n              actual: `${policyStats.performance}%`,\n              timestamp: timestamp\n            });\n            metrics.summary.warnings++;\n          }\n        }\n        break;\n        \n      case 'mpsk_usage':\n        metrics.usage = {\n          mpskConnections: data.active_connections || 0,\n          totalMpsks: data.total_mpsks || 0,\n          utilizationPercent: data.utilization_percent || 0,\n          timestamp: timestamp\n        };\n        break;\n    }\n  } else {\n    metrics.summary.failedChecks++;\n    metrics.summary.errors++;\n    \n    // Add API failure alert\n    metrics.alerts.push({\n      type: 'error',\n      category: 'api_failure',\n      message: `API call failed: ${response.url}`,\n      statusCode: statusCode,\n      error: response.error || 'Unknown error',\n      timestamp: timestamp\n    });\n  }\n});\n\n// Calculate overall health score\nconst healthScore = metrics.summary.totalChecks > 0 \n  ? Math.round((metrics.summary.successfulChecks / metrics.summary.totalChecks) * 100)\n  : 0;\n\nmetrics.summary.healthScore = healthScore;\n\n// Determine overall status\nlet overallStatus = 'healthy';\nif (metrics.summary.errors > 0) {\n  overallStatus = 'critical';\n} else if (metrics.summary.warnings > 0) {\n  overallStatus = 'warning';\n}\n\nmetrics.summary.overallStatus = overallStatus;\n\nreturn [{ json: metrics }];"
+      },
+      "id": "b8c9d0e1-f2a3-4b5c-6d7e-8f9a0b1c2d3e",
+      "name": "Analyze Performance Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.summary.errors }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "c9d0e1f2-a3b4-5c6d-7e8f-9a0b1c2d3e4f",
+      "name": "Check for Critical Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.summary.warnings }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "d0e1f2a3-b4c5-6d7e-8f9a-0b1c2d3e4f5a",
+      "name": "Check for Warnings",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "chatId": "#network-alerts",
+        "text": "🚨 **EdgeConnect Critical Performance Alert**\n\n**Overall Status:** {{ $json.summary.overallStatus }}\n**Health Score:** {{ $json.summary.healthScore }}%\n**Timestamp:** {{ $json.timestamp }}\n\n**Summary:**\n• Total Checks: {{ $json.summary.totalChecks }}\n• Failed Checks: {{ $json.summary.failedChecks }}\n• Critical Errors: {{ $json.summary.errors }}\n• Warnings: {{ $json.summary.warnings }}\n\n**Critical Alerts:**\n{% for alert in $json.alerts %}\n{% if alert.type == 'error' %}\n❌ **{{ alert.category }}**: {{ alert.message }}\n{% if alert.gateway %}   Gateway: {{ alert.gateway }}{% endif %}\n{% if alert.threshold %}   Threshold: {{ alert.threshold }} | Actual: {{ alert.actual }}{% endif %}\n{% endif %}\n{% endfor %}\n\n**Immediate Action Required**",
+        "options": {}
+      },
+      "id": "e1f2a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b",
+      "name": "Send Critical Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "chatId": "#network-monitoring",
+        "text": "⚠️ **EdgeConnect Performance Warning**\n\n**Overall Status:** {{ $json.summary.overallStatus }}\n**Health Score:** {{ $json.summary.healthScore }}%\n**Timestamp:** {{ $json.timestamp }}\n\n**Summary:**\n• Total Checks: {{ $json.summary.totalChecks }}\n• Successful: {{ $json.summary.successfulChecks }}\n• Warnings: {{ $json.summary.warnings }}\n\n**Warning Alerts:**\n{% for alert in $json.alerts %}\n{% if alert.type == 'warning' %}\n⚠️ **{{ alert.category }}**: {{ alert.message }}\n{% if alert.gateway %}   Gateway: {{ alert.gateway }}{% endif %}\n{% if alert.policy %}   Policy: {{ alert.policy }}{% endif %}\n{% if alert.threshold %}   Threshold: {{ alert.threshold }} | Actual: {{ alert.actual }}{% endif %}\n{% endif %}\n{% endfor %}\n\n**Monitoring Continues**",
+        "options": {}
+      },
+      "id": "f2a3b4c5-d6e7-8f9a-0b1c-2d3e4f5a6b7c",
+      "name": "Send Warning Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "chatId": "#network-monitoring",
+        "text": "✅ **EdgeConnect Performance Report**\n\n**Overall Status:** {{ $json.summary.overallStatus }}\n**Health Score:** {{ $json.summary.healthScore }}%\n**Timestamp:** {{ $json.timestamp }}\n\n**Summary:**\n• Total Checks: {{ $json.summary.totalChecks }}\n• Successful: {{ $json.summary.successfulChecks }}\n• Health Score: {{ $json.summary.healthScore }}%\n\n**Gateway Performance:**\n{% for gateway, stats in $json.gateways %}\n• **{{ gateway }}**: \n  {% if stats.wanCompression %}Compression: {{ stats.wanCompression.compressionRatio }}%{% endif %}\n  {% if stats.tunnels %}Active Tunnels: {{ stats.tunnels.activeTunnels }}{% endif %}\n{% endfor %}\n\n**Policy Compliance:**\n{% for cluster, stats in $json.clusters %}\n• **{{ cluster }}**: {{ stats.compliance.percentage }}%\n{% endfor %}\n\n**All Systems Operating Normally**",
+        "options": {}
+      },
+      "id": "a3b4c5d6-e7f8-9a0b-1c2d-3e4f5a6b7c8d",
+      "name": "Send Status Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        580
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule: Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Initialize Monitoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Monitoring": {
+      "main": [
+        [
+          {
+            "node": "Prepare Gateway Stats Requests",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Tunnel Monitoring Requests",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Policy Monitoring Requests",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Usage Statistics Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Gateway Stats Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Monitoring API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Tunnel Monitoring Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Monitoring API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Policy Monitoring Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Monitoring API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Usage Statistics Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Monitoring API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Monitoring API Calls": {
+      "main": [
+        [
+          {
+            "node": "Analyze Performance Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Performance Metrics": {
+      "main": [
+        [
+          {
+            "node": "Check for Critical Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check for Warnings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Critical Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Status Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Warnings": {
+      "main": [
+        [
+          {
+            "node": "Send Warning Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-16T00:00:00.000Z",
+      "updatedAt": "2025-01-16T00:00:00.000Z",
+      "id": "edgeconnect-monitoring",
+      "name": "EdgeConnect Monitoring"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-16T00:00:00.000Z",
+  "versionId": "1"
+}

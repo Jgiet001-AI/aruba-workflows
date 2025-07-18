@@ -1,0 +1,357 @@
+{
+  "servicenow_configuration": {
+    "description": "ServiceNow ITSM integration configuration parameters",
+    "version": "1.0",
+    "created": "2025-01-17",
+    
+    "connection": {
+      "instance_url": {
+        "description": "ServiceNow instance URL",
+        "example": "https://company.service-now.com",
+        "required": true,
+        "type": "string"
+      },
+      "api_version": {
+        "description": "ServiceNow REST API version",
+        "default": "v1",
+        "options": ["v1", "v2"],
+        "type": "string"
+      },
+      "timeout": {
+        "description": "API request timeout in milliseconds",
+        "default": 30000,
+        "min": 5000,
+        "max": 120000,
+        "type": "integer"
+      }
+    },
+    
+    "authentication": {
+      "method": {
+        "description": "Authentication method",
+        "default": "basic",
+        "options": ["basic", "oauth2", "bearer_token"],
+        "type": "string"
+      },
+      "username": {
+        "description": "ServiceNow username for basic auth",
+        "required": true,
+        "type": "string",
+        "secure": true
+      },
+      "password": {
+        "description": "ServiceNow password for basic auth",
+        "required": true,
+        "type": "string",
+        "secure": true
+      },
+      "client_id": {
+        "description": "OAuth 2.0 client ID",
+        "required_if": "method=oauth2",
+        "type": "string",
+        "secure": true
+      },
+      "client_secret": {
+        "description": "OAuth 2.0 client secret",
+        "required_if": "method=oauth2",
+        "type": "string",
+        "secure": true
+      },
+      "bearer_token": {
+        "description": "Bearer token for API access",
+        "required_if": "method=bearer_token",
+        "type": "string",
+        "secure": true
+      }
+    },
+    
+    "incident_management": {
+      "default_assignment_group": {
+        "description": "Default assignment group for network incidents",
+        "default": "Network Operations",
+        "type": "string"
+      },
+      "default_caller": {
+        "description": "Default caller for automated incidents",
+        "default": "aruba.automation@company.com",
+        "type": "string"
+      },
+      "category": {
+        "description": "Default incident category",
+        "default": "Network",
+        "type": "string"
+      },
+      "subcategory_mapping": {
+        "description": "Device type to subcategory mapping",
+        "default": {
+          "AP": "Wireless",
+          "Switch": "Wired",
+          "Gateway": "Security",
+          "Controller": "Infrastructure"
+        },
+        "type": "object"
+      },
+      "priority_mapping": {
+        "description": "Severity to priority mapping",
+        "default": {
+          "critical": "1",
+          "high": "2", 
+          "medium": "3",
+          "low": "4"
+        },
+        "type": "object"
+      },
+      "auto_assignment": {
+        "description": "Enable automatic incident assignment",
+        "default": true,
+        "type": "boolean"
+      },
+      "auto_close": {
+        "description": "Enable automatic incident closure",
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    
+    "service_requests": {
+      "catalog_id": {
+        "description": "Service catalog ID for network requests",
+        "example": "network_services_catalog",
+        "type": "string"
+      },
+      "default_requested_for": {
+        "description": "Default requested for user",
+        "default": "network.admin@company.com",
+        "type": "string"
+      },
+      "approval_required": {
+        "description": "Require approval for service requests",
+        "default": true,
+        "type": "boolean"
+      },
+      "approval_group": {
+        "description": "Approval group for network requests",
+        "default": "Network Management",
+        "type": "string"
+      },
+      "auto_fulfillment": {
+        "description": "Enable automatic request fulfillment",
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    
+    "change_management": {
+      "default_type": {
+        "description": "Default change request type",
+        "default": "normal",
+        "options": ["standard", "normal", "emergency"],
+        "type": "string"
+      },
+      "default_category": {
+        "description": "Default change category",
+        "default": "Network",
+        "type": "string"
+      },
+      "risk_assessment": {
+        "description": "Default risk assessment level",
+        "default": "Medium",
+        "options": ["Low", "Medium", "High"],
+        "type": "string"
+      },
+      "cab_required": {
+        "description": "Require CAB approval by default",
+        "default": false,
+        "type": "boolean"
+      },
+      "auto_schedule": {
+        "description": "Enable automatic change scheduling",
+        "default": true,
+        "type": "boolean"
+      },
+      "maintenance_window": {
+        "description": "Default maintenance window settings",
+        "default": {
+          "start_time": "02:00:00",
+          "duration_hours": 2,
+          "timezone": "UTC"
+        },
+        "type": "object"
+      }
+    },
+    
+    "asset_management": {
+      "auto_discovery": {
+        "description": "Enable automatic CI creation",
+        "default": true,
+        "type": "boolean"
+      },
+      "ci_class_mapping": {
+        "description": "Device type to CI class mapping",
+        "default": {
+          "AP": "cmdb_ci_computer",
+          "Switch": "cmdb_ci_computer", 
+          "Gateway": "cmdb_ci_computer",
+          "Controller": "cmdb_ci_computer"
+        },
+        "type": "object"
+      },
+      "manufacturer": {
+        "description": "Default manufacturer",
+        "default": "HPE Aruba",
+        "type": "string"
+      },
+      "operational_status_mapping": {
+        "description": "Device status to operational status mapping",
+        "default": {
+          "Up": "Operational",
+          "Down": "Non-Operational",
+          "Warning": "Operational",
+          "Unknown": "Non-Operational"
+        },
+        "type": "object"
+      },
+      "sync_interval": {
+        "description": "Asset sync interval in minutes",
+        "default": 60,
+        "min": 15,
+        "max": 1440,
+        "type": "integer"
+      }
+    },
+    
+    "notification_settings": {
+      "slack_integration": {
+        "description": "Enable Slack notifications",
+        "default": true,
+        "type": "boolean"
+      },
+      "slack_channel": {
+        "description": "Default Slack channel for ServiceNow notifications",
+        "default": "#servicenow-alerts",
+        "type": "string"
+      },
+      "email_notifications": {
+        "description": "Enable email notifications",
+        "default": true,
+        "type": "boolean"
+      },
+      "notification_recipients": {
+        "description": "Default notification recipients",
+        "default": ["network-team@company.com"],
+        "type": "array"
+      }
+    },
+    
+    "error_handling": {
+      "retry_attempts": {
+        "description": "Number of retry attempts for failed requests",
+        "default": 3,
+        "min": 1,
+        "max": 5,
+        "type": "integer"
+      },
+      "retry_delay": {
+        "description": "Delay between retry attempts in milliseconds",
+        "default": 2000,
+        "min": 1000,
+        "max": 10000,
+        "type": "integer"
+      },
+      "fallback_assignment_group": {
+        "description": "Fallback assignment group for failed assignments",
+        "default": "IT Service Desk",
+        "type": "string"
+      },
+      "error_notification": {
+        "description": "Enable error notifications",
+        "default": true,
+        "type": "boolean"
+      }
+    },
+    
+    "compliance_settings": {
+      "audit_logging": {
+        "description": "Enable comprehensive audit logging",
+        "default": true,
+        "type": "boolean"
+      },
+      "data_retention": {
+        "description": "Data retention period in days",
+        "default": 365,
+        "min": 30,
+        "max": 2555,
+        "type": "integer"
+      },
+      "encryption_required": {
+        "description": "Require encryption for sensitive data",
+        "default": true,
+        "type": "boolean"
+      },
+      "compliance_framework": {
+        "description": "Compliance framework requirements",
+        "default": ["SOX", "GDPR"],
+        "options": ["SOX", "GDPR", "HIPAA", "PCI-DSS"],
+        "type": "array"
+      }
+    },
+    
+    "performance_settings": {
+      "batch_size": {
+        "description": "Batch size for bulk operations",
+        "default": 50,
+        "min": 1,
+        "max": 100,
+        "type": "integer"
+      },
+      "rate_limit": {
+        "description": "Rate limit for API requests per minute",
+        "default": 100,
+        "min": 10,
+        "max": 1000,
+        "type": "integer"
+      },
+      "cache_duration": {
+        "description": "Cache duration for responses in minutes",
+        "default": 15,
+        "min": 5,
+        "max": 60,
+        "type": "integer"
+      },
+      "parallel_processing": {
+        "description": "Enable parallel processing for multiple requests",
+        "default": true,
+        "type": "boolean"
+      }
+    },
+    
+    "integration_mappings": {
+      "aruba_to_servicenow_fields": {
+        "description": "Field mapping from Aruba to ServiceNow",
+        "default": {
+          "device_name": "name",
+          "device_ip": "ip_address", 
+          "device_mac": "mac_address",
+          "device_serial": "serial_number",
+          "device_model": "model_id",
+          "device_location": "location",
+          "device_status": "operational_status",
+          "firmware_version": "os_version"
+        },
+        "type": "object"
+      },
+      "custom_fields": {
+        "description": "Custom ServiceNow fields for Aruba integration",
+        "default": {
+          "u_aruba_device_type": "string",
+          "u_aruba_central_url": "string",
+          "u_aruba_group": "string",
+          "u_aruba_site": "string",
+          "u_aruba_firmware": "string",
+          "u_automation_source": "string"
+        },
+        "type": "object"
+      }
+    }
+  }
+}

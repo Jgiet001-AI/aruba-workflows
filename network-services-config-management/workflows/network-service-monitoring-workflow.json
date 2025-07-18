@@ -1,0 +1,638 @@
+{
+  "name": "Network Service Monitoring Automation",
+  "id": "q15edpeeByFM5sgx",
+  "active": false,
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Monitoring Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {
+        "path": "network-service-monitoring",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Monitoring Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "parameters": {
+        "functionCode": "// Network Service Monitoring Input Validation\nconst input = items[0].json;\n\n// Required fields\nconst requiredFields = ['operation', 'service_type'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'start_monitoring', 'stop_monitoring', 'get_metrics', 'get_health',\n  'set_thresholds', 'get_alerts', 'acknowledge_alert', 'get_performance',\n  'get_capacity', 'get_availability', 'create_dashboard', 'export_metrics'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}`);\n}\n\n// Valid service types\nconst validServiceTypes = ['gateway', 'tunnel', 'api_service', 'network_interface', 'application'];\nif (!validServiceTypes.includes(input.service_type)) {\n  throw new Error(`Invalid service type: ${input.service_type}`);\n}\n\n// Prepare validated request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `mon-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      }
+    },
+    {
+      "id": "set-monitoring-config",
+      "name": "Set Monitoring Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "monitoring_base_url",
+              "name": "monitoring_base_url",
+              "value": "monitoring/v1/services",
+              "type": "string"
+            },
+            {
+              "id": "metrics_retention",
+              "name": "metrics_retention",
+              "value": "90",
+              "type": "string"
+            },
+            {
+              "id": "alert_threshold_cpu",
+              "name": "alert_threshold_cpu",
+              "value": "85",
+              "type": "string"
+            },
+            {
+              "id": "alert_threshold_memory",
+              "name": "alert_threshold_memory",
+              "value": "90",
+              "type": "string"
+            },
+            {
+              "id": "monitoring_interval",
+              "name": "monitoring_interval",
+              "value": "60",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "route-monitoring",
+      "name": "Route Monitoring Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "metrics"
+                  }
+                ]
+              },
+              "renameOutput": "Metrics Collection"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "health"
+                  }
+                ]
+              },
+              "renameOutput": "Health Monitoring"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "performance"
+                  }
+                ]
+              },
+              "renameOutput": "Performance Monitoring"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "alert"
+                  }
+                ]
+              },
+              "renameOutput": "Alert Management"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.operation}}",
+                    "operation": "contains",
+                    "value2": "threshold"
+                  }
+                ]
+              },
+              "renameOutput": "Threshold Management"
+            }
+          ]
+        },
+        "fallbackOutput": "defaultOutput"
+      }
+    },
+    {
+      "id": "metrics-collection",
+      "name": "Metrics Collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 100],
+      "parameters": {
+        "method": "GET",
+        "url": "https://aruba-central.example.com/monitoring/v1/services/{{$json.service_type}}/metrics={{$json.service_id ? '/' + $json.service_id : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$json.api_token}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Monitoring-Interval",
+              "value": "{{$node[\"Set Monitoring Config\"].json[\"monitoring_interval\"]}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "start_time",
+              "value": "={{$json.start_time || new Date(Date.now() - 3600000).toISOString()}}"
+            },
+            {
+              "name": "end_time",
+              "value": "={{$json.end_time || new Date().toISOString()}}"
+            },
+            {
+              "name": "metrics",
+              "value": "={{$json.metrics || 'cpu,memory,network,latency,throughput'}}"
+            },
+            {
+              "name": "granularity",
+              "value": "={{$json.granularity || '5m'}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "health-monitoring",
+      "name": "Health Status Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "https://aruba-central.example.com/monitoring/v1/services/{{$json.service_type}}/health={{$json.service_id ? '/' + $json.service_id : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$json.api_token}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "check_connectivity",
+              "value": "={{$json.check_connectivity !== false}}"
+            },
+            {
+              "name": "check_performance",
+              "value": "={{$json.check_performance !== false}}"
+            },
+            {
+              "name": "include_dependencies",
+              "value": "={{$json.include_dependencies === true}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "performance-monitoring",
+      "name": "Performance Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://aruba-central.example.com/monitoring/v1/services/{{$json.service_type}}/performance={{$json.service_id ? '/' + $json.service_id : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$json.api_token}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "analysis_period",
+              "value": "={{$json.analysis_period || '1h'}}"
+            },
+            {
+              "name": "include_trends",
+              "value": "={{$json.include_trends !== false}}"
+            },
+            {
+              "name": "benchmark_comparison",
+              "value": "={{$json.benchmark_comparison === true}}"
+            },
+            {
+              "name": "performance_metrics",
+              "value": "={{$json.performance_metrics || 'latency,throughput,error_rate,availability'}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "alert-management",
+      "name": "Alert Management",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 400],
+      "parameters": {
+        "method": "={{$json.operation === 'get_alerts' ? 'GET' : $json.operation === 'acknowledge_alert' ? 'PATCH' : 'POST'}}",
+        "url": "https://aruba-central.example.com/monitoring/v1/alerts={{$json.alert_id ? '/' + $json.alert_id : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$json.api_token}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"service_type\": {{JSON.stringify($json.service_type)}},\n  \"service_id\": {{JSON.stringify($json.service_id)}},\n  \"severity\": {{JSON.stringify($json.severity || \"warning\")}},\n  \"status\": {{JSON.stringify($json.status || \"active\")}},\n  \"acknowledged_by\": {{JSON.stringify($json.acknowledged_by)}},\n  \"acknowledgment_note\": {{JSON.stringify($json.acknowledgment_note)}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "threshold-management",
+      "name": "Threshold Configuration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 500],
+      "parameters": {
+        "method": "={{$json.operation === 'set_thresholds' ? 'PUT' : 'GET'}}",
+        "url": "https://aruba-central.example.com/monitoring/v1/services/{{$json.service_type}}/thresholds={{$json.service_id ? '/' + $json.service_id : ''}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$json.api_token}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cpu_threshold\": {{JSON.stringify($json.cpu_threshold || $node[\"Set Monitoring Config\"].json[\"alert_threshold_cpu\"])}},\n  \"memory_threshold\": {{JSON.stringify($json.memory_threshold || $node[\"Set Monitoring Config\"].json[\"alert_threshold_memory\"])}},\n  \"latency_threshold\": {{JSON.stringify($json.latency_threshold || 100)}},\n  \"error_rate_threshold\": {{JSON.stringify($json.error_rate_threshold || 5)}},\n  \"availability_threshold\": {{JSON.stringify($json.availability_threshold || 99.5)}},\n  \"notification_channels\": {{JSON.stringify($json.notification_channels || [\"slack\", \"email\"])}}\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "process-monitoring-results",
+      "name": "Process Monitoring Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1350, 300],
+      "parameters": {
+        "functionCode": "// Process monitoring operation results\nconst input = items[0].json;\nconst originalRequest = $('Validate Monitoring Request').first().json;\n\nlet result = {\n  request_id: originalRequest.request_id,\n  operation: originalRequest.operation,\n  service_type: originalRequest.service_type,\n  timestamp: new Date().toISOString(),\n  status: 'success',\n  message: 'Monitoring operation completed successfully'\n};\n\ntry {\n  if (input.error) {\n    result.status = 'error';\n    result.message = input.error;\n    result.error_details = input;\n  } else {\n    result.data = input;\n    \n    // Operation-specific processing\n    switch (originalRequest.operation) {\n      case 'get_metrics':\n        result.message = `Metrics collected for ${originalRequest.service_type}`;\n        result.metrics_count = input.metrics ? input.metrics.length : 0;\n        result.time_range = `${originalRequest.start_time || 'last hour'} to ${originalRequest.end_time || 'now'}`;\n        \n        // Check for performance anomalies\n        if (input.metrics) {\n          const alerts = [];\n          input.metrics.forEach(metric => {\n            if (metric.cpu_usage > 85) alerts.push(`High CPU: ${metric.cpu_usage}%`);\n            if (metric.memory_usage > 90) alerts.push(`High Memory: ${metric.memory_usage}%`);\n            if (metric.latency > 100) alerts.push(`High Latency: ${metric.latency}ms`);\n          });\n          if (alerts.length > 0) {\n            result.alerts = alerts;\n            result.status = 'warning';\n          }\n        }\n        break;\n        \n      case 'get_health':\n        result.message = `Health check completed for ${originalRequest.service_type}`;\n        result.health_status = input.status || 'unknown';\n        result.health_score = input.health_score || 0;\n        \n        if (input.status === 'unhealthy') {\n          result.status = 'critical';\n          result.health_issues = input.issues || [];\n        }\n        break;\n        \n      case 'get_performance':\n        result.message = `Performance analysis completed for ${originalRequest.service_type}`;\n        result.performance_score = input.performance_score || 0;\n        result.trends = input.trends || {};\n        \n        if (input.performance_score < 70) {\n          result.status = 'warning';\n          result.message += ' - Performance below acceptable threshold';\n        }\n        break;\n        \n      case 'set_thresholds':\n        result.message = `Monitoring thresholds updated for ${originalRequest.service_type}`;\n        result.thresholds_set = input.thresholds_count || 0;\n        break;\n        \n      case 'get_alerts':\n        result.message = `Retrieved ${input.alerts ? input.alerts.length : 0} alerts`;\n        result.alert_count = input.alerts ? input.alerts.length : 0;\n        result.critical_alerts = input.alerts ? input.alerts.filter(a => a.severity === 'critical').length : 0;\n        break;\n        \n      case 'acknowledge_alert':\n        result.message = `Alert ${originalRequest.alert_id} acknowledged successfully`;\n        result.acknowledged_by = originalRequest.acknowledged_by;\n        break;\n        \n      default:\n        result.message = `${originalRequest.operation} completed successfully`;\n    }\n    \n    // Add capacity information if available\n    if (input.capacity_info) {\n      result.capacity_utilization = input.capacity_info.utilization_percentage;\n      if (input.capacity_info.utilization_percentage > 80) {\n        result.capacity_alerts = [`Capacity utilization at ${input.capacity_info.utilization_percentage}%`];\n      }\n    }\n  }\n} catch (error) {\n  result.status = 'error';\n  result.message = 'Error processing monitoring operation result';\n  result.error_details = error.message;\n}\n\nreturn [{ json: result }];"
+      }
+    },
+    {
+      "id": "generate-monitoring-alerts",
+      "name": "Generate Monitoring Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1550, 300],
+      "parameters": {
+        "functionCode": "// Generate intelligent monitoring alerts\nconst result = items[0].json;\nconst originalRequest = $('Validate Monitoring Request').first().json;\n\nlet notifications = [];\n\n// Determine alert level and channels\nlet alertLevel = 'info';\nlet channels = ['#network-operations'];\n\nif (result.status === 'critical' || result.critical_alerts > 0) {\n  alertLevel = 'critical';\n  channels.push('#network-alerts');\n} else if (result.status === 'warning' || result.alerts?.length > 0) {\n  alertLevel = 'warning';\n  channels.push('#network-alerts');\n}\n\n// Create notifications for each channel\nchannels.forEach(channel => {\n  let icon = '📊';\n  if (alertLevel === 'critical') icon = '🚨';\n  else if (alertLevel === 'warning') icon = '⚠️';\n  else if (result.status === 'success') icon = '✅';\n  \n  let message = `${icon} **Network Service Monitoring Report**\\n`;\n  message += `**Service**: ${result.service_type}\\n`;\n  message += `**Operation**: ${result.operation}\\n`;\n  message += `**Status**: ${result.status.toUpperCase()}\\n`;\n  message += `**Message**: ${result.message}\\n`;\n  message += `**Time**: ${result.timestamp}\\n`;\n  message += `**Request ID**: ${result.request_id}\\n`;\n  \n  // Add operation-specific details\n  if (result.metrics_count) {\n    message += `**Metrics Collected**: ${result.metrics_count}\\n`;\n    message += `**Time Range**: ${result.time_range}\\n`;\n  }\n  \n  if (result.health_status) {\n    message += `**Health Status**: ${result.health_status.toUpperCase()}\\n`;\n    if (result.health_score) {\n      message += `**Health Score**: ${result.health_score}/100\\n`;\n    }\n  }\n  \n  if (result.performance_score) {\n    message += `**Performance Score**: ${result.performance_score}/100\\n`;\n  }\n  \n  if (result.alert_count !== undefined) {\n    message += `**Total Alerts**: ${result.alert_count}\\n`;\n    if (result.critical_alerts > 0) {\n      message += `**Critical Alerts**: ${result.critical_alerts}\\n`;\n    }\n  }\n  \n  // Add capacity information\n  if (result.capacity_utilization) {\n    message += `**Capacity Utilization**: ${result.capacity_utilization}%\\n`;\n  }\n  \n  // Add specific alerts\n  if (result.alerts && result.alerts.length > 0) {\n    message += `\\n**Active Alerts**:\\n`;\n    result.alerts.forEach(alert => {\n      message += `• ${alert}\\n`;\n    });\n  }\n  \n  if (result.health_issues && result.health_issues.length > 0) {\n    message += `\\n**Health Issues**:\\n`;\n    result.health_issues.forEach(issue => {\n      message += `• ${issue}\\n`;\n    });\n  }\n  \n  if (result.capacity_alerts && result.capacity_alerts.length > 0) {\n    message += `\\n**Capacity Alerts**:\\n`;\n    result.capacity_alerts.forEach(alert => {\n      message += `• ${alert}\\n`;\n    });\n  }\n  \n  // Add troubleshooting suggestions for critical issues\n  if (alertLevel === 'critical') {\n    message += `\\n**Immediate Actions Required**:\\n`;\n    message += `• Check service connectivity and dependencies\\n`;\n    message += `• Review recent configuration changes\\n`;\n    message += `• Escalate to on-call engineer if needed\\n`;\n  }\n  \n  notifications.push({\n    json: {\n      channel: channel,\n      message: message,\n      alert_level: alertLevel,\n      result: result\n    }\n  });\n});\n\nreturn notifications;"
+      }
+    },
+    {
+      "id": "send-slack-notification",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1750, 300],
+      "parameters": {
+        "channel": "={{$json.channel}}",
+        "text": "={{$json.message}}",
+        "attachments": [],
+        "otherOptions": {}
+      }
+    },
+    {
+      "id": "create-monitoring-dashboard",
+      "name": "Create Monitoring Dashboard",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1750, 450],
+      "parameters": {
+        "functionCode": "// Create monitoring dashboard data\nconst result = items[0].json.result;\nconst originalRequest = $('Validate Monitoring Request').first().json;\n\n// Dashboard configuration\nconst dashboard = {\n  dashboard_id: `dash-${Date.now()}`,\n  title: `${result.service_type} Monitoring Dashboard`,\n  created: new Date().toISOString(),\n  service_type: result.service_type,\n  service_id: originalRequest.service_id,\n  \n  // Key metrics summary\n  summary: {\n    overall_status: result.status,\n    health_score: result.health_score || null,\n    performance_score: result.performance_score || null,\n    alert_count: result.alert_count || 0,\n    critical_alerts: result.critical_alerts || 0,\n    capacity_utilization: result.capacity_utilization || null\n  },\n  \n  // Dashboard widgets\n  widgets: [\n    {\n      type: 'status_indicator',\n      title: 'Service Status',\n      value: result.status,\n      color: result.status === 'success' ? 'green' : \n             result.status === 'warning' ? 'yellow' : 'red'\n    },\n    {\n      type: 'metric_chart',\n      title: 'Performance Trends',\n      data: result.trends || {},\n      time_range: result.time_range || 'Last Hour'\n    },\n    {\n      type: 'alert_list',\n      title: 'Active Alerts',\n      alerts: result.alerts || [],\n      count: result.alert_count || 0\n    }\n  ],\n  \n  // Refresh settings\n  refresh_interval: originalRequest.monitoring_interval || 60,\n  auto_refresh: true,\n  \n  // Export options\n  export_formats: ['json', 'csv', 'pdf'],\n  \n  // Sharing settings\n  share_url: `https://monitoring.company.com/dashboard/${result.service_type}/${originalRequest.service_id || 'all'}`,\n  embed_code: `<iframe src=\"https://monitoring.company.com/embed/${result.service_type}\" width=\"800\" height=\"600\"></iframe>`\n};\n\n// Add capacity widget if data available\nif (result.capacity_utilization) {\n  dashboard.widgets.push({\n    type: 'capacity_gauge',\n    title: 'Capacity Utilization',\n    value: result.capacity_utilization,\n    threshold: 80,\n    max_value: 100\n  });\n}\n\n// Add health score widget if available\nif (result.health_score) {\n  dashboard.widgets.push({\n    type: 'health_score',\n    title: 'Health Score',\n    value: result.health_score,\n    threshold: 70,\n    max_value: 100\n  });\n}\n\nconsole.log('Generated Monitoring Dashboard:', JSON.stringify(dashboard, null, 2));\n\nreturn [{ json: dashboard }];"
+      }
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1950, 300],
+      "parameters": {
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Monitoring Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Monitoring Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Monitoring Request": {
+      "main": [
+        [
+          {
+            "node": "Set Monitoring Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Monitoring Config": {
+      "main": [
+        [
+          {
+            "node": "Route Monitoring Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Monitoring Operation": {
+      "main": [
+        [
+          {
+            "node": "Metrics Collection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Health Status Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Performance Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Threshold Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Monitoring Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Metrics Collection": {
+      "main": [
+        [
+          {
+            "node": "Process Monitoring Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Status Check": {
+      "main": [
+        [
+          {
+            "node": "Process Monitoring Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Performance Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process Monitoring Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Management": {
+      "main": [
+        [
+          {
+            "node": "Process Monitoring Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threshold Configuration": {
+      "main": [
+        [
+          {
+            "node": "Process Monitoring Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Monitoring Results": {
+      "main": [
+        [
+          {
+            "node": "Generate Monitoring Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Monitoring Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Monitoring Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Monitoring Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "createdAt": "2025-07-17T22:22:24.092Z",
+  "updatedAt": "2025-07-17T22:22:24.092Z"
+}

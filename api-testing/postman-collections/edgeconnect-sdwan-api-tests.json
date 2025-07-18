@@ -1,0 +1,682 @@
+{
+  "info": {
+    "name": "EdgeConnect SD-WAN API Test Collection",
+    "description": "Comprehensive API testing for EdgeConnect SD-WAN including policy management, appliance provisioning, and performance monitoring",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.1.0"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "EdgeConnect authentication and session management tests",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/gms/rest/authentication/login",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "authentication", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Authentication successful', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('token');",
+                  "    pm.expect(jsonData.token).to.not.be.empty;",
+                  "    pm.globals.set('auth_token', jsonData.token);",
+                  "});",
+                  "",
+                  "pm.test('Response time is acceptable', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/authentication/user",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "authentication", "user"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('User info retrieved', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('username');",
+                  "    pm.expect(jsonData).to.have.property('privileges');",
+                  "    pm.globals.set('username_verified', jsonData.username);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Policy Management",
+      "description": "SD-WAN policy configuration and management tests",
+      "item": [
+        {
+          "name": "List Network Policies",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/policy",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "policy"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Policy list is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Policy objects have required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.length > 0) {",
+                  "        const policy = jsonData[0];",
+                  "        pm.expect(policy).to.have.property('name');",
+                  "        pm.expect(policy).to.have.property('id');",
+                  "        pm.globals.set('test_policy_id', policy.id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Test Policy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test_Policy_{{$randomInt}}\",\n  \"description\": \"Test policy for API validation\",\n  \"priority\": 100,\n  \"rules\": [\n    {\n      \"name\": \"Allow_HTTP\",\n      \"action\": \"allow\",\n      \"source\": \"any\",\n      \"destination\": \"any\",\n      \"service\": \"http\",\n      \"enabled\": true\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/gms/rest/policy",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "policy"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Policy created successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('name');",
+                  "    pm.globals.set('created_policy_id', jsonData.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Policy Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/policy/{{created_policy_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "policy", "{{created_policy_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Policy details are complete', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('name');",
+                  "    pm.expect(jsonData).to.have.property('description');",
+                  "    pm.expect(jsonData).to.have.property('rules');",
+                  "    pm.expect(jsonData.rules).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Policy",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated_Test_Policy\",\n  \"description\": \"Updated test policy description\",\n  \"priority\": 150,\n  \"rules\": [\n    {\n      \"name\": \"Allow_HTTP\",\n      \"action\": \"allow\",\n      \"source\": \"any\",\n      \"destination\": \"any\",\n      \"service\": \"http\",\n      \"enabled\": true\n    },\n    {\n      \"name\": \"Allow_HTTPS\",\n      \"action\": \"allow\",\n      \"source\": \"any\",\n      \"destination\": \"any\",\n      \"service\": \"https\",\n      \"enabled\": true\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/gms/rest/policy/{{created_policy_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "policy", "{{created_policy_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Policy updated successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.name).to.eql('Updated_Test_Policy');",
+                  "    pm.expect(jsonData.priority).to.eql(150);",
+                  "    pm.expect(jsonData.rules).to.have.lengthOf(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Test Policy",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/policy/{{created_policy_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "policy", "{{created_policy_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test('Policy deleted successfully', function () {",
+                  "    pm.expect(pm.response.text()).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Appliance Management",
+      "description": "EdgeConnect appliance configuration and management tests",
+      "item": [
+        {
+          "name": "List Appliances",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/appliance",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "appliance"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Appliance list is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Appliances have required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.length > 0) {",
+                  "        const appliance = jsonData[0];",
+                  "        pm.expect(appliance).to.have.property('id');",
+                  "        pm.expect(appliance).to.have.property('hostname');",
+                  "        pm.expect(appliance).to.have.property('status');",
+                  "        pm.globals.set('test_appliance_id', appliance.id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Appliance Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/appliance/{{test_appliance_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "appliance", "{{test_appliance_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Appliance details are complete', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('hostname');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('version');",
+                  "    pm.expect(jsonData).to.have.property('interfaces');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Appliance Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/appliance/{{test_appliance_id}}/stats",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "appliance", "{{test_appliance_id}}", "stats"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Statistics are available', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('cpu_usage');",
+                  "    pm.expect(jsonData).to.have.property('memory_usage');",
+                  "    pm.expect(jsonData).to.have.property('tunnel_stats');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Performance Monitoring",
+      "description": "Performance monitoring and analytics tests",
+      "item": [
+        {
+          "name": "Get Network Performance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/reporting/network/performance?timerange=1h",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "reporting", "network", "performance"],
+              "query": [
+                {
+                  "key": "timerange",
+                  "value": "1h"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Performance data is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('metrics');",
+                  "    pm.expect(jsonData.metrics).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Tunnel Health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/reporting/tunnel/health",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "reporting", "tunnel", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Tunnel health data is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('tunnels');",
+                  "    pm.expect(jsonData.tunnels).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Application Performance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/reporting/application/performance?timerange=1h",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "reporting", "application", "performance"],
+              "query": [
+                {
+                  "key": "timerange",
+                  "value": "1h"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Application performance data is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('applications');",
+                  "    pm.expect(jsonData.applications).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Configuration Management",
+      "description": "Configuration backup and restore tests",
+      "item": [
+        {
+          "name": "Export Configuration",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/configuration/export",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "configuration", "export"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Configuration export is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('configuration');",
+                  "    pm.expect(jsonData).to.have.property('version');",
+                  "    pm.expect(jsonData).to.have.property('timestamp');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Configuration History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/configuration/history",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "configuration", "history"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Configuration history is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('history');",
+                  "    pm.expect(jsonData.history).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cleanup",
+      "description": "Logout and cleanup tests",
+      "item": [
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Auth-Token",
+                "value": "{{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/gms/rest/authentication/logout",
+              "host": ["{{base_url}}"],
+              "path": ["gms", "rest", "authentication", "logout"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Logout successful', function () {",
+                  "    pm.globals.unset('auth_token');",
+                  "    pm.globals.unset('username_verified');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://orchestrator.example.com"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "your_password"
+    }
+  ]
+}

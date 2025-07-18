@@ -1,0 +1,114 @@
+{
+  "name": "IDS/IPS Rule Management Automation",
+  "id": "PBuOh8qoqGiHXxks",
+  "nodes": [
+    {
+      "id": "trigger-webhook",
+      "name": "IDS/IPS Rule Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {
+        "path": "ids-ips-rule-management",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Rule Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Validate IDS/IPS rule input data\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['action_type', 'rule_data'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Action type validation\nconst validActions = ['create_rule', 'update_rule', 'delete_rule', 'deploy_rules', 'rollback_deployment'];\nif (!validActions.includes(input.action_type)) {\n  throw new Error(`Invalid action type: ${input.action_type}`);\n}\n\n// Rule data validation for create/update actions\nif (['create_rule', 'update_rule'].includes(input.action_type)) {\n  const ruleData = input.rule_data;\n  const requiredRuleFields = ['name', 'action', 'severity', 'protocol'];\n  \n  for (const field of requiredRuleFields) {\n    if (!ruleData[field]) {\n      throw new Error(`Missing required rule field: ${field}`);\n    }\n  }\n  \n  // Validate rule action\n  const validRuleActions = ['allow', 'block', 'alert', 'drop'];\n  if (!validRuleActions.includes(ruleData.action)) {\n    throw new Error(`Invalid rule action: ${ruleData.action}`);\n  }\n  \n  // Validate severity\n  const validSeverities = ['low', 'medium', 'high', 'critical'];\n  if (!validSeverities.includes(ruleData.severity)) {\n    throw new Error(`Invalid severity: ${ruleData.severity}`);\n  }\n}\n\n// Enrich input with metadata\nconst enrichedInput = {\n  ...input,\n  processed_at: new Date().toISOString(),\n  request_id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,\n  validation_passed: true\n};\n\nreturn [{ json: enrichedInput }];"
+      }
+    },
+    {
+      "id": "route-action",
+      "name": "Route by Action Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"id": "create-rule", "leftValue": "={{ $json.action_type }}", "rightValue": "create_rule", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "create_rule"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"id": "update-rule", "leftValue": "={{ $json.action_type }}", "rightValue": "update_rule", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "update_rule"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"id": "delete-rule", "leftValue": "={{ $json.action_type }}", "rightValue": "delete_rule", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "delete_rule"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"id": "deploy-rules", "leftValue": "={{ $json.action_type }}", "rightValue": "deploy_rules", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "deploy_rules"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"id": "rollback", "leftValue": "={{ $json.action_type }}", "rightValue": "rollback_deployment", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "rollback"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "IDS/IPS Rule Trigger": {
+      "main": [[{"node": "Validate Rule Input", "type": "main", "index": 0}]]
+    },
+    "Validate Rule Input": {
+      "main": [[{"node": "Route by Action Type", "type": "main", "index": 0}]]
+    },
+    "Route by Action Type": {
+      "main": [
+        [{"node": "Create IDS Rule", "type": "main", "index": 0}],
+        [{"node": "Update IDS Rule", "type": "main", "index": 0}],
+        [{"node": "Delete IDS Rule", "type": "main", "index": 0}],
+        [{"node": "Deploy IDS Rules", "type": "main", "index": 0}],
+        [{"node": "Rollback Deployment", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "webhook_url": "http://192.168.40.100:8006/webhook/ids-ips-rule-management",
+  "created_at": "2025-07-17T15:09:56.726Z"
+}

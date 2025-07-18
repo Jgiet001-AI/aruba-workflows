@@ -1,0 +1,228 @@
+{
+  "info": {
+    "name": "HPE Aruba EdgeConnect Orchestrator API Collection",
+    "description": "Comprehensive API testing collection for HPE Aruba EdgeConnect Orchestrator",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{api_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request script for rate limiting and token management",
+          "const rateLimitDelay = pm.globals.get('rateLimitDelay') || 0;",
+          "if (rateLimitDelay > 0) {",
+          "    setTimeout(() => {}, rateLimitDelay);",
+          "    pm.globals.set('rateLimitDelay', 0);",
+          "}",
+          "",
+          "// Check if session token is expired",
+          "const tokenExpiry = pm.environment.get('token_expiry');",
+          "if (tokenExpiry && Date.now() > parseInt(tokenExpiry)) {",
+          "    pm.environment.unset('session_token');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test script for common validations",
+          "pm.test('Response time is less than 5000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});",
+          "",
+          "// Handle rate limiting",
+          "if (pm.response.code === 429) {",
+          "    const retryAfter = pm.response.headers.get('Retry-After') || 60;",
+          "    pm.globals.set('rateLimitDelay', parseInt(retryAfter) * 1000);",
+          "    pm.test('Rate limited - will retry after ' + retryAfter + ' seconds', function () {",
+          "        pm.expect(pm.response.code).to.equal(429);",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "orchestrator_url",
+      "value": "https://orchestrator.example.com",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "your-api-key-here",
+      "type": "string"
+    },
+    {
+      "key": "session_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cluster_id",
+      "value": "your-cluster-id",
+      "type": "string"
+    },
+    {
+      "key": "gateway_serial",
+      "value": "your-gateway-serial",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login - Session Auth",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has session token', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('session_token');",
+                  "    pm.environment.set('session_token', jsonData.session_token);",
+                  "    ",
+                  "    // Set token expiry (assuming 8 hours)",
+                  "    const expiry = Date.now() + (8 * 60 * 60 * 1000);",
+                  "    pm.environment.set('token_expiry', expiry.toString());",
+                  "});",
+                  "",
+                  "pm.test('Authentication successful', function () {",
+                  "    pm.expect(pm.response.code).to.not.be.oneOf([401, 403]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin_password\"\n}"
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/api/login",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Monitoring",
+      "item": [
+        {
+          "name": "List Appliances",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is array of appliances', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "    if (jsonData.length > 0) {",
+                  "        pm.expect(jsonData[0]).to.have.property('id');",
+                  "        pm.expect(jsonData[0]).to.have.property('name');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{orchestrator_url}}/api/appliances",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api", "appliances"]
+            }
+          }
+        },
+        {
+          "name": "Get Gateway WAN Compression Stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Compression stats present', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('compression_ratio');",
+                  "    pm.expect(jsonData.compression_ratio).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-AUTH-TOKEN",
+                "value": "{{session_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{orchestrator_url}}/gms/rest/monitoring/v1/gateways/{{gateway_serial}}/uplinks/wan_compression_stats",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["gms", "rest", "monitoring", "v1", "gateways", "{{gateway_serial}}", "uplinks", "wan_compression_stats"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
