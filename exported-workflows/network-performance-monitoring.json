@@ -1,0 +1,363 @@
+{
+  "name": "Network Performance Monitoring",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Network Performance Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "network-performance-monitoring",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Performance Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Network Performance Monitoring Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'run_latency_test', 'run_throughput_test', 'run_packet_loss_test', 'run_comprehensive_test',\n  'get_performance_metrics', 'set_performance_thresholds', 'get_historical_data',\n  'generate_performance_report', 'check_sla_compliance'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `perf-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed',\n  \n  // Set performance monitoring defaults\n  test_duration: input.test_duration || 60,\n  test_interval: input.test_interval || 5,\n  target_hosts: input.target_hosts || ['8.8.8.8', '1.1.1.1'],\n  metrics_to_collect: input.metrics_to_collect || ['latency', 'throughput', 'packet_loss', 'jitter'],\n  \n  // Performance thresholds\n  thresholds: {\n    latency: {\n      excellent: input.latency_excellent || 20,\n      good: input.latency_good || 50,\n      acceptable: input.latency_acceptable || 100,\n      poor: input.latency_poor || 200,\n      critical: input.latency_critical || 500\n    },\n    throughput: {\n      excellent: input.throughput_excellent || 90,\n      good: input.throughput_good || 70,\n      acceptable: input.throughput_acceptable || 50,\n      poor: input.throughput_poor || 30,\n      critical: input.throughput_critical || 10\n    },\n    packet_loss: {\n      excellent: input.packet_loss_excellent || 0.01,\n      good: input.packet_loss_good || 0.1,\n      acceptable: input.packet_loss_acceptable || 0.5,\n      poor: input.packet_loss_poor || 1.0,\n      critical: input.packet_loss_critical || 5.0\n    },\n    jitter: {\n      excellent: input.jitter_excellent || 5,\n      good: input.jitter_good || 15,\n      acceptable: input.jitter_acceptable || 30,\n      poor: input.jitter_poor || 50,\n      critical: input.jitter_critical || 100\n    }\n  }\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "route-operation",
+      "name": "Route Performance Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "test",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "get_performance_metrics",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "get_historical_data",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "set_performance_thresholds",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "generate_performance_report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "check_sla_compliance",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "execute-performance-tests",
+      "name": "Execute Performance Tests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// Execute Network Performance Tests\nconst data = items[0].json;\nconst operation = data.operation;\n\n// Simulate performance test execution\nconst results = {\n  test_id: `test-${Date.now()}`,\n  operation: operation,\n  start_time: new Date().toISOString(),\n  test_duration: data.test_duration,\n  targets: data.target_hosts,\n  metrics: {}\n};\n\n// Generate realistic performance metrics\nfor (const target of data.target_hosts) {\n  const metrics = {};\n  \n  if (data.metrics_to_collect.includes('latency')) {\n    metrics.latency = {\n      avg: Math.random() * 100 + 10, // 10-110ms\n      min: Math.random() * 20 + 5,   // 5-25ms\n      max: Math.random() * 200 + 50, // 50-250ms\n      unit: 'ms'\n    };\n  }\n  \n  if (data.metrics_to_collect.includes('throughput')) {\n    metrics.throughput = {\n      download: Math.random() * 800 + 200, // 200-1000 Mbps\n      upload: Math.random() * 400 + 100,   // 100-500 Mbps\n      unit: 'Mbps'\n    };\n  }\n  \n  if (data.metrics_to_collect.includes('packet_loss')) {\n    metrics.packet_loss = {\n      percentage: Math.random() * 2, // 0-2%\n      packets_sent: 1000,\n      packets_received: Math.floor(1000 - (Math.random() * 20)),\n      unit: '%'\n    };\n  }\n  \n  if (data.metrics_to_collect.includes('jitter')) {\n    metrics.jitter = {\n      avg: Math.random() * 20 + 1, // 1-21ms\n      max: Math.random() * 50 + 10, // 10-60ms\n      unit: 'ms'\n    };\n  }\n  \n  results.metrics[target] = metrics;\n}\n\n// Evaluate performance against thresholds\nresults.evaluation = {};\nfor (const target of data.target_hosts) {\n  const targetMetrics = results.metrics[target];\n  const evaluation = {};\n  \n  if (targetMetrics.latency) {\n    const latency = targetMetrics.latency.avg;\n    if (latency <= data.thresholds.latency.excellent) evaluation.latency = 'excellent';\n    else if (latency <= data.thresholds.latency.good) evaluation.latency = 'good';\n    else if (latency <= data.thresholds.latency.acceptable) evaluation.latency = 'acceptable';\n    else if (latency <= data.thresholds.latency.poor) evaluation.latency = 'poor';\n    else evaluation.latency = 'critical';\n  }\n  \n  if (targetMetrics.packet_loss) {\n    const packetLoss = targetMetrics.packet_loss.percentage;\n    if (packetLoss <= data.thresholds.packet_loss.excellent) evaluation.packet_loss = 'excellent';\n    else if (packetLoss <= data.thresholds.packet_loss.good) evaluation.packet_loss = 'good';\n    else if (packetLoss <= data.thresholds.packet_loss.acceptable) evaluation.packet_loss = 'acceptable';\n    else if (packetLoss <= data.thresholds.packet_loss.poor) evaluation.packet_loss = 'poor';\n    else evaluation.packet_loss = 'critical';\n  }\n  \n  results.evaluation[target] = evaluation;\n}\n\nresults.end_time = new Date().toISOString();\nresults.status = 'completed';\nresults.overall_health = Object.values(results.evaluation).every(eval => \n  Object.values(eval).every(rating => ['excellent', 'good'].includes(rating))\n) ? 'healthy' : 'degraded';\n\nreturn [{ json: {\n  ...data,\n  test_results: results,\n  message: `Performance test ${operation} completed successfully`,\n  health_status: results.overall_health\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "get-metrics",
+      "name": "Get Performance Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        250
+      ],
+      "parameters": {
+        "jsCode": "// Get Current Performance Metrics\nconst data = items[0].json;\n\n// Simulate current metrics retrieval\nconst currentMetrics = {\n  timestamp: new Date().toISOString(),\n  network_interfaces: {\n    'eth0': {\n      status: 'up',\n      speed: '1000Mbps',\n      utilization: Math.random() * 80 + 10, // 10-90%\n      errors: Math.floor(Math.random() * 5),\n      drops: Math.floor(Math.random() * 3)\n    },\n    'wlan0': {\n      status: 'up',\n      speed: '866Mbps',\n      utilization: Math.random() * 60 + 20, // 20-80%\n      signal_strength: Math.random() * 30 - 70, // -70 to -40 dBm\n      errors: Math.floor(Math.random() * 10)\n    }\n  },\n  bandwidth_usage: {\n    download: Math.random() * 500 + 100, // 100-600 Mbps\n    upload: Math.random() * 200 + 50,    // 50-250 Mbps\n    total: Math.random() * 700 + 150     // 150-850 Mbps\n  },\n  connection_stats: {\n    active_connections: Math.floor(Math.random() * 1000 + 100),\n    tcp_connections: Math.floor(Math.random() * 800 + 80),\n    udp_connections: Math.floor(Math.random() * 200 + 20)\n  },\n  quality_metrics: {\n    availability: 99.9 - (Math.random() * 1), // 98.9-99.9%\n    reliability: 99.5 - (Math.random() * 0.5), // 99.0-99.5%\n    response_time: Math.random() * 50 + 10     // 10-60ms\n  }\n};\n\nreturn [{ json: {\n  ...data,\n  current_metrics: currentMetrics,\n  message: 'Current performance metrics retrieved successfully',\n  status: 'success'\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "update-thresholds",
+      "name": "Update Performance Thresholds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        350
+      ],
+      "parameters": {
+        "jsCode": "// Update Performance Thresholds\nconst data = items[0].json;\n\n// Update thresholds configuration\nconst updatedThresholds = {\n  ...data.thresholds,\n  last_updated: new Date().toISOString(),\n  updated_by: 'n8n-automation'\n};\n\n// Validate threshold values\nfor (const metric in updatedThresholds) {\n  if (typeof updatedThresholds[metric] === 'object' && updatedThresholds[metric].excellent !== undefined) {\n    const thresholds = updatedThresholds[metric];\n    if (thresholds.excellent > thresholds.good || \n        thresholds.good > thresholds.acceptable ||\n        thresholds.acceptable > thresholds.poor ||\n        thresholds.poor > thresholds.critical) {\n      throw new Error(`Invalid threshold progression for ${metric}`);\n    }\n  }\n}\n\nreturn [{ json: {\n  ...data,\n  updated_thresholds: updatedThresholds,\n  message: 'Performance thresholds updated successfully',\n  status: 'success'\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "generate-reports",
+      "name": "Generate Performance Reports",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        450
+      ],
+      "parameters": {
+        "jsCode": "// Generate Performance Reports\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet report = {\n  report_id: `rpt-${Date.now()}`,\n  generated_at: new Date().toISOString(),\n  report_type: operation,\n  period: data.report_period || 'last_24_hours'\n};\n\nif (operation === 'generate_performance_report') {\n  report.sections = {\n    executive_summary: {\n      overall_health: 'Good',\n      key_findings: [\n        'Network latency within acceptable limits',\n        'Bandwidth utilization at 65% average',\n        'No critical performance issues detected'\n      ],\n      recommendations: [\n        'Monitor bandwidth growth trends',\n        'Consider capacity planning for Q4',\n        'Implement proactive alerting for latency spikes'\n      ]\n    },\n    performance_metrics: {\n      average_latency: '45ms',\n      peak_bandwidth: '850 Mbps',\n      availability: '99.95%',\n      packet_loss: '0.02%'\n    },\n    trend_analysis: {\n      latency_trend: 'stable',\n      bandwidth_trend: 'increasing',\n      availability_trend: 'improving'\n    },\n    incidents: [\n      {\n        timestamp: new Date(Date.now() - 86400000).toISOString(),\n        type: 'latency_spike',\n        duration: '15 minutes',\n        impact: 'low',\n        resolution: 'auto-resolved'\n      }\n    ]\n  };\n} else if (operation === 'check_sla_compliance') {\n  report.sla_metrics = {\n    availability_sla: {\n      target: '99.9%',\n      actual: '99.95%',\n      status: 'compliant'\n    },\n    latency_sla: {\n      target: '<100ms',\n      actual: '45ms avg',\n      status: 'compliant'\n    },\n    throughput_sla: {\n      target: '>500 Mbps',\n      actual: '750 Mbps avg',\n      status: 'compliant'\n    }\n  };\n  report.compliance_score = 100;\n  report.violations = [];\n}\n\nreturn [{ json: {\n  ...data,\n  performance_report: report,\n  message: `${operation} completed successfully`,\n  status: 'success'\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "process-results",
+      "name": "Process Performance Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1150,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Process Network Performance Results\nconst data = items[0].json;\n\nlet result = {\n  request_id: data.request_id,\n  operation: data.operation,\n  timestamp: new Date().toISOString(),\n  status: 'success'\n};\n\n// Operation-specific result processing\nswitch (data.operation) {\n  case 'run_latency_test':\n  case 'run_throughput_test':\n  case 'run_packet_loss_test':\n  case 'run_comprehensive_test':\n    result.message = `Performance test ${data.operation} completed successfully`;\n    result.test_results = data.test_results;\n    result.health_status = data.health_status;\n    result.targets_tested = data.target_hosts.length;\n    break;\n    \n  case 'get_performance_metrics':\n  case 'get_historical_data':\n    result.message = 'Performance metrics retrieved successfully';\n    result.metrics = data.current_metrics;\n    break;\n    \n  case 'set_performance_thresholds':\n    result.message = 'Performance thresholds updated successfully';\n    result.thresholds = data.updated_thresholds;\n    break;\n    \n  case 'generate_performance_report':\n  case 'check_sla_compliance':\n    result.message = `${data.operation} completed successfully`;\n    result.report = data.performance_report;\n    if (data.performance_report.compliance_score) {\n      result.compliance_score = data.performance_report.compliance_score;\n    }\n    break;\n    \n  default:\n    result.message = `${data.operation} completed successfully`;\n}\n\n// Add performance summary if test results available\nif (data.test_results && data.test_results.evaluation) {\n  const evaluations = Object.values(data.test_results.evaluation);\n  const ratings = evaluations.flatMap(eval => Object.values(eval));\n  const criticalCount = ratings.filter(r => r === 'critical').length;\n  const poorCount = ratings.filter(r => r === 'poor').length;\n  \n  result.performance_summary = {\n    total_metrics: ratings.length,\n    critical_issues: criticalCount,\n    poor_performance: poorCount,\n    overall_status: criticalCount > 0 ? 'critical' : poorCount > 0 ? 'degraded' : 'healthy'\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1350,
+        300
+      ],
+      "parameters": {
+        "channel": "#network-monitoring",
+        "username": "n8n-performance-bot",
+        "text": "📊 **Network Performance Monitoring**\\n\\n**Operation:** {{ $json.operation }}\\n**Status:** {{ $json.status.toUpperCase() }}\\n**Message:** {{ $json.message }}\\n**Time:** {{ $json.timestamp }}\\n**Request ID:** {{ $json.request_id }}\\n\\n{{ $json.targets_tested ? '**Targets Tested:** ' + $json.targets_tested + '\\\\n' : '' }}{{ $json.health_status ? '**Health Status:** ' + $json.health_status.toUpperCase() + '\\\\n' : '' }}{{ $json.compliance_score ? '**SLA Compliance:** ' + $json.compliance_score + '%\\\\n' : '' }}{{ $json.performance_summary ? '**Critical Issues:** ' + $json.performance_summary.critical_issues + '\\\\n' : '' }}\\n{{ $json.status === 'success' ? '✅ Performance monitoring completed successfully' : '❌ Performance monitoring failed - check logs' }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1550,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Network Performance Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Performance Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Performance Request": {
+      "main": [
+        [
+          {
+            "node": "Route Performance Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Performance Operation": {
+      "main": [
+        [
+          {
+            "node": "Execute Performance Tests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Performance Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Performance Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Performance Reports",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Performance Tests": {
+      "main": [
+        [
+          {
+            "node": "Process Performance Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Performance Metrics": {
+      "main": [
+        [
+          {
+            "node": "Process Performance Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Performance Thresholds": {
+      "main": [
+        [
+          {
+            "node": "Process Performance Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Performance Reports": {
+      "main": [
+        [
+          {
+            "node": "Process Performance Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Performance Results": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

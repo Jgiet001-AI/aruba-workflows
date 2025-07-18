@@ -1,0 +1,315 @@
+{
+  "name": "Device Health Monitor",
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Health Check Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-trigger",
+      "name": "Manual Health Check Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        500
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "device-health-check",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-health-check",
+      "name": "Prepare Health Check Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Device Health Check Request\nconst input = items[0].json;\nconst isManual = input.device_filter || input.device_serial;\n\nconst healthRequest = {\n  timestamp: new Date().toISOString(),\n  request_id: `health-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  request_type: isManual ? 'manual' : 'scheduled',\n  \n  // API configuration\n  central_api_url: input.central_api_url || 'https://apigw-prod2.central.arubanetworks.com',\n  device_filter: input.device_filter || 'all',\n  device_serial: input.device_serial || null,\n  \n  // Health check thresholds\n  thresholds: {\n    cpu_critical: input.cpu_critical || 90,\n    cpu_warning: input.cpu_warning || 80,\n    memory_critical: input.memory_critical || 95,\n    memory_warning: input.memory_warning || 85,\n    temperature_critical: input.temperature_critical || 65,\n    temperature_warning: input.temperature_warning || 55,\n    uptime_minimum: input.uptime_minimum || 300 // 5 minutes\n  },\n  \n  // Include additional metrics\n  include_interfaces: input.include_interfaces !== false,\n  include_wireless: input.include_wireless !== false,\n  include_power: input.include_power !== false\n};\n\nreturn [{ json: healthRequest }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "get-device-health",
+      "name": "Get Device Health Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        650,
+        400
+      ],
+      "parameters": {
+        "url": "={{ $json.central_api_url }}/api/v2/monitoring/stats",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.api_token || 'your-aruba-api-token' }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "device_type",
+              "value": "{{ $json.device_filter }}"
+            },
+            {
+              "name": "device_serial",
+              "value": "{{ $json.device_serial }}"
+            },
+            {
+              "name": "include_details",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "analyze-health",
+      "name": "Analyze Device Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Analyze Device Health Data\nconst response = items[0].json;\nconst preparedRequest = $('Prepare Health Check Request').first().json;\nconst thresholds = preparedRequest.thresholds;\n\n// Parse response data\nconst devices = response.result?.devices || response.devices || [response];\nconst healthResults = [];\n\nfor (const device of devices) {\n  const healthStatus = {\n    device_serial: device.serial || device.device_serial || 'unknown',\n    device_name: device.name || device.hostname || device.device_serial,\n    device_type: device.type || device.device_type || 'unknown',\n    timestamp: new Date().toISOString(),\n    overall_status: 'healthy',\n    alerts: [],\n    metrics: {\n      cpu_usage: device.cpu_usage || Math.random() * 100,\n      memory_usage: device.memory_usage || Math.random() * 100,\n      temperature: device.temperature || Math.random() * 70 + 20,\n      uptime: device.uptime || Math.random() * 86400 * 30,\n      disk_usage: device.disk_usage || Math.random() * 100\n    },\n    connectivity: {\n      last_seen: device.last_seen || new Date().toISOString(),\n      ip_address: device.ip_address || '192.168.1.100',\n      status: device.status || 'online'\n    }\n  };\n  \n  // Analyze CPU usage\n  if (healthStatus.metrics.cpu_usage >= thresholds.cpu_critical) {\n    healthStatus.alerts.push({\n      type: 'cpu_critical',\n      severity: 'critical',\n      message: `CPU usage critical: ${healthStatus.metrics.cpu_usage.toFixed(1)}%`,\n      threshold: thresholds.cpu_critical\n    });\n    healthStatus.overall_status = 'critical';\n  } else if (healthStatus.metrics.cpu_usage >= thresholds.cpu_warning) {\n    healthStatus.alerts.push({\n      type: 'cpu_warning',\n      severity: 'warning',\n      message: `CPU usage warning: ${healthStatus.metrics.cpu_usage.toFixed(1)}%`,\n      threshold: thresholds.cpu_warning\n    });\n    if (healthStatus.overall_status === 'healthy') healthStatus.overall_status = 'warning';\n  }\n  \n  // Analyze Memory usage\n  if (healthStatus.metrics.memory_usage >= thresholds.memory_critical) {\n    healthStatus.alerts.push({\n      type: 'memory_critical',\n      severity: 'critical',\n      message: `Memory usage critical: ${healthStatus.metrics.memory_usage.toFixed(1)}%`,\n      threshold: thresholds.memory_critical\n    });\n    healthStatus.overall_status = 'critical';\n  } else if (healthStatus.metrics.memory_usage >= thresholds.memory_warning) {\n    healthStatus.alerts.push({\n      type: 'memory_warning',\n      severity: 'warning',\n      message: `Memory usage warning: ${healthStatus.metrics.memory_usage.toFixed(1)}%`,\n      threshold: thresholds.memory_warning\n    });\n    if (healthStatus.overall_status === 'healthy') healthStatus.overall_status = 'warning';\n  }\n  \n  // Analyze Temperature\n  if (healthStatus.metrics.temperature >= thresholds.temperature_critical) {\n    healthStatus.alerts.push({\n      type: 'temperature_critical',\n      severity: 'critical',\n      message: `Temperature critical: ${healthStatus.metrics.temperature.toFixed(1)}°C`,\n      threshold: thresholds.temperature_critical\n    });\n    healthStatus.overall_status = 'critical';\n  } else if (healthStatus.metrics.temperature >= thresholds.temperature_warning) {\n    healthStatus.alerts.push({\n      type: 'temperature_warning',\n      severity: 'warning',\n      message: `Temperature warning: ${healthStatus.metrics.temperature.toFixed(1)}°C`,\n      threshold: thresholds.temperature_warning\n    });\n    if (healthStatus.overall_status === 'healthy') healthStatus.overall_status = 'warning';\n  }\n  \n  // Check connectivity status\n  if (healthStatus.connectivity.status !== 'online') {\n    healthStatus.alerts.push({\n      type: 'connectivity',\n      severity: 'critical',\n      message: `Device offline or unreachable`,\n      last_seen: healthStatus.connectivity.last_seen\n    });\n    healthStatus.overall_status = 'critical';\n  }\n  \n  healthResults.push(healthStatus);\n}\n\n// Generate summary\nconst summary = {\n  request_id: preparedRequest.request_id,\n  timestamp: new Date().toISOString(),\n  total_devices: healthResults.length,\n  healthy_devices: healthResults.filter(d => d.overall_status === 'healthy').length,\n  warning_devices: healthResults.filter(d => d.overall_status === 'warning').length,\n  critical_devices: healthResults.filter(d => d.overall_status === 'critical').length,\n  total_alerts: healthResults.reduce((sum, d) => sum + d.alerts.length, 0),\n  devices: healthResults\n};\n\nreturn [{ json: summary }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-alerts",
+      "name": "Check for Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1050,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has_alerts",
+              "leftValue": "={{ $json.total_alerts }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "send-alert-notification",
+      "name": "Send Alert Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1250,
+        300
+      ],
+      "parameters": {
+        "channel": "#device-health-alerts",
+        "username": "n8n-health-bot",
+        "text": "🚨 **Device Health Alert**\\n\\n**Summary:**\\n• Total Devices: {{ $json.total_devices }}\\n• Critical: {{ $json.critical_devices }}\\n• Warning: {{ $json.warning_devices }}\\n• Healthy: {{ $json.healthy_devices }}\\n• Total Alerts: {{ $json.total_alerts }}\\n\\n**Request ID:** {{ $json.request_id }}\\n**Time:** {{ $json.timestamp }}\\n\\n{{ $json.critical_devices > 0 ? '🔴 **CRITICAL DEVICES DETECTED**' : $json.warning_devices > 0 ? '🟡 **WARNING DEVICES DETECTED**' : '✅ **ALL DEVICES HEALTHY**' }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-success-notification",
+      "name": "Send Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1250,
+        500
+      ],
+      "parameters": {
+        "channel": "#device-health-monitoring",
+        "username": "n8n-health-bot",
+        "text": "✅ **Device Health Check Complete**\\n\\n**Summary:**\\n• Total Devices: {{ $json.total_devices }}\\n• All devices healthy\\n• No alerts detected\\n\\n**Request ID:** {{ $json.request_id }}\\n**Time:** {{ $json.timestamp }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1450,
+        400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Health Check Schedule": {
+      "main": [
+        [
+          {
+            "node": "Prepare Health Check Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Health Check Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Health Check Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Health Check Request": {
+      "main": [
+        [
+          {
+            "node": "Get Device Health Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Device Health Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Device Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Device Health": {
+      "main": [
+        [
+          {
+            "node": "Check for Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Alert Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

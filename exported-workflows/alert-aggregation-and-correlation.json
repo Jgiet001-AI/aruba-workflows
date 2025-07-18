@@ -1,0 +1,329 @@
+{
+  "name": "Alert Aggregation and Correlation",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Alert Aggregation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "alert-aggregation",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-alert",
+      "name": "Validate Alert Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Alert Aggregation Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['source', 'alert_type'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid sources and severity levels\nconst validSources = ['aruba_central', 'aos_cx', 'edgeconnect', 'uxi', 'monitoring', 'security'];\nconst validSeverities = ['critical', 'high', 'medium', 'low', 'info'];\n\nif (!validSources.includes(input.source)) {\n  throw new Error(`Invalid source: ${input.source}. Valid sources: ${validSources.join(', ')}`);\n}\n\n// Set defaults and prepare alert\nconst processedAlert = {\n  ...input,\n  alert_id: input.alert_id || `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  timestamp: input.timestamp || new Date().toISOString(),\n  severity: input.severity || 'medium',\n  status: input.status || 'new',\n  \n  // Standardize fields\n  device_id: input.device_id || input.device_serial || input.hostname || 'unknown',\n  message: input.message || input.description || 'Alert message not provided',\n  source_system: input.source,\n  \n  // Processing metadata\n  processing_timestamp: new Date().toISOString(),\n  correlation_id: input.correlation_id || null,\n  parent_alert_id: input.parent_alert_id || null\n};\n\nreturn [{ json: processedAlert }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "categorize-alert",
+      "name": "Categorize Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Alert Categorization Engine\nconst alert = items[0].json;\n\nconst categoryRules = {\n  device_health: {\n    keywords: ['cpu', 'memory', 'temperature', 'disk', 'health', 'utilization', 'performance'],\n    patterns: [/cpu.*usage/i, /memory.*usage/i, /temperature.*high/i, /disk.*full/i]\n  },\n  connectivity: {\n    keywords: ['link', 'connection', 'interface', 'port', 'down', 'up', 'unreachable', 'timeout'],\n    patterns: [/link.*down/i, /interface.*down/i, /connection.*lost/i, /unreachable/i]\n  },\n  security: {\n    keywords: ['security', 'intrusion', 'threat', 'unauthorized', 'breach', 'attack', 'malware'],\n    patterns: [/security.*violation/i, /unauthorized.*access/i, /intrusion.*detected/i]\n  },\n  configuration: {\n    keywords: ['config', 'configuration', 'settings', 'policy', 'template', 'deployment'],\n    patterns: [/config.*change/i, /policy.*violation/i, /deployment.*failed/i]\n  },\n  power: {\n    keywords: ['power', 'poe', 'battery', 'ups', 'voltage', 'current'],\n    patterns: [/power.*failure/i, /poe.*overload/i, /battery.*low/i]\n  },\n  wireless: {\n    keywords: ['wireless', 'wifi', 'radio', 'ssid', 'client', 'association'],\n    patterns: [/radio.*failure/i, /client.*disconnected/i, /ssid.*down/i]\n  }\n};\n\n// Determine alert category\nlet category = 'general';\nlet confidence = 0;\nconst message = alert.message.toLowerCase();\nconst alertType = alert.alert_type.toLowerCase();\n\nfor (const [cat, rules] of Object.entries(categoryRules)) {\n  let score = 0;\n  \n  // Check keywords\n  for (const keyword of rules.keywords) {\n    if (message.includes(keyword) || alertType.includes(keyword)) {\n      score += 1;\n    }\n  }\n  \n  // Check patterns\n  for (const pattern of rules.patterns) {\n    if (pattern.test(message) || pattern.test(alertType)) {\n      score += 2;\n    }\n  }\n  \n  if (score > confidence) {\n    confidence = score;\n    category = cat;\n  }\n}\n\n// Priority mapping based on source and severity\nconst priorityMapping = {\n  aruba_central: { critical: 1, high: 2, medium: 3, low: 4, info: 5 },\n  aos_cx: { critical: 1, high: 2, medium: 3, low: 4, info: 5 },\n  edgeconnect: { critical: 1, high: 2, medium: 3, low: 4, info: 5 },\n  uxi: { critical: 2, high: 3, medium: 4, low: 5, info: 5 },\n  monitoring: { critical: 1, high: 2, medium: 3, low: 4, info: 5 },\n  security: { critical: 1, high: 1, medium: 2, low: 3, info: 4 }\n};\n\nconst priority = priorityMapping[alert.source_system]?.[alert.severity] || 3;\n\n// Enhanced alert with categorization\nconst categorizedAlert = {\n  ...alert,\n  category: category,\n  confidence_score: confidence,\n  priority: priority,\n  tags: [\n    alert.source_system,\n    category,\n    alert.severity,\n    `priority-${priority}`\n  ],\n  \n  // Correlation hints for grouping\n  correlation_keys: {\n    device: alert.device_id,\n    category: category,\n    severity: alert.severity,\n    time_window: Math.floor(Date.now() / (5 * 60 * 1000)) // 5-minute windows\n  }\n};\n\nreturn [{ json: categorizedAlert }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-correlation",
+      "name": "Check for Alert Correlation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Alert Correlation Engine\nconst alert = items[0].json;\n\n// Simulated correlation store (in production, use database)\nconst recentAlerts = global.alertCorrelationStore || [];\n\n// Clean old alerts (older than 30 minutes)\nconst thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;\nglobal.alertCorrelationStore = recentAlerts.filter(a => \n  new Date(a.timestamp).getTime() > thirtyMinutesAgo\n);\n\n// Look for correlated alerts\nconst correlatedAlerts = global.alertCorrelationStore.filter(existing => {\n  // Same device correlation\n  if (existing.device_id === alert.device_id && \n      existing.category === alert.category &&\n      existing.alert_id !== alert.alert_id) {\n    return true;\n  }\n  \n  // Time window correlation (same category, similar time)\n  if (existing.category === alert.category &&\n      existing.correlation_keys.time_window === alert.correlation_keys.time_window &&\n      existing.severity === alert.severity &&\n      existing.alert_id !== alert.alert_id) {\n    return true;\n  }\n  \n  return false;\n});\n\n// Determine if this is a new incident or part of existing one\nlet incident_id = null;\nlet correlation_type = 'none';\nconst correlation_count = correlatedAlerts.length;\n\nif (correlatedAlerts.length > 0) {\n  // Find existing incident or create new one\n  incident_id = correlatedAlerts[0].incident_id || \n                `incident-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\n  \n  if (correlatedAlerts.some(a => a.device_id === alert.device_id)) {\n    correlation_type = 'device_correlation';\n  } else {\n    correlation_type = 'pattern_correlation';\n  }\n  \n  // Update existing alerts with incident ID\n  correlatedAlerts.forEach(existing => {\n    existing.incident_id = incident_id;\n  });\n} else if (alert.priority <= 2 || alert.category === 'security') {\n  // High priority or security alerts always create incidents\n  incident_id = `incident-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\n  correlation_type = 'new_incident';\n}\n\n// Enhanced alert with correlation data\nconst correlatedAlert = {\n  ...alert,\n  incident_id: incident_id,\n  correlation_type: correlation_type,\n  correlation_count: correlation_count,\n  correlated_alert_ids: correlatedAlerts.map(a => a.alert_id),\n  \n  // Escalation logic\n  requires_escalation: alert.priority <= 2 || correlation_count >= 3,\n  auto_resolution: alert.category === 'device_health' && correlation_count === 0,\n  \n  // Processing metadata\n  correlation_processed_at: new Date().toISOString()\n};\n\n// Add to correlation store\nglobal.alertCorrelationStore = global.alertCorrelationStore || [];\nglobal.alertCorrelationStore.push(correlatedAlert);\n\nreturn [{ json: correlatedAlert }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "route-alert",
+      "name": "Route Alert by Priority",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1050,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": 1,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": 2,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": 3,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "handle-critical",
+      "name": "Handle Critical Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1300,
+        100
+      ],
+      "parameters": {
+        "channel": "#critical-alerts",
+        "username": "n8n-alert-bot",
+        "text": "🔴 **CRITICAL ALERT**\\n\\n**Alert ID:** {{ $json.alert_id }}\\n**Device:** {{ $json.device_id }}\\n**Category:** {{ $json.category }}\\n**Message:** {{ $json.message }}\\n**Source:** {{ $json.source_system }}\\n**Priority:** {{ $json.priority }}\\n\\n{{ $json.incident_id ? '**Incident ID:** ' + $json.incident_id + '\\\\n' : '' }}{{ $json.correlation_count > 0 ? '**Correlated Alerts:** ' + $json.correlation_count + '\\\\n' : '' }}\\n**Time:** {{ $json.timestamp }}\\n\\n🚨 **IMMEDIATE ATTENTION REQUIRED**"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "handle-high",
+      "name": "Handle High Priority Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "channel": "#high-priority-alerts",
+        "username": "n8n-alert-bot",
+        "text": "🟠 **HIGH PRIORITY ALERT**\\n\\n**Alert ID:** {{ $json.alert_id }}\\n**Device:** {{ $json.device_id }}\\n**Category:** {{ $json.category }}\\n**Message:** {{ $json.message }}\\n**Source:** {{ $json.source_system }}\\n**Priority:** {{ $json.priority }}\\n\\n{{ $json.incident_id ? '**Incident ID:** ' + $json.incident_id + '\\\\n' : '' }}{{ $json.correlation_count > 0 ? '**Correlated Alerts:** ' + $json.correlation_count + '\\\\n' : '' }}\\n**Time:** {{ $json.timestamp }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "handle-normal",
+      "name": "Handle Normal Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1300,
+        500
+      ],
+      "parameters": {
+        "channel": "#general-alerts",
+        "username": "n8n-alert-bot",
+        "text": "🟡 **Alert Notification**\\n\\n**Alert ID:** {{ $json.alert_id }}\\n**Device:** {{ $json.device_id }}\\n**Category:** {{ $json.category }}\\n**Message:** {{ $json.message }}\\n**Source:** {{ $json.source_system }}\\n**Priority:** {{ $json.priority }}\\n\\n{{ $json.incident_id ? '**Incident ID:** ' + $json.incident_id + '\\\\n' : '' }}{{ $json.correlation_count > 0 ? '**Correlated Alerts:** ' + $json.correlation_count + '\\\\n' : '' }}\\n**Time:** {{ $json.timestamp }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "store-alert",
+      "name": "Store Alert Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        250
+      ],
+      "parameters": {
+        "jsCode": "// Store Alert in Database (Simulated)\nconst alert = items[0].json;\n\n// Simulated database storage\nconst alertRecord = {\n  ...alert,\n  stored_at: new Date().toISOString(),\n  database_id: `db_${alert.alert_id}`,\n  status: 'stored',\n  \n  // Metrics for reporting\n  processing_time_ms: Date.now() - new Date(alert.processing_timestamp).getTime(),\n  \n  // Audit trail\n  processing_steps: [\n    'validation',\n    'categorization', \n    'correlation',\n    'routing',\n    'notification',\n    'storage'\n  ]\n};\n\n// Log alert for analytics\nconsole.log(`Alert processed: ${alert.alert_id} - Category: ${alert.category} - Priority: ${alert.priority}`);\n\nreturn [{ json: alertRecord }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1700,
+        250
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Alert Aggregation Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Alert Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Alert Input": {
+      "main": [
+        [
+          {
+            "node": "Categorize Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Alert": {
+      "main": [
+        [
+          {
+            "node": "Check for Alert Correlation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Alert Correlation": {
+      "main": [
+        [
+          {
+            "node": "Route Alert by Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Alert by Priority": {
+      "main": [
+        [
+          {
+            "node": "Handle Critical Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle High Priority Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Normal Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Critical Alerts": {
+      "main": [
+        [
+          {
+            "node": "Store Alert Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle High Priority Alerts": {
+      "main": [
+        [
+          {
+            "node": "Store Alert Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Normal Alerts": {
+      "main": [
+        [
+          {
+            "node": "Store Alert Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Alert Data": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

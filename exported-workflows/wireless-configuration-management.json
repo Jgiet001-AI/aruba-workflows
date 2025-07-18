@@ -1,0 +1,246 @@
+{
+  "name": "Wireless Configuration Management",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Wireless Config Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wireless-config-management",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Wireless Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Wireless Configuration Management Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'create_ssid', 'update_ssid', 'delete_ssid', 'list_ssids',\n  'create_wlan_group', 'update_wlan_group', 'delete_wlan_group',\n  'assign_ssid_to_group', 'remove_ssid_from_group',\n  'configure_radio_profile', 'update_radio_profile', 'delete_radio_profile',\n  'configure_ap_group', 'update_ap_group', 'assign_ap_to_group',\n  'configure_mesh', 'configure_band_steering', 'configure_load_balancing',\n  'get_wireless_stats', 'get_client_info', 'get_rf_health'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Operation-specific validation\nif (['create_ssid', 'update_ssid'].includes(input.operation)) {\n  if (!input.ssid_name) {\n    throw new Error('SSID operations require ssid_name');\n  }\n  if (!input.security_type) {\n    throw new Error('SSID operations require security_type');\n  }\n}\n\nif (['create_wlan_group', 'update_wlan_group'].includes(input.operation)) {\n  if (!input.group_name) {\n    throw new Error('WLAN group operations require group_name');\n  }\n}\n\nif (['assign_ssid_to_group', 'remove_ssid_from_group'].includes(input.operation)) {\n  if (!input.ssid_name || !input.group_name) {\n    throw new Error('SSID group assignment requires ssid_name and group_name');\n  }\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `wireless-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed',\n  \n  // Set Aruba Central defaults\n  base_url: input.base_url || 'https://apigw-prod2.central.arubanetworks.com',\n  group_name: input.group_name || 'default-ap-group',\n  security_type: input.security_type || 'WPA3-PSK',\n  vlan_id: input.vlan_id || 100,\n  band: input.band || 'dual',\n  channel_width: input.channel_width || '80MHz',\n  max_clients: input.max_clients || 64,\n  broadcast_ssid: input.broadcast_ssid !== false,\n  client_isolation: input.client_isolation || false,\n  band_steering: input.band_steering || true,\n  load_balancing: input.load_balancing || false\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "authenticate-central",
+      "name": "Authenticate to Aruba Central",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "url": "={{ $json.base_url }}/oauth2/token",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "form",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $vars.ARUBA_CLIENT_ID || 'your-client-id' }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $vars.ARUBA_CLIENT_SECRET || 'your-client-secret' }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "route-operation",
+      "name": "Route Wireless Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        850,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "ssid",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "wlan_group",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "radio_profile",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "ap_group",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "="{{ $json.operation }}",
+                    "rightValue": "stats",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "client",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "rf_health",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Wireless Config Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Wireless Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Wireless Request": {
+      "main": [
+        [
+          {
+            "node": "Authenticate to Aruba Central",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticate to Aruba Central": {
+      "main": [
+        [
+          {
+            "node": "Route Wireless Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

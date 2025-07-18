@@ -1,0 +1,101 @@
+{
+  "name": "Security Event Response Automation",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Security Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "path": "security-event-response",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "parse-event",
+      "name": "Parse Security Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Parse and validate security event data\nconst eventData = items[0].json;\n\n// Validate required fields\nconst requiredFields = ['event_id', 'threat_type', 'severity', 'device_id', 'timestamp'];\nfor (const field of requiredFields) {\n  if (!eventData[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Calculate threat score based on severity and confidence\nconst severityScores = {\n  'low': 25,\n  'medium': 50, \n  'high': 75,\n  'critical': 95\n};\n\nconst baseThreatScore = severityScores[eventData.severity.toLowerCase()] || 50;\nconst confidenceMultiplier = eventData.confidence_score || 0.8;\nconst threatScore = Math.round(baseThreatScore * confidenceMultiplier);\n\n// Enrich event data\nconst enrichedEvent = {\n  ...eventData,\n  threat_score: threatScore,\n  processed_at: new Date().toISOString(),\n  response_required: threatScore >= 70,\n  isolation_required: threatScore >= 90,\n  notification_level: threatScore >= 80 ? 'critical' : threatScore >= 60 ? 'high' : 'medium'\n};\n\nreturn [{ json: enrichedEvent }];"
+      }
+    },
+    {
+      "id": "check-threat-level",
+      "name": "Check Threat Level",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "critical-threat",
+              "leftValue": "={{ $json.threat_score }}",
+              "rightValue": 90,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Security Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Security Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Security Event": {
+      "main": [
+        [
+          {
+            "node": "Check Threat Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

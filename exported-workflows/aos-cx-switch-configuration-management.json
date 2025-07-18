@@ -1,0 +1,354 @@
+{
+  "name": "AOS-CX Switch Configuration Management",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "AOS-CX Switch Config Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aos-cx-switch-config",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Switch Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// AOS-CX Switch Configuration Management Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'health_check', 'system_info', 'interface_status', 'vlan_info',\n  'create_vlan', 'update_vlan', 'delete_vlan',\n  'configure_interface', 'update_interface',\n  'backup_config', 'get_running_config'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Extract configuration parameters\nconst config = {\n  switchIP: input.switch_ip || '192.168.1.100',\n  username: input.username || 'admin',\n  password: input.password || 'admin',\n  operation: input.operation,\n  timestamp: new Date().toISOString(),\n  \n  // VLAN configuration if provided\n  vlanConfig: input.vlan_config || {\n    vlanId: input.vlan_id || 100,\n    name: input.vlan_name || 'default_vlan',\n    description: input.description || 'Default VLAN configuration'\n  },\n  \n  // Interface configuration if provided\n  interfaceConfig: input.interface_config || {\n    interfaceId: input.interface_id || '1/1/1',\n    adminState: input.admin_state || 'up',\n    vlanMode: input.vlan_mode || 'access',\n    accessVlan: input.access_vlan || 100\n  }\n};\n\n// AOS-CX REST API base URL (v10.08)\nconst baseUrl = `https://${config.switchIP}/rest/v10.08`;\n\nconst validatedInput = {\n  config: config,\n  baseUrl: baseUrl,\n  operation: config.operation,\n  timestamp: config.timestamp,\n  requestId: `aos-cx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "authenticate-switch",
+      "name": "Authenticate to AOS-CX Switch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "url": "={{ $json.baseUrl }}/login",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"username\": \"{{ $json.config.username }}\",\n  \"password\": \"{{ $json.config.password }}\"\n}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-api-calls",
+      "name": "Prepare AOS-CX API Calls",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Prepare AOS-CX API calls based on operation\nconst requestData = items[0].json;\nconst authResponse = items[1].json;\n\nconst config = requestData.config;\nconst baseUrl = requestData.baseUrl;\nconst operation = requestData.operation;\nconst requestId = requestData.requestId;\n\n// Extract session cookie from authentication\nconst authHeaders = authResponse.$response?.headers || {};\nconst sessionCookie = authHeaders['set-cookie']?.[0] || '';\nconst cookieValue = sessionCookie.split(';')[0] || '';\n\n// Check authentication success\nif (authResponse.statusCode !== 200 && authResponse.statusCode !== 201) {\n  throw new Error(`Authentication failed: ${authResponse.statusCode} - ${authResponse.message || 'Unknown error'}`);\n}\n\nlet method = 'GET';\nlet url = `${baseUrl}/system`;\nlet body = null;\n\nswitch (operation) {\n  case 'health_check':\n  case 'system_info':\n    method = 'GET';\n    url = `${baseUrl}/system`;\n    break;\n    \n  case 'interface_status':\n    method = 'GET';\n    url = `${baseUrl}/system/interfaces`;\n    break;\n    \n  case 'vlan_info':\n    method = 'GET';\n    url = `${baseUrl}/system/vlans`;\n    break;\n    \n  case 'create_vlan':\n  case 'update_vlan':\n    method = 'PUT';\n    url = `${baseUrl}/system/vlans/${config.vlanConfig.vlanId}`;\n    body = {\n      'name': config.vlanConfig.name,\n      'description': config.vlanConfig.description,\n      'admin': 'up',\n      'vlan_id': config.vlanConfig.vlanId\n    };\n    break;\n    \n  case 'delete_vlan':\n    method = 'DELETE';\n    url = `${baseUrl}/system/vlans/${config.vlanConfig.vlanId}`;\n    break;\n    \n  case 'configure_interface':\n  case 'update_interface':\n    method = 'PUT';\n    url = `${baseUrl}/system/interfaces/${encodeURIComponent(config.interfaceConfig.interfaceId)}`;\n    body = {\n      'admin': config.interfaceConfig.adminState,\n      'vlan_mode': config.interfaceConfig.vlanMode,\n      'vlan_tag': config.interfaceConfig.accessVlan\n    };\n    break;\n    \n  case 'backup_config':\n  case 'get_running_config':\n    method = 'GET';\n    url = `${baseUrl}/fullconfigs/running-config`;\n    break;\n    \n  default:\n    method = 'GET';\n    url = `${baseUrl}/system`;\n}\n\nreturn [{ json: {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Cookie': cookieValue,\n    'Content-Type': 'application/json',\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  requestId: requestId,\n  config: config\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-api-call",
+      "name": "Execute AOS-CX API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1050,
+        300
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "={{ $json.method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{ $json.headers.Cookie }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body || {}) }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "process-results",
+      "name": "Process AOS-CX Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Process AOS-CX API response\nconst response = items[0].json;\nconst statusCode = response.statusCode || 0;\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\n// Get original request data\nconst preparedData = $('Prepare AOS-CX API Calls').first().json;\nconst operation = preparedData.operation;\nconst requestId = preparedData.requestId;\n\nlet result = {\n  requestId: requestId,\n  operation: operation,\n  timestamp: new Date().toISOString(),\n  status: isSuccess ? 'success' : 'error',\n  statusCode: statusCode\n};\n\nif (isSuccess) {\n  const data = response.result || response.body || response;\n  result.data = data;\n  \n  switch (operation) {\n    case 'health_check':\n    case 'system_info':\n      result.message = 'System information retrieved successfully';\n      result.systemInfo = {\n        hostname: data.hostname || 'Unknown',\n        platform: data.platform_name || 'Unknown',\n        software_version: data.software_version || 'Unknown',\n        uptime: data.uptime || 0,\n        cpu_utilization: data.cpu_utilization || 0,\n        memory_utilization: data.memory_utilization || 0,\n        temperature: data.temperature || 0\n      };\n      \n      // Health check warnings\n      result.warnings = [];\n      if (data.cpu_utilization > 80) {\n        result.warnings.push(`High CPU utilization: ${data.cpu_utilization}%`);\n      }\n      if (data.memory_utilization > 85) {\n        result.warnings.push(`High memory utilization: ${data.memory_utilization}%`);\n      }\n      if (data.temperature > 65) {\n        result.warnings.push(`High temperature: ${data.temperature}°C`);\n      }\n      break;\n      \n    case 'interface_status':\n      result.message = 'Interface status retrieved successfully';\n      result.interfaceCount = Object.keys(data || {}).length;\n      break;\n      \n    case 'vlan_info':\n      result.message = 'VLAN information retrieved successfully';\n      result.vlanCount = Object.keys(data || {}).length;\n      break;\n      \n    case 'create_vlan':\n    case 'update_vlan':\n      result.message = `VLAN ${preparedData.config.vlanConfig.vlanId} configured successfully`;\n      result.vlanId = preparedData.config.vlanConfig.vlanId;\n      break;\n      \n    case 'delete_vlan':\n      result.message = `VLAN ${preparedData.config.vlanConfig.vlanId} deleted successfully`;\n      result.vlanId = preparedData.config.vlanConfig.vlanId;\n      break;\n      \n    case 'configure_interface':\n    case 'update_interface':\n      result.message = `Interface ${preparedData.config.interfaceConfig.interfaceId} configured successfully`;\n      result.interfaceId = preparedData.config.interfaceConfig.interfaceId;\n      break;\n      \n    case 'backup_config':\n    case 'get_running_config':\n      result.message = 'Configuration backup completed successfully';\n      result.configSize = JSON.stringify(data).length;\n      break;\n      \n    default:\n      result.message = `${operation} completed successfully`;\n  }\n} else {\n  result.message = `AOS-CX API call failed: ${response.error?.message || response.message || 'Unknown error'}`;\n  result.error = {\n    statusCode: statusCode,\n    message: response.error?.message || response.message || 'Unknown error',\n    details: response\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-success",
+      "name": "Check Operation Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1450,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success_check",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "send-success-notification",
+      "name": "Send Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1650,
+        200
+      ],
+      "parameters": {
+        "channel": "#network-operations",
+        "username": "n8n-aos-cx-bot",
+        "text": "✅ **AOS-CX Switch Operation Successful**\\n\\n**Operation:** {{ $json.operation }}\\n**Switch:** {{ $('Prepare AOS-CX API Calls').first().json.config.switchIP }}\\n**Status:** {{ $json.status }}\\n**Message:** {{ $json.message }}\\n**Time:** {{ $json.timestamp }}\\n**Request ID:** {{ $json.requestId }}\\n\\n{{ $json.warnings && $json.warnings.length > 0 ? '⚠️ **Warnings:**\\n' + $json.warnings.join('\\n') : '✅ All systems normal' }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-error-notification",
+      "name": "Send Error Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1650,
+        400
+      ],
+      "parameters": {
+        "channel": "#network-alerts",
+        "username": "n8n-aos-cx-bot",
+        "text": "❌ **AOS-CX Switch Operation Failed**\\n\\n**Operation:** {{ $json.operation }}\\n**Status:** {{ $json.status }}\\n**Error:** {{ $json.message }}\\n**Status Code:** {{ $json.statusCode }}\\n**Time:** {{ $json.timestamp }}\\n**Request ID:** {{ $json.requestId }}\\n\\n🔧 **Recommended Actions:**\\n- Check switch connectivity and credentials\\n- Verify API endpoints and parameters\\n- Review switch logs for additional details"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1850,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "AOS-CX Switch Config Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Switch Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Switch Request": {
+      "main": [
+        [
+          {
+            "node": "Authenticate to AOS-CX Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticate to AOS-CX Switch": {
+      "main": [
+        [
+          {
+            "node": "Prepare AOS-CX API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AOS-CX API Calls": {
+      "main": [
+        [
+          {
+            "node": "Execute AOS-CX API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute AOS-CX API Call": {
+      "main": [
+        [
+          {
+            "node": "Process AOS-CX Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AOS-CX Results": {
+      "main": [
+        [
+          {
+            "node": "Check Operation Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Operation Success": {
+      "main": [
+        [
+          {
+            "node": "Send Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Error Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

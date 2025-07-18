@@ -1,0 +1,354 @@
+{
+  "name": "AOS-CX VLAN Management",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "AOS-CX VLAN Management Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aos-cx-vlan-management",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate VLAN Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// AOS-CX VLAN Management Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation', 'switch_ip'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = ['create', 'read', 'update', 'delete', 'list', 'enable', 'disable'];\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Validate switch IP format\nif (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(input.switch_ip)) {\n  throw new Error('switch_ip must be a valid IP address format');\n}\n\n// Validate VLAN ID for operations that require it\nif (['create', 'read', 'update', 'delete', 'enable', 'disable'].includes(input.operation)) {\n  if (!input.vlan_id) {\n    throw new Error(`vlan_id is required for ${input.operation} operation`);\n  }\n  const vlanId = parseInt(input.vlan_id);\n  if (isNaN(vlanId) || vlanId < 1 || vlanId > 4094) {\n    throw new Error('vlan_id must be a number between 1 and 4094');\n  }\n}\n\n// Validate VLAN name for create/update operations\nif (['create', 'update'].includes(input.operation)) {\n  if (!input.vlan_name) {\n    throw new Error(`vlan_name is required for ${input.operation} operation`);\n  }\n  if (input.vlan_name.length > 32) {\n    throw new Error('vlan_name must be 32 characters or less');\n  }\n  if (!/^[a-zA-Z0-9_-]+$/.test(input.vlan_name)) {\n    throw new Error('vlan_name can only contain letters, numbers, underscores, and hyphens');\n  }\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  operation: input.operation,\n  switch_ip: input.switch_ip,\n  vlan_id: input.vlan_id ? parseInt(input.vlan_id) : null,\n  vlan_name: input.vlan_name || '',\n  description: input.description || '',\n  admin_state: input.admin_state || 'up',\n  username: input.username || 'admin',\n  password: input.password || 'admin',\n  timestamp: new Date().toISOString(),\n  requestId: `vlan-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  api_base_url: `https://${input.switch_ip}/rest/v10.08`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "authenticate-switch",
+      "name": "Authenticate to AOS-CX Switch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "url": "={{ $json.api_base_url }}/login",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"username\": \"{{ $json.username }}\",\n  \"password\": \"{{ $json.password }}\"\n}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-vlan-operation",
+      "name": "Prepare VLAN Operation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Prepare AOS-CX VLAN operation based on request\nconst requestData = items[0].json;\nconst authResponse = items[1].json;\n\nconst operation = requestData.operation;\nconst apiBaseUrl = requestData.api_base_url;\nconst requestId = requestData.requestId;\nconst vlanId = requestData.vlan_id;\n\n// Extract session cookie from authentication\nconst authHeaders = authResponse.$response?.headers || {};\nconst sessionCookie = authHeaders['set-cookie']?.[0] || '';\nconst cookieValue = sessionCookie.split(';')[0] || '';\n\n// Check authentication success\nif (authResponse.statusCode !== 200 && authResponse.statusCode !== 201) {\n  throw new Error(`Authentication failed: ${authResponse.statusCode} - ${authResponse.message || 'Unknown error'}`);\n}\n\nlet method = 'GET';\nlet url = `${apiBaseUrl}/system/vlans`;\nlet body = null;\n\nswitch (operation) {\n  case 'list':\n    method = 'GET';\n    url = `${apiBaseUrl}/system/vlans`;\n    break;\n    \n  case 'read':\n    method = 'GET';\n    url = `${apiBaseUrl}/system/vlans/${vlanId}`;\n    break;\n    \n  case 'create':\n    method = 'PUT';\n    url = `${apiBaseUrl}/system/vlans/${vlanId}`;\n    body = {\n      'name': requestData.vlan_name,\n      'description': requestData.description,\n      'admin': requestData.admin_state,\n      'vlan_id': vlanId\n    };\n    break;\n    \n  case 'update':\n    method = 'PUT';\n    url = `${apiBaseUrl}/system/vlans/${vlanId}`;\n    body = {\n      'name': requestData.vlan_name,\n      'description': requestData.description,\n      'admin': requestData.admin_state\n    };\n    break;\n    \n  case 'delete':\n    method = 'DELETE';\n    url = `${apiBaseUrl}/system/vlans/${vlanId}`;\n    break;\n    \n  case 'enable':\n    method = 'PUT';\n    url = `${apiBaseUrl}/system/vlans/${vlanId}`;\n    body = {\n      'admin': 'up'\n    };\n    break;\n    \n  case 'disable':\n    method = 'PUT';\n    url = `${apiBaseUrl}/system/vlans/${vlanId}`;\n    body = {\n      'admin': 'down'\n    };\n    break;\n    \n  default:\n    method = 'GET';\n    url = `${apiBaseUrl}/system/vlans`;\n}\n\nreturn [{ json: {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Cookie': cookieValue,\n    'Content-Type': 'application/json',\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  requestId: requestId,\n  vlanId: vlanId,\n  originalRequest: requestData\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-vlan-api",
+      "name": "Execute VLAN API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1050,
+        300
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "={{ $json.method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{ $json.headers.Cookie }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body || {}) }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "process-vlan-results",
+      "name": "Process VLAN Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Process AOS-CX VLAN API response\nconst response = items[0].json;\nconst statusCode = response.statusCode || 0;\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\n// Get original request data\nconst preparedData = $('Prepare VLAN Operation').first().json;\nconst operation = preparedData.operation;\nconst requestId = preparedData.requestId;\nconst vlanId = preparedData.vlanId;\n\nlet result = {\n  requestId: requestId,\n  operation: operation,\n  vlanId: vlanId,\n  timestamp: new Date().toISOString(),\n  status: isSuccess ? 'success' : 'error',\n  statusCode: statusCode,\n  switch_ip: preparedData.originalRequest.switch_ip\n};\n\nif (isSuccess) {\n  const data = response.result || response.body || response;\n  result.data = data;\n  \n  switch (operation) {\n    case 'list':\n      result.message = 'VLANs listed successfully';\n      result.vlanCount = Object.keys(data || {}).length;\n      result.vlans = data;\n      break;\n      \n    case 'read':\n      result.message = `VLAN ${vlanId} details retrieved successfully`;\n      result.vlanInfo = {\n        id: data.vlan_id || vlanId,\n        name: data.name || 'Unknown',\n        description: data.description || '',\n        admin_state: data.admin || 'unknown',\n        oper_state: data.oper_state || 'unknown'\n      };\n      break;\n      \n    case 'create':\n      result.message = `VLAN ${vlanId} created successfully`;\n      result.vlanName = preparedData.originalRequest.vlan_name;\n      break;\n      \n    case 'update':\n      result.message = `VLAN ${vlanId} updated successfully`;\n      result.vlanName = preparedData.originalRequest.vlan_name;\n      break;\n      \n    case 'delete':\n      result.message = `VLAN ${vlanId} deleted successfully`;\n      break;\n      \n    case 'enable':\n      result.message = `VLAN ${vlanId} enabled successfully`;\n      result.adminState = 'up';\n      break;\n      \n    case 'disable':\n      result.message = `VLAN ${vlanId} disabled successfully`;\n      result.adminState = 'down';\n      break;\n      \n    default:\n      result.message = `${operation} completed successfully`;\n  }\n} else {\n  result.message = `VLAN ${operation} failed: ${response.error?.message || response.message || 'Unknown error'}`;\n  result.error = {\n    statusCode: statusCode,\n    message: response.error?.message || response.message || 'Unknown error',\n    details: response\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-operation-success",
+      "name": "Check Operation Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1450,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success_check",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "send-success-notification",
+      "name": "Send Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1650,
+        200
+      ],
+      "parameters": {
+        "channel": "#network-operations",
+        "username": "n8n-vlan-bot",
+        "text": "✅ **AOS-CX VLAN Operation Successful**\\n\\n**Operation:** {{ $json.operation }}\\n**Switch:** {{ $json.switch_ip }}\\n**VLAN ID:** {{ $json.vlanId }}\\n**Status:** {{ $json.status }}\\n**Message:** {{ $json.message }}\\n**Time:** {{ $json.timestamp }}\\n**Request ID:** {{ $json.requestId }}\\n\\n{{ $json.operation === 'list' ? '📊 **VLAN Count:** ' + $json.vlanCount : '' }}\\n{{ $json.vlanName ? '🏷️ **VLAN Name:** ' + $json.vlanName : '' }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-error-notification",
+      "name": "Send Error Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1650,
+        400
+      ],
+      "parameters": {
+        "channel": "#network-alerts",
+        "username": "n8n-vlan-bot",
+        "text": "❌ **AOS-CX VLAN Operation Failed**\\n\\n**Operation:** {{ $json.operation }}\\n**Switch:** {{ $json.switch_ip }}\\n**VLAN ID:** {{ $json.vlanId }}\\n**Status:** {{ $json.status }}\\n**Error:** {{ $json.message }}\\n**Status Code:** {{ $json.statusCode }}\\n**Time:** {{ $json.timestamp }}\\n**Request ID:** {{ $json.requestId }}\\n\\n🔧 **Recommended Actions:**\\n- Verify switch connectivity and credentials\\n- Check VLAN ID validity (1-4094)\\n- Ensure VLAN doesn't conflict with existing configuration\\n- Review switch logs for additional details"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1850,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "AOS-CX VLAN Management Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate VLAN Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate VLAN Request": {
+      "main": [
+        [
+          {
+            "node": "Authenticate to AOS-CX Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticate to AOS-CX Switch": {
+      "main": [
+        [
+          {
+            "node": "Prepare VLAN Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare VLAN Operation": {
+      "main": [
+        [
+          {
+            "node": "Execute VLAN API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute VLAN API Call": {
+      "main": [
+        [
+          {
+            "node": "Process VLAN Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process VLAN Results": {
+      "main": [
+        [
+          {
+            "node": "Check Operation Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Operation Success": {
+      "main": [
+        [
+          {
+            "node": "Send Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Error Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

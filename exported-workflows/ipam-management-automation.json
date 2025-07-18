@@ -1,0 +1,59 @@
+{
+  "name": "IPAM Management Automation",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "IPAM Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "path": "ipam-management",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate IPAM Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// IPAM Management Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation', 'resource_type'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'create_pool', 'update_pool', 'delete_pool', 'list_pools',\n  'allocate_ip', 'release_ip', 'reserve_ip', 'list_allocations',\n  'create_dhcp_scope', 'update_dhcp_scope', 'delete_dhcp_scope',\n  'create_dns_zone', 'update_dns_record', 'delete_dns_record',\n  'create_vlan_mapping', 'update_subnet', 'list_utilization'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}`);\n}\n\n// Valid resource types\nconst validResourceTypes = ['ip_pool', 'dhcp_scope', 'dns_zone', 'vlan_mapping', 'ip_allocation'];\nif (!validResourceTypes.includes(input.resource_type)) {\n  throw new Error(`Invalid resource type: ${input.resource_type}`);\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `ipam-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "IPAM Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate IPAM Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

@@ -1,0 +1,58 @@
+{
+  "name": "ServiceNow Incident Management Automation",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "ServiceNow Incident Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "servicenow-incident",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate ServiceNow Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// ServiceNow Incident Management Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation', 'servicenow_instance'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'create_incident', 'update_incident', 'resolve_incident', 'close_incident',\n  'get_incident', 'list_incidents', 'assign_incident', 'escalate_incident',\n  'add_comment', 'attach_file', 'create_change_request', 'update_change_request',\n  'approve_change', 'reject_change', 'schedule_change', 'implement_change',\n  'create_problem', 'link_incident_to_problem', 'sync_cmdb_item'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}`);\n}\n\n// Operation-specific validation\nif (['create_incident', 'create_change_request', 'create_problem'].includes(input.operation)) {\n  if (!input.title && !input.short_description) {\n    throw new Error('Title or short_description is required for create operations');\n  }\n  if (!input.description) {\n    throw new Error('Description is required for create operations');\n  }\n}\n\nif (['update_incident', 'resolve_incident', 'close_incident', 'assign_incident'].includes(input.operation)) {\n  if (!input.incident_number && !input.sys_id) {\n    throw new Error('Incident number or sys_id is required for incident operations');\n  }\n}\n\nif (['assign_incident', 'escalate_incident'].includes(input.operation)) {\n  if (!input.assigned_to && !input.assignment_group) {\n    throw new Error('assigned_to or assignment_group is required for assignment operations');\n  }\n}\n\n// Set ServiceNow instance URL\nlet instanceUrl;\nif (input.servicenow_instance.startsWith('https://')) {\n  instanceUrl = input.servicenow_instance;\n} else {\n  instanceUrl = `https://${input.servicenow_instance}.service-now.com`;\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  instance_url: instanceUrl,\n  timestamp: new Date().toISOString(),\n  request_id: `snow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      }
+    }
+  ],
+  "connections": {
+    "ServiceNow Incident Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate ServiceNow Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

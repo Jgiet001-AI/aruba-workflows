@@ -1,0 +1,59 @@
+{
+  "name": "ServiceNow Change Management Automation",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "ServiceNow Change Management Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "path": "servicenow-change-management",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Change Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// ServiceNow Change Management Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation', 'change_type'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'create_change', 'update_change', 'approve_change', 'reject_change',\n  'schedule_change', 'implement_change', 'close_change', 'cancel_change',\n  'create_change_task', 'update_change_task', 'get_change_status', 'submit_for_approval'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}`);\n}\n\n// Valid change types\nconst validChangeTypes = ['normal', 'standard', 'emergency', 'automated'];\nif (!validChangeTypes.includes(input.change_type)) {\n  throw new Error(`Invalid change type: ${input.change_type}`);\n}\n\n// Operation-specific validation\nif (input.operation === 'create_change') {\n  if (!input.short_description) {\n    throw new Error('create_change requires short_description');\n  }\n  if (!input.planned_start_date || !input.planned_end_date) {\n    throw new Error('create_change requires planned_start_date and planned_end_date');\n  }\n}\n\nif (input.operation === 'approve_change' || input.operation === 'reject_change') {\n  if (!input.change_id) {\n    throw new Error('Approval operations require change_id');\n  }\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `snow-chg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed',\n  \n  // Set ServiceNow defaults\n  priority: input.priority || '3',\n  risk: input.risk || 'Medium',\n  impact: input.impact || 'Medium',\n  category: input.category || 'Network',\n  requested_by: input.requested_by || 'aruba.automation@company.com',\n  assignment_group: input.assignment_group || 'Network Operations',\n  cab_required: input.cab_required || false,\n  state: input.state || 'new',\n  instance_url: input.instance_url || 'https://company.service-now.com'\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "ServiceNow Change Management Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Change Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

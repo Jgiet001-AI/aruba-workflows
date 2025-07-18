@@ -1,0 +1,478 @@
+{
+  "name": "SIEM Integration Management Automation",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "SIEM Integration Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "path": "siem-integration",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate SIEM Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// SIEM Integration Management Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation', 'siem_type'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'configure_siem_connection', 'test_siem_connectivity', 'send_logs',\n  'setup_log_forwarding', 'create_correlation_rule', 'update_correlation_rule',\n  'delete_correlation_rule', 'list_correlation_rules', 'send_event',\n  'query_siem_data', 'sync_threat_intelligence', 'export_logs',\n  'configure_alerts', 'test_alert_integration'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Valid SIEM types\nconst validSiemTypes = ['splunk', 'qradar', 'arcsight', 'sentinel', 'elastic', 'logrhythm', 'secureworks', 'generic_syslog'];\nif (!validSiemTypes.includes(input.siem_type)) {\n  throw new Error(`Invalid SIEM type: ${input.siem_type}. Valid types: ${validSiemTypes.join(', ')}`);\n}\n\n// Operation-specific validation\nif (['configure_siem_connection', 'setup_log_forwarding'].includes(input.operation)) {\n  if (!input.siem_config) {\n    throw new Error('SIEM configuration is required for connection operations');\n  }\n  if (!input.siem_config.host) {\n    throw new Error('SIEM host is required in configuration');\n  }\n}\n\nif (['send_logs', 'send_event'].includes(input.operation)) {\n  if (!input.log_data && !input.event_data) {\n    throw new Error('Log data or event data is required for send operations');\n  }\n}\n\nif (['create_correlation_rule', 'update_correlation_rule'].includes(input.operation)) {\n  if (!input.rule_name) {\n    throw new Error('Rule name is required for correlation rule operations');\n  }\n  if (!input.rule_definition) {\n    throw new Error('Rule definition is required for correlation rule operations');\n  }\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `siem-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed',\n  \n  // Set SIEM integration defaults\n  siem_api_url: input.siem_api_url || 'https://central.arubanetworks.com/siem-integration/v1',\n  \n  // Default SIEM configuration\n  siem_config: {\n    ...input.siem_config,\n    port: input.siem_config?.port || getSiemDefaultPort(input.siem_type),\n    protocol: input.siem_config?.protocol || 'tcp',\n    auth_type: input.siem_config?.auth_type || 'api_key',\n    encryption: {\n      enabled: input.siem_config?.encryption?.enabled !== false,\n      tls_version: input.siem_config?.encryption?.tls_version || '1.2'\n    }\n  },\n  \n  // Default log configuration\n  log_config: {\n    ...input.log_config,\n    sources: input.log_config?.sources || ['security', 'network', 'system'],\n    level: input.log_config?.level || 'info',\n    format: input.log_config?.format || getSiemLogFormat(input.siem_type),\n    batch_size: input.log_config?.batch_size || 100,\n    flush_interval: input.log_config?.flush_interval || 60\n  },\n  \n  // Default alert configuration\n  alert_config: {\n    ...input.alert_config,\n    enabled: input.alert_config?.enabled !== false,\n    thresholds: {\n      low: input.alert_config?.thresholds?.low || 10,\n      medium: input.alert_config?.thresholds?.medium || 5,\n      high: input.alert_config?.thresholds?.high || 2,\n      critical: input.alert_config?.thresholds?.critical || 1\n    },\n    channels: input.alert_config?.channels || ['siem', 'slack'],\n    escalation: input.alert_config?.escalation || {}\n  }\n};\n\nfunction getSiemDefaultPort(siemType) {\n  const portMap = {\n    'splunk': 8088,\n    'qradar': 514,\n    'arcsight': 514,\n    'sentinel': 443,\n    'elastic': 9200,\n    'logrhythm': 514,\n    'secureworks': 514,\n    'generic_syslog': 514\n  };\n  return portMap[siemType] || 514;\n}\n\nfunction getSiemLogFormat(siemType) {\n  const formatMap = {\n    'splunk': 'json',\n    'qradar': 'leef',\n    'arcsight': 'cef',\n    'sentinel': 'json',\n    'elastic': 'json',\n    'logrhythm': 'syslog',\n    'secureworks': 'cef',\n    'generic_syslog': 'syslog'\n  };\n  return formatMap[siemType] || 'cef';\n}\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "route-operation",
+      "name": "Route SIEM Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "connection",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "connectivity",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "log",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "rule",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "event",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "query",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "alert",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "threat",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "prepare-connection",
+      "name": "Prepare Connection Management",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// Prepare SIEM Connection Management API call\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet method = 'GET';\nlet url = `${data.siem_api_url}/node_list/group/default/config/connection/${data.siem_type}`;\nlet body = null;\n\nif (operation === 'configure_siem_connection') {\n  method = 'PUT';\n  body = {\n    siem_type: data.siem_type,\n    connection_config: {\n      host: data.siem_config.host,\n      port: data.siem_config.port,\n      protocol: data.siem_config.protocol,\n      authentication: {\n        type: data.siem_config.auth_type,\n        credentials: data.siem_config.credentials || {},\n        api_key: data.siem_config.api_key,\n        username: data.siem_config.username,\n        password: data.siem_config.password\n      },\n      encryption: data.siem_config.encryption,\n      connection_pool: {\n        max_connections: data.siem_config.max_connections || 10,\n        timeout: data.siem_config.timeout || 30000,\n        retry_attempts: data.siem_config.retry_attempts || 3\n      }\n    },\n    validation_config: {\n      test_on_create: true,\n      health_check_interval: data.siem_config.health_check_interval || 300\n    }\n  };\n} else if (operation === 'test_siem_connectivity') {\n  method = 'POST';\n  url += '/test';\n  body = {\n    test_type: data.test_type || 'full',\n    timeout: data.test_timeout || 30000,\n    verify_authentication: data.verify_auth !== false,\n    check_log_delivery: data.check_log_delivery !== false\n  };\n}\n\nreturn [{ json: {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-siem-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  request_id: data.request_id,\n  siem_type: data.siem_type\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-log-management",
+      "name": "Prepare Log Management",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        250
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Log Management API call\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet method = 'GET';\nlet url = `${data.siem_api_url}/node_list/group/default/config/logs/${data.siem_type}`;\nlet body = null;\n\nif (operation === 'send_logs') {\n  method = 'POST';\n  url += '/send';\n  body = {\n    log_data: data.log_data || [],\n    format: data.log_config.format,\n    timestamp: data.timestamp,\n    source: data.log_source || 'aruba_central',\n    tags: data.log_tags || ['automation', 'aruba'],\n    metadata: {\n      device_count: data.device_count,\n      log_level: data.log_config.level,\n      batch_id: `batch-${Date.now()}`\n    }\n  };\n} else if (operation === 'setup_log_forwarding') {\n  method = 'PUT';\n  url += '/forwarding';\n  body = {\n    forwarding_config: {\n      enabled: data.log_forwarding_enabled !== false,\n      log_sources: data.log_config.sources,\n      log_level: data.log_config.level,\n      format: data.log_config.format,\n      batch_settings: {\n        batch_size: data.log_config.batch_size,\n        flush_interval: data.log_config.flush_interval,\n        compression: data.log_config.compression || 'gzip'\n      },\n      filtering_rules: data.log_filtering_rules || [],\n      transformation_rules: data.log_transformation_rules || []\n    },\n    destination_config: {\n      siem_type: data.siem_type,\n      connection_id: data.connection_id,\n      delivery_mode: data.delivery_mode || 'realtime',\n      retry_policy: {\n        max_retries: 3,\n        backoff_strategy: 'exponential',\n        retry_delay: 5000\n      }\n    }\n  };\n} else if (operation === 'export_logs') {\n  method = 'POST';\n  url += '/export';\n  body = {\n    export_config: {\n      start_time: data.export_start_time || new Date(Date.now() - 86400000).toISOString(),\n      end_time: data.export_end_time || new Date().toISOString(),\n      log_sources: data.export_sources || data.log_config.sources,\n      format: data.export_format || data.log_config.format,\n      compression: data.export_compression || 'gzip',\n      max_file_size: data.max_file_size || '100MB'\n    }\n  };\n}\n\nreturn [{ json: {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-siem-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  request_id: data.request_id,\n  siem_type: data.siem_type\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-rule-management",
+      "name": "Prepare Rule Management",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        350
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Correlation Rule Management API call\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet method = 'GET';\nlet url = `${data.siem_api_url}/node_list/group/default/config/rules/${data.siem_type}`;\nlet body = null;\n\nif (operation === 'create_correlation_rule') {\n  method = 'POST';\n  body = {\n    rule_name: data.rule_name,\n    rule_type: data.rule_type || 'correlation',\n    rule_definition: {\n      conditions: data.rule_definition.conditions || [],\n      actions: data.rule_definition.actions || [],\n      severity: data.rule_definition.severity || 'medium',\n      time_window: data.rule_definition.time_window || 300,\n      threshold: data.rule_definition.threshold || 1,\n      aggregation_method: data.rule_definition.aggregation_method || 'count'\n    },\n    enabled: data.enabled !== false,\n    description: data.description || 'Automated correlation rule',\n    metadata: {\n      created_by: 'n8n-automation',\n      source: 'aruba_network_automation',\n      version: '1.0',\n      tags: data.rule_tags || ['automation', 'security']\n    }\n  };\n} else if (operation === 'update_correlation_rule') {\n  method = 'PUT';\n  url += `/${data.rule_id || data.rule_name}`;\n  body = {\n    rule_definition: data.rule_definition,\n    enabled: data.enabled,\n    description: data.description,\n    metadata: {\n      modified_by: 'n8n-automation',\n      modified_at: data.timestamp,\n      version: data.rule_version || '1.1'\n    }\n  };\n} else if (operation === 'delete_correlation_rule') {\n  method = 'DELETE';\n  url += `/${data.rule_id || data.rule_name}`;\n} else if (operation === 'list_correlation_rules') {\n  method = 'GET';\n  if (data.rule_filter) {\n    url += `?filter=${encodeURIComponent(JSON.stringify(data.rule_filter))}`;\n  }\n}\n\nreturn [{ json: {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-siem-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  request_id: data.request_id,\n  rule_name: data.rule_name,\n  siem_type: data.siem_type\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-event-management",
+      "name": "Prepare Event Management",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        450
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Event Management API call\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet method = 'POST';\nlet url = `${data.siem_api_url}/node_list/group/default/config/events/${data.siem_type}`;\nlet body = null;\n\nif (operation === 'send_event') {\n  method = 'POST';\n  url += '/send';\n  body = {\n    event_type: data.event_data?.type || 'security_incident',\n    event_data: {\n      id: data.event_data?.id || `event-${Date.now()}`,\n      source: data.event_data?.source || 'aruba_automation',\n      severity: data.event_data?.severity || 'medium',\n      category: data.event_data?.category || 'network_security',\n      timestamp: data.timestamp,\n      message: data.event_data?.message,\n      details: {\n        ...data.event_data?.details,\n        device_id: data.device_id,\n        user_id: data.user_id,\n        location: data.location,\n        action_taken: data.action_taken\n      }\n    },\n    correlation_data: {\n      ...data.correlation_data,\n      correlation_id: data.correlation_id || `corr-${Date.now()}`,\n      related_events: data.related_events || [],\n      confidence_score: data.confidence_score || 0.8\n    },\n    enrichment_data: {\n      threat_intelligence: data.threat_intelligence || {},\n      geolocation: data.geolocation || {},\n      asset_information: data.asset_information || {}\n    }\n  };\n} else if (operation === 'query_siem_data') {\n  method = 'POST';\n  url += '/query';\n  body = {\n    query_config: {\n      query_type: data.query_type || 'search',\n      search_criteria: {\n        time_range: {\n          start: data.query_start_time || new Date(Date.now() - 3600000).toISOString(),\n          end: data.query_end_time || new Date().toISOString()\n        },\n        filters: data.query_filters || {},\n        keywords: data.query_keywords || [],\n        fields: data.query_fields || ['timestamp', 'severity', 'message']\n      },\n      aggregation: data.query_aggregation || {},\n      limit: data.query_limit || 1000,\n      offset: data.query_offset || 0\n    }\n  };\n}\n\nreturn [{ json: {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-siem-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  request_id: data.request_id,\n  siem_type: data.siem_type\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-alert-threat",
+      "name": "Prepare Alert/Threat Management",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        550
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Alert and Threat Intelligence Management API call\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet method = 'GET';\nlet url = `${data.siem_api_url}/node_list/group/default/config/alerts/${data.siem_type}`;\nlet body = null;\n\nif (operation === 'configure_alerts') {\n  method = 'PUT';\n  body = {\n    alert_config: {\n      enabled: data.alert_config.enabled,\n      severity_thresholds: data.alert_config.thresholds,\n      notification_settings: {\n        channels: data.alert_config.channels,\n        templates: {\n          critical: data.alert_templates?.critical || 'Critical SIEM alert: {{event.message}}',\n          high: data.alert_templates?.high || 'High priority SIEM alert: {{event.message}}',\n          medium: data.alert_templates?.medium || 'Medium priority SIEM alert: {{event.message}}',\n          low: data.alert_templates?.low || 'Low priority SIEM alert: {{event.message}}'\n        },\n        escalation_rules: {\n          ...data.alert_config.escalation,\n          auto_escalate: data.alert_config.auto_escalate !== false,\n          escalation_delay: data.alert_config.escalation_delay || 300\n        }\n      },\n      suppression_rules: data.alert_suppression_rules || [],\n      correlation_settings: {\n        enable_correlation: data.enable_alert_correlation !== false,\n        correlation_window: data.alert_correlation_window || 300,\n        max_correlations: data.max_alert_correlations || 10\n      }\n    }\n  };\n} else if (operation === 'test_alert_integration') {\n  method = 'POST';\n  url += '/test';\n  body = {\n    test_alert: {\n      severity: data.test_severity || 'medium',\n      message: data.test_message || 'Test alert from Aruba automation',\n      source: 'aruba_automation_test',\n      timestamp: data.timestamp,\n      test_id: `test-${Date.now()}`\n    },\n    notification_test: {\n      test_all_channels: data.test_all_channels !== false,\n      specific_channels: data.test_channels || data.alert_config.channels\n    }\n  };\n} else if (operation === 'sync_threat_intelligence') {\n  method = 'POST';\n  url = `${data.siem_api_url}/node_list/group/default/config/threat-intelligence/${data.siem_type}`;\n  body = {\n    sync_config: {\n      intelligence_sources: data.threat_sources || ['aruba_threat_feed', 'global_threat_db'],\n      sync_frequency: data.sync_frequency || 'hourly',\n      data_types: data.threat_data_types || ['ip_addresses', 'domains', 'file_hashes', 'urls'],\n      filtering_rules: data.threat_filtering_rules || [],\n      auto_apply: data.auto_apply_intelligence !== false\n    },\n    enrichment_config: {\n      enable_enrichment: data.enable_threat_enrichment !== false,\n      enrichment_fields: data.enrichment_fields || ['reputation', 'category', 'confidence'],\n      cache_duration: data.threat_cache_duration || 3600\n    }\n  };\n}\n\nreturn [{ json: {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-siem-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  request_id: data.request_id,\n  siem_type: data.siem_type\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-siem-api",
+      "name": "Execute SIEM API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1150,
+        350
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "={{ $json.method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $json.headers.Authorization }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body || {}) }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "process-results",
+      "name": "Process SIEM Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        350
+      ],
+      "parameters": {
+        "jsCode": "// Process SIEM integration operation results\nconst response = items[0].json;\nconst statusCode = response.statusCode || 0;\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\n// Get original request data\nconst preparedData = $('Route SIEM Operation').first().json;\nconst originalRequest = $('Validate SIEM Request').first().json;\n\nlet result = {\n  request_id: originalRequest.request_id,\n  operation: originalRequest.operation,\n  siem_type: originalRequest.siem_type,\n  timestamp: new Date().toISOString(),\n  status: isSuccess ? 'success' : 'error',\n  statusCode: statusCode\n};\n\nif (isSuccess) {\n  const data = response.result || response.body || response;\n  result.data = data;\n  \n  switch (originalRequest.operation) {\n    case 'configure_siem_connection':\n      result.message = `SIEM connection configured for ${originalRequest.siem_type}`;\n      result.connection_id = data.connection_id || data.id;\n      result.connection_status = data.status || 'configured';\n      result.host = originalRequest.siem_config.host;\n      result.port = originalRequest.siem_config.port;\n      break;\n      \n    case 'test_siem_connectivity':\n      result.message = `SIEM connectivity test completed for ${originalRequest.siem_type}`;\n      result.connectivity_status = data.connectivity_status || data.status;\n      result.response_time = data.response_time;\n      result.test_results = data.test_results || {};\n      break;\n      \n    case 'send_logs':\n      result.message = `Logs sent to ${originalRequest.siem_type} SIEM`;\n      result.logs_sent = data.logs_sent || originalRequest.log_data?.length || 0;\n      result.batch_id = data.batch_id;\n      result.delivery_status = data.delivery_status;\n      break;\n      \n    case 'setup_log_forwarding':\n      result.message = `Log forwarding configured for ${originalRequest.siem_type}`;\n      result.forwarding_id = data.forwarding_id || data.id;\n      result.forwarding_status = data.status;\n      result.log_sources = originalRequest.log_config.sources;\n      break;\n      \n    case 'create_correlation_rule':\n      result.message = `Correlation rule '${originalRequest.rule_name}' created for ${originalRequest.siem_type}`;\n      result.rule_id = data.rule_id || data.id;\n      result.rule_name = originalRequest.rule_name;\n      result.rule_status = data.status || 'active';\n      break;\n      \n    case 'update_correlation_rule':\n      result.message = `Correlation rule '${originalRequest.rule_name}' updated for ${originalRequest.siem_type}`;\n      result.rule_id = data.rule_id || originalRequest.rule_id;\n      result.rule_name = originalRequest.rule_name;\n      break;\n      \n    case 'delete_correlation_rule':\n      result.message = `Correlation rule '${originalRequest.rule_name}' deleted from ${originalRequest.siem_type}`;\n      result.rule_name = originalRequest.rule_name;\n      break;\n      \n    case 'list_correlation_rules':\n      result.message = `Retrieved ${Array.isArray(data.rules) ? data.rules.length : 'unknown'} correlation rules from ${originalRequest.siem_type}`;\n      result.rule_count = Array.isArray(data.rules) ? data.rules.length : 0;\n      result.rules = data.rules || data;\n      break;\n      \n    case 'send_event':\n      result.message = `Security event sent to ${originalRequest.siem_type} SIEM`;\n      result.event_id = data.event_id || data.id;\n      result.event_type = originalRequest.event_data?.type;\n      result.correlation_id = data.correlation_id;\n      break;\n      \n    case 'query_siem_data':\n      result.message = `SIEM data query completed for ${originalRequest.siem_type}`;\n      result.query_results = data.results || data;\n      result.result_count = Array.isArray(data.results) ? data.results.length : 0;\n      result.query_duration = data.query_duration;\n      break;\n      \n    case 'configure_alerts':\n      result.message = `Alert configuration updated for ${originalRequest.siem_type}`;\n      result.alert_config_id = data.config_id || data.id;\n      result.alert_channels = originalRequest.alert_config.channels;\n      break;\n      \n    case 'test_alert_integration':\n      result.message = `Alert integration test completed for ${originalRequest.siem_type}`;\n      result.test_alert_id = data.test_alert_id || data.id;\n      result.test_status = data.test_status;\n      result.notification_results = data.notification_results || {};\n      break;\n      \n    case 'sync_threat_intelligence':\n      result.message = `Threat intelligence sync completed for ${originalRequest.siem_type}`;\n      result.sync_id = data.sync_id || data.id;\n      result.indicators_synced = data.indicators_synced || 0;\n      result.sync_status = data.sync_status;\n      break;\n      \n    case 'export_logs':\n      result.message = `Log export completed for ${originalRequest.siem_type}`;\n      result.export_id = data.export_id || data.id;\n      result.export_file = data.export_file;\n      result.records_exported = data.records_exported || 0;\n      break;\n      \n    default:\n      result.message = `${originalRequest.operation} completed successfully for ${originalRequest.siem_type}`;\n  }\n} else {\n  result.message = `SIEM API call failed: ${response.error?.message || response.message || 'Unknown error'}`;\n  result.error = {\n    statusCode: statusCode,\n    message: response.error?.message || response.message || 'Unknown error',\n    details: response\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1550,
+        350
+      ],
+      "parameters": {
+        "channel": "#siem-integration",
+        "username": "n8n-siem-bot",
+        "text": "🔍 **SIEM Integration Report**\\n\\n**Operation:** {{ $json.operation }}\\n**SIEM Type:** {{ $json.siem_type }}\\n**Status:** {{ $json.status.toUpperCase() }}\\n**Message:** {{ $json.message }}\\n**Time:** {{ $json.timestamp }}\\n**Request ID:** {{ $json.request_id }}\\n\\n{{ $json.connection_id ? '**Connection ID:** ' + $json.connection_id + '\\\\n' : '' }}{{ $json.rule_id ? '**Rule ID:** ' + $json.rule_id + '\\\\n' : '' }}{{ $json.logs_sent ? '**Logs Sent:** ' + $json.logs_sent + '\\\\n' : '' }}{{ $json.event_id ? '**Event ID:** ' + $json.event_id + '\\\\n' : '' }}{{ $json.rule_count ? '**Rules Found:** ' + $json.rule_count + '\\\\n' : '' }}\\n{{ $json.status === 'success' ? '✅ SIEM integration completed successfully' : '❌ SIEM integration failed - check logs' }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1750,
+        350
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "SIEM Integration Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate SIEM Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate SIEM Request": {
+      "main": [
+        [
+          {
+            "node": "Route SIEM Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route SIEM Operation": {
+      "main": [
+        [
+          {
+            "node": "Prepare Connection Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Log Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Rule Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Event Management",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Alert/Threat Management",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Connection Management": {
+      "main": [
+        [
+          {
+            "node": "Execute SIEM API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Management": {
+      "main": [
+        [
+          {
+            "node": "Execute SIEM API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Rule Management": {
+      "main": [
+        [
+          {
+            "node": "Execute SIEM API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Event Management": {
+      "main": [
+        [
+          {
+            "node": "Execute SIEM API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alert/Threat Management": {
+      "main": [
+        [
+          {
+            "node": "Execute SIEM API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute SIEM API": {
+      "main": [
+        [
+          {
+            "node": "Process SIEM Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process SIEM Results": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

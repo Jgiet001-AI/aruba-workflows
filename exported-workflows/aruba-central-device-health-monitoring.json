@@ -1,0 +1,416 @@
+{
+  "name": "Aruba Central Device Health Monitoring",
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Health Check Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "init-monitoring",
+      "name": "Initialize Central Monitoring",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Aruba Central Device Health Monitoring Initialization\nconst timestamp = new Date().toISOString();\n\n// Configuration for Aruba Central\nconst config = {\n  clientId: $vars.ARUBA_CLIENT_ID || 'your-client-id',\n  clientSecret: $vars.ARUBA_CLIENT_SECRET || 'your-client-secret',\n  baseUrl: $vars.ARUBA_BASE_URL || 'https://apigw-prod2.central.arubanetworks.com',\n  customerId: $vars.ARUBA_CUSTOMER_ID || 'your-customer-id',\n  region: $vars.ARUBA_REGION || 'us-central',\n  timestamp: timestamp,\n  \n  // Health check thresholds\n  thresholds: {\n    cpu: 80,\n    memory: 85,\n    temperature: 60,\n    uptime: 86400, // 24 hours in seconds\n    signalStrength: -70 // dBm for APs\n  },\n  \n  // Device filters\n  filters: {\n    deviceTypes: ['ap', 'switch', 'gateway'],\n    status: ['up', 'down'],\n    locations: ['all'] // or specific site names\n  }\n};\n\n// OAuth token endpoint\nconst authUrl = `${config.baseUrl}/oauth2/token`;\n\nreturn [{\n  json: {\n    config: config,\n    authUrl: authUrl,\n    operation: 'initialize_monitoring',\n    timestamp: timestamp,\n    requestId: `health-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`\n  }\n}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "authenticate-central",
+      "name": "Authenticate to Aruba Central",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "url": "={{ $json.authUrl }}",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "form",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $json.config.clientId }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $json.config.clientSecret }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-health-requests",
+      "name": "Prepare Health API Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Prepare device health monitoring API calls\nconst authResponse = items[1].json;\nconst configData = items[0].json;\n\n// Check authentication success\nif (authResponse.statusCode !== 200 && authResponse.statusCode !== 201) {\n  throw new Error(`Authentication failed: ${authResponse.statusCode} - ${authResponse.message || 'Unknown error'}`);\n}\n\nconst accessToken = authResponse.access_token;\nconst config = configData.config;\nconst baseUrl = config.baseUrl;\nconst requestId = configData.requestId;\n\n// Build comprehensive API request for device health\nconst healthRequest = {\n  url: `${baseUrl}/api/v2/monitoring/devices`,\n  method: 'GET',\n  headers: {\n    'Authorization': `Bearer ${accessToken}`,\n    'Accept': 'application/json',\n    'Content-Type': 'application/json'\n  },\n  queryParams: {\n    limit: 100,\n    offset: 0,\n    calculate_total: true,\n    show_resource_details: true\n  },\n  requestType: 'device_health',\n  timestamp: config.timestamp,\n  requestId: requestId,\n  config: config\n};\n\nreturn [{ json: healthRequest }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-health-api",
+      "name": "Execute Health API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1050,
+        300
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $json.headers.Authorization }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "={{ $json.queryParams.limit }}"
+            },
+            {
+              "name": "offset",
+              "value": "={{ $json.queryParams.offset }}"
+            },
+            {
+              "name": "calculate_total",
+              "value": "={{ $json.queryParams.calculate_total }}"
+            },
+            {
+              "name": "show_resource_details",
+              "value": "={{ $json.queryParams.show_resource_details }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "analyze-device-health",
+      "name": "Analyze Device Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Analyze Aruba Central device health\nconst response = items[0].json;\nconst statusCode = response.statusCode || 0;\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\n// Get original request data\nconst preparedData = $('Prepare Health API Requests').first().json;\nconst config = preparedData.config;\nconst requestId = preparedData.requestId;\nconst timestamp = new Date().toISOString();\n\n// Initialize health report\nconst healthReport = {\n  requestId: requestId,\n  timestamp: timestamp,\n  status: isSuccess ? 'success' : 'error',\n  statusCode: statusCode,\n  summary: {\n    totalDevices: 0,\n    healthyDevices: 0,\n    unhealthyDevices: 0,\n    offlineDevices: 0,\n    criticalAlerts: 0,\n    warnings: 0,\n    overallHealth: 100,\n    overallStatus: 'healthy'\n  },\n  devices: [],\n  alerts: [],\n  thresholds: config.thresholds\n};\n\nif (isSuccess) {\n  const data = response.result || response.body || response;\n  \n  if (data.devices && Array.isArray(data.devices)) {\n    healthReport.summary.totalDevices = data.devices.length;\n    \n    data.devices.forEach(device => {\n      const deviceHealth = {\n        serial: device.serial,\n        macAddr: device.macaddr,\n        hostname: device.hostname || device.name || device.serial,\n        deviceType: device.device_type,\n        model: device.model,\n        status: device.status,\n        uptime: device.uptime || 0,\n        lastSeen: device.last_modified,\n        location: device.site || 'Unknown',\n        firmware: device.firmware_version,\n        ip_address: device.ip_address,\n        healthScore: 100,\n        alerts: []\n      };\n      \n      // Check device status\n      if (device.status === 'up') {\n        healthReport.summary.healthyDevices++;\n      } else {\n        healthReport.summary.offlineDevices++;\n        healthReport.summary.unhealthyDevices++;\n        \n        // Create offline alert\n        const offlineAlert = {\n          type: 'error',\n          category: 'device_offline',\n          device: deviceHealth,\n          message: `Device ${deviceHealth.hostname} is offline`,\n          severity: 'critical',\n          timestamp: timestamp\n        };\n        \n        healthReport.alerts.push(offlineAlert);\n        deviceHealth.alerts.push(offlineAlert);\n        healthReport.summary.criticalAlerts++;\n        deviceHealth.healthScore = 0;\n      }\n      \n      // Check performance metrics if available\n      if (device.cpu_utilization !== undefined) {\n        deviceHealth.performance = {\n          cpu: device.cpu_utilization || 0,\n          memory: device.memory_utilization || 0,\n          temperature: device.temperature || 0\n        };\n        \n        // CPU threshold check\n        if (device.cpu_utilization > config.thresholds.cpu) {\n          const cpuAlert = {\n            type: 'warning',\n            category: 'high_cpu',\n            device: deviceHealth,\n            message: `High CPU usage: ${device.cpu_utilization}%`,\n            threshold: `${config.thresholds.cpu}%`,\n            actual: `${device.cpu_utilization}%`,\n            timestamp: timestamp\n          };\n          \n          healthReport.alerts.push(cpuAlert);\n          deviceHealth.alerts.push(cpuAlert);\n          healthReport.summary.warnings++;\n          deviceHealth.healthScore -= 20;\n        }\n        \n        // Memory threshold check\n        if (device.memory_utilization > config.thresholds.memory) {\n          const memoryAlert = {\n            type: 'warning',\n            category: 'high_memory',\n            device: deviceHealth,\n            message: `High memory usage: ${device.memory_utilization}%`,\n            threshold: `${config.thresholds.memory}%`,\n            actual: `${device.memory_utilization}%`,\n            timestamp: timestamp\n          };\n          \n          healthReport.alerts.push(memoryAlert);\n          deviceHealth.alerts.push(memoryAlert);\n          healthReport.summary.warnings++;\n          deviceHealth.healthScore -= 20;\n        }\n        \n        // Temperature threshold check\n        if (device.temperature > config.thresholds.temperature) {\n          const tempAlert = {\n            type: 'error',\n            category: 'high_temperature',\n            device: deviceHealth,\n            message: `High temperature: ${device.temperature}°C`,\n            threshold: `${config.thresholds.temperature}°C`,\n            actual: `${device.temperature}°C`,\n            timestamp: timestamp\n          };\n          \n          healthReport.alerts.push(tempAlert);\n          deviceHealth.alerts.push(tempAlert);\n          healthReport.summary.criticalAlerts++;\n          deviceHealth.healthScore -= 30;\n        }\n      }\n      \n      // Ensure health score doesn't go below 0\n      deviceHealth.healthScore = Math.max(0, deviceHealth.healthScore);\n      \n      healthReport.devices.push(deviceHealth);\n    });\n    \n    // Calculate overall health\n    const totalHealthScore = healthReport.devices.reduce((sum, device) => sum + device.healthScore, 0);\n    healthReport.summary.overallHealth = healthReport.summary.totalDevices > 0\n      ? Math.round(totalHealthScore / healthReport.summary.totalDevices)\n      : 100;\n    \n    // Determine overall status\n    if (healthReport.summary.criticalAlerts > 0) {\n      healthReport.summary.overallStatus = 'critical';\n    } else if (healthReport.summary.warnings > 0) {\n      healthReport.summary.overallStatus = 'warning';\n    } else {\n      healthReport.summary.overallStatus = 'healthy';\n    }\n    \n    healthReport.message = `Health check completed successfully. ${healthReport.summary.totalDevices} devices monitored.`;\n  } else {\n    healthReport.message = 'No device data received from Aruba Central API';\n    healthReport.summary.overallStatus = 'unknown';\n  }\n} else {\n  healthReport.message = `API call failed: ${response.error?.message || response.message || 'Unknown error'}`;\n  healthReport.error = {\n    statusCode: statusCode,\n    message: response.error?.message || response.message || 'Unknown error',\n    details: response\n  };\n  healthReport.summary.overallStatus = 'error';\n}\n\nreturn [{ json: healthReport }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-health-status",
+      "name": "Check Health Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1450,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "critical_check",
+              "leftValue": "={{ $json.summary.overallStatus }}",
+              "rightValue": "critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "check-warning-status",
+      "name": "Check Warning Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1650,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "warning_check",
+              "leftValue": "={{ $json.summary.overallStatus }}",
+              "rightValue": "warning",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "send-critical-alert",
+      "name": "Send Critical Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1650,
+        200
+      ],
+      "parameters": {
+        "channel": "#network-alerts",
+        "username": "n8n-aruba-bot",
+        "text": "🚨 **Aruba Central Critical Health Alert**\\n\\n**Overall Status:** {{ $json.summary.overallStatus }}\\n**Overall Health:** {{ $json.summary.overallHealth }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Devices: {{ $json.summary.totalDevices }}\\n• Healthy: {{ $json.summary.healthyDevices }}\\n• Offline: {{ $json.summary.offlineDevices }}\\n• Critical Alerts: {{ $json.summary.criticalAlerts }}\\n• Warnings: {{ $json.summary.warnings }}\\n\\n**Critical Issues:**\\n{{ $json.alerts.filter(alert => alert.type === 'error').map(alert => `❌ **${alert.category}**: ${alert.message}${alert.device ? ' - Device: ' + alert.device.hostname : ''}`).join('\\n') }}\\n\\n**🔧 Immediate Action Required**\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-warning-alert",
+      "name": "Send Warning Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1850,
+        400
+      ],
+      "parameters": {
+        "channel": "#network-monitoring",
+        "username": "n8n-aruba-bot",
+        "text": "⚠️ **Aruba Central Health Warning**\\n\\n**Overall Status:** {{ $json.summary.overallStatus }}\\n**Overall Health:** {{ $json.summary.overallHealth }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Devices: {{ $json.summary.totalDevices }}\\n• Healthy: {{ $json.summary.healthyDevices }}\\n• Warnings: {{ $json.summary.warnings }}\\n\\n**Warning Issues:**\\n{{ $json.alerts.filter(alert => alert.type === 'warning').map(alert => `⚠️ **${alert.category}**: ${alert.message}${alert.device ? ' - Device: ' + alert.device.hostname : ''}`).join('\\n') }}\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-healthy-report",
+      "name": "Send Healthy Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1850,
+        500
+      ],
+      "parameters": {
+        "channel": "#network-monitoring",
+        "username": "n8n-aruba-bot",
+        "text": "✅ **Aruba Central Health Report**\\n\\n**Overall Status:** {{ $json.summary.overallStatus }}\\n**Overall Health:** {{ $json.summary.overallHealth }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Devices: {{ $json.summary.totalDevices }}\\n• Healthy Devices: {{ $json.summary.healthyDevices }}\\n• All systems normal\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Health Check Schedule": {
+      "main": [
+        [
+          {
+            "node": "Initialize Central Monitoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Central Monitoring": {
+      "main": [
+        [
+          {
+            "node": "Authenticate to Aruba Central",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticate to Aruba Central": {
+      "main": [
+        [
+          {
+            "node": "Prepare Health API Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Health API Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Health API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Health API Call": {
+      "main": [
+        [
+          {
+            "node": "Analyze Device Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Device Health": {
+      "main": [
+        [
+          {
+            "node": "Check Health Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Health Status": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Warning Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Warning Status": {
+      "main": [
+        [
+          {
+            "node": "Send Warning Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Healthy Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

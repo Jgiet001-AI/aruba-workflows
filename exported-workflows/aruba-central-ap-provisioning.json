@@ -1,0 +1,531 @@
+{
+  "name": "Aruba Central AP Provisioning",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "AP Provisioning Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aruba-central-ap-provisioning",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate AP Provisioning Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Aruba Central AP Provisioning Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'provision_ap', 'deprovision_ap', 'update_ap_config', 'move_ap_group',\n  'assign_ap_template', 'get_ap_status', 'reboot_ap', 'factory_reset_ap',\n  'bulk_provision', 'get_provisioning_status', 'update_ap_location'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Operation-specific validation\nif (['provision_ap', 'deprovision_ap', 'update_ap_config', 'reboot_ap', 'factory_reset_ap'].includes(input.operation)) {\n  if (!input.device_serial) {\n    throw new Error(`${input.operation} requires device_serial`);\n  }\n}\n\nif (input.operation === 'provision_ap') {\n  if (!input.group_name) {\n    throw new Error('provision_ap requires group_name');\n  }\n}\n\nif (input.operation === 'bulk_provision') {\n  if (!input.devices || !Array.isArray(input.devices)) {\n    throw new Error('bulk_provision requires devices array');\n  }\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `ap-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed',\n  \n  // Set Central API defaults\n  central_api_url: input.central_api_url || 'https://apigw-prod2.central.arubanetworks.com',\n  group_name: input.group_name || 'default-ap-group',\n  template_name: input.template_name || 'standard-ap-template',\n  site_name: input.site_name || 'default-site',\n  \n  // AP configuration defaults\n  ap_config: {\n    ...input.ap_config,\n    country_code: input.country_code || input.ap_config?.country_code || 'US',\n    rf_band: input.rf_band || input.ap_config?.rf_band || 'dual',\n    power_mode: input.power_mode || input.ap_config?.power_mode || 'auto',\n    led_override: input.led_override || input.ap_config?.led_override || false,\n    external_antenna: input.external_antenna || input.ap_config?.external_antenna || false\n  },\n  \n  // Location information\n  location_info: {\n    ...input.location_info,\n    address: input.address || input.location_info?.address || '',\n    latitude: input.latitude || input.location_info?.latitude || null,\n    longitude: input.longitude || input.location_info?.longitude || null,\n    floor: input.floor || input.location_info?.floor || '',\n    building: input.building || input.location_info?.building || ''\n  }\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "route-operation",
+      "name": "Route AP Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "provision_ap",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "update_ap_config",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "move_ap_group",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "assign_ap_template",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "deprovision_ap",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "reboot_ap",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "factory_reset_ap",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "get_ap_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "get_provisioning_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "bulk_provision",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "update_ap_location",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "provision-single-ap",
+      "name": "Provision Single AP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// Provision Single AP\nconst data = items[0].json;\n\nconst provisioningRequest = {\n  method: 'POST',\n  url: `${data.central_api_url}/api/v2/configuration/devices`,\n  body: {\n    device_serial: data.device_serial,\n    device_type: 'ap',\n    group_name: data.group_name,\n    template_name: data.template_name,\n    site_name: data.site_name,\n    hostname: data.hostname || `AP-${data.device_serial.slice(-6)}`,\n    location: {\n      address: data.location_info.address,\n      latitude: data.location_info.latitude,\n      longitude: data.location_info.longitude,\n      floor: data.location_info.floor,\n      building: data.location_info.building\n    },\n    ap_config: {\n      country_code: data.ap_config.country_code,\n      rf_band: data.ap_config.rf_band,\n      power_mode: data.ap_config.power_mode,\n      led_override: data.ap_config.led_override,\n      external_antenna: data.ap_config.external_antenna,\n      radio_settings: {\n        radio_2_4ghz: {\n          enabled: data.radio_2_4ghz_enabled !== false,\n          channel: data.radio_2_4ghz_channel || 'auto',\n          power: data.radio_2_4ghz_power || 'auto'\n        },\n        radio_5ghz: {\n          enabled: data.radio_5ghz_enabled !== false,\n          channel: data.radio_5ghz_channel || 'auto',\n          power: data.radio_5ghz_power || 'auto'\n        }\n      }\n    },\n    tags: data.tags || ['automated', 'n8n-provisioned'],\n    notes: data.notes || `Provisioned via n8n automation on ${data.timestamp}`\n  },\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-aruba-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: data.operation,\n  request_id: data.request_id,\n  device_serial: data.device_serial\n};\n\nreturn [{ json: provisioningRequest }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "update-ap-operations",
+      "name": "Update AP Operations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        250
+      ],
+      "parameters": {
+        "jsCode": "// Update AP Configuration Operations\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet method = 'PUT';\nlet url = `${data.central_api_url}/api/v2/configuration/devices/${data.device_serial}`;\nlet body = null;\n\nswitch (operation) {\n  case 'update_ap_config':\n    method = 'PUT';\n    body = {\n      ap_config: data.ap_config,\n      location: data.location_info,\n      template_name: data.template_name,\n      hostname: data.hostname,\n      notes: `Updated via n8n automation on ${data.timestamp}`\n    };\n    break;\n    \n  case 'move_ap_group':\n    method = 'PUT';\n    url = `${data.central_api_url}/api/v2/configuration/devices/${data.device_serial}/group`;\n    body = {\n      group_name: data.new_group_name || data.group_name,\n      preserve_config: data.preserve_config !== false\n    };\n    break;\n    \n  case 'assign_ap_template':\n    method = 'PUT';\n    url = `${data.central_api_url}/api/v2/configuration/devices/${data.device_serial}/template`;\n    body = {\n      template_name: data.new_template_name || data.template_name,\n      variables: data.template_variables || {}\n    };\n    break;\n}\n\nconst updateRequest = {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-aruba-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  request_id: data.request_id,\n  device_serial: data.device_serial\n};\n\nreturn [{ json: updateRequest }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "management-operations",
+      "name": "AP Management Operations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        350
+      ],
+      "parameters": {
+        "jsCode": "// AP Management Operations (Deprovision, Reboot, Factory Reset)\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet method = 'POST';\nlet url = `${data.central_api_url}/api/v2/devices/${data.device_serial}`;\nlet body = null;\n\nswitch (operation) {\n  case 'deprovision_ap':\n    method = 'DELETE';\n    url = `${data.central_api_url}/api/v2/configuration/devices/${data.device_serial}`;\n    body = {\n      reason: data.deprovision_reason || 'Deprovisioned via automation',\n      preserve_license: data.preserve_license !== false\n    };\n    break;\n    \n  case 'reboot_ap':\n    method = 'POST';\n    url = `${data.central_api_url}/api/v2/devices/${data.device_serial}/action`;\n    body = {\n      action: 'reboot',\n      reason: data.reboot_reason || 'Reboot via automation',\n      scheduled_time: data.scheduled_time || null\n    };\n    break;\n    \n  case 'factory_reset_ap':\n    method = 'POST';\n    url = `${data.central_api_url}/api/v2/devices/${data.device_serial}/action`;\n    body = {\n      action: 'factory_reset',\n      reason: data.reset_reason || 'Factory reset via automation',\n      preserve_network_config: data.preserve_network_config || false\n    };\n    break;\n}\n\nconst managementRequest = {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-aruba-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  request_id: data.request_id,\n  device_serial: data.device_serial\n};\n\nreturn [{ json: managementRequest }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "query-operations",
+      "name": "AP Query Operations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        450
+      ],
+      "parameters": {
+        "jsCode": "// AP Query Operations (Status, Provisioning Status)\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet method = 'GET';\nlet url = `${data.central_api_url}/api/v2/devices`;\nlet queryParams = {};\n\nswitch (operation) {\n  case 'get_ap_status':\n    method = 'GET';\n    url = `${data.central_api_url}/api/v2/devices/${data.device_serial}`;\n    queryParams = {\n      include_details: true,\n      include_stats: data.include_stats !== false\n    };\n    break;\n    \n  case 'get_provisioning_status':\n    method = 'GET';\n    url = `${data.central_api_url}/api/v2/devices/provisioning/status`;\n    queryParams = {\n      device_serial: data.device_serial || undefined,\n      group_name: data.group_name || undefined,\n      status_filter: data.status_filter || undefined,\n      limit: data.limit || 100\n    };\n    break;\n}\n\nconst queryRequest = {\n  method: method,\n  url: url,\n  queryParams: queryParams,\n  body: null,\n  headers: {\n    'Authorization': `Bearer ${data.api_token || 'your-aruba-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  request_id: data.request_id\n};\n\nreturn [{ json: queryRequest }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "bulk-operations",
+      "name": "Bulk Operations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        550
+      ],
+      "parameters": {
+        "jsCode": "// Bulk AP Operations\nconst data = items[0].json;\nconst operation = data.operation;\n\nif (operation === 'bulk_provision') {\n  const bulkRequest = {\n    method: 'POST',\n    url: `${data.central_api_url}/api/v2/configuration/devices/bulk`,\n    body: {\n      devices: data.devices.map(device => ({\n        device_serial: device.device_serial,\n        device_type: 'ap',\n        group_name: device.group_name || data.group_name,\n        template_name: device.template_name || data.template_name,\n        site_name: device.site_name || data.site_name,\n        hostname: device.hostname || `AP-${device.device_serial.slice(-6)}`,\n        location: device.location || data.location_info,\n        ap_config: { ...data.ap_config, ...device.ap_config },\n        tags: device.tags || data.tags || ['bulk-provisioned', 'n8n-automated']\n      })),\n      provisioning_options: {\n        batch_size: data.batch_size || 10,\n        delay_between_batches: data.batch_delay || 5000,\n        rollback_on_failure: data.rollback_on_failure !== false,\n        notification_settings: {\n          on_success: data.notify_on_success !== false,\n          on_failure: data.notify_on_failure !== false\n        }\n      }\n    },\n    headers: {\n      'Content-Type': 'application/json',\n      'Authorization': `Bearer ${data.api_token || 'your-aruba-api-token'}`,\n      'Accept': 'application/json'\n    },\n    operation: operation,\n    request_id: data.request_id,\n    device_count: data.devices.length\n  };\n  \n  return [{ json: bulkRequest }];\n} else if (operation === 'update_ap_location') {\n  const locationRequest = {\n    method: 'PUT',\n    url: `${data.central_api_url}/api/v2/devices/${data.device_serial}/location`,\n    body: {\n      location: data.location_info,\n      update_time: data.timestamp\n    },\n    headers: {\n      'Content-Type': 'application/json',\n      'Authorization': `Bearer ${data.api_token || 'your-aruba-api-token'}`,\n      'Accept': 'application/json'\n    },\n    operation: operation,\n    request_id: data.request_id,\n    device_serial: data.device_serial\n  };\n  \n  return [{ json: locationRequest }];\n}\n\nreturn [{ json: {\n  method: 'GET',\n  url: data.central_api_url,\n  operation: operation,\n  request_id: data.request_id\n}}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-central-api",
+      "name": "Execute Central API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1150,
+        350
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "={{ $json.method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $json.headers.Authorization }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "include_details",
+              "value": "={{ $json.queryParams?.include_details }}"
+            },
+            {
+              "name": "include_stats",
+              "value": "={{ $json.queryParams?.include_stats }}"
+            },
+            {
+              "name": "device_serial",
+              "value": "={{ $json.queryParams?.device_serial }}"
+            },
+            {
+              "name": "group_name",
+              "value": "={{ $json.queryParams?.group_name }}"
+            },
+            {
+              "name": "status_filter",
+              "value": "={{ $json.queryParams?.status_filter }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $json.queryParams?.limit }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body || {}) }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "process-results",
+      "name": "Process AP Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        350
+      ],
+      "parameters": {
+        "jsCode": "// Process Aruba Central AP API response\nconst response = items[0].json;\nconst statusCode = response.statusCode || 0;\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\n// Get original request data\nconst preparedData = $('Route AP Operation').first().json;\nconst originalRequest = $('Validate AP Provisioning Request').first().json;\n\nlet result = {\n  request_id: originalRequest.request_id,\n  operation: originalRequest.operation,\n  timestamp: new Date().toISOString(),\n  status: isSuccess ? 'success' : 'error',\n  statusCode: statusCode\n};\n\nif (isSuccess) {\n  const data = response.result || response.body || response;\n  result.data = data;\n  \n  switch (originalRequest.operation) {\n    case 'provision_ap':\n      result.message = `AP '${originalRequest.device_serial}' provisioned successfully`;\n      result.device_serial = originalRequest.device_serial;\n      result.group_name = originalRequest.group_name;\n      result.template_name = originalRequest.template_name;\n      result.hostname = data.hostname || originalRequest.hostname;\n      break;\n      \n    case 'deprovision_ap':\n      result.message = `AP '${originalRequest.device_serial}' deprovisioned successfully`;\n      result.device_serial = originalRequest.device_serial;\n      break;\n      \n    case 'update_ap_config':\n      result.message = `AP '${originalRequest.device_serial}' configuration updated successfully`;\n      result.device_serial = originalRequest.device_serial;\n      result.config_changes = originalRequest.ap_config;\n      break;\n      \n    case 'move_ap_group':\n      result.message = `AP '${originalRequest.device_serial}' moved to group '${originalRequest.new_group_name || originalRequest.group_name}' successfully`;\n      result.device_serial = originalRequest.device_serial;\n      result.new_group = originalRequest.new_group_name || originalRequest.group_name;\n      break;\n      \n    case 'assign_ap_template':\n      result.message = `AP '${originalRequest.device_serial}' assigned template '${originalRequest.new_template_name || originalRequest.template_name}' successfully`;\n      result.device_serial = originalRequest.device_serial;\n      result.template_name = originalRequest.new_template_name || originalRequest.template_name;\n      break;\n      \n    case 'get_ap_status':\n      result.message = `AP status retrieved successfully`;\n      result.device_serial = originalRequest.device_serial;\n      result.ap_status = {\n        status: data.status || 'unknown',\n        model: data.model,\n        firmware_version: data.firmware_version,\n        ip_address: data.ip_address,\n        group_name: data.group_name,\n        site_name: data.site_name,\n        last_modified: data.last_modified,\n        uptime: data.uptime\n      };\n      break;\n      \n    case 'reboot_ap':\n      result.message = `AP '${originalRequest.device_serial}' reboot initiated successfully`;\n      result.device_serial = originalRequest.device_serial;\n      result.action_id = data.action_id;\n      break;\n      \n    case 'factory_reset_ap':\n      result.message = `AP '${originalRequest.device_serial}' factory reset initiated successfully`;\n      result.device_serial = originalRequest.device_serial;\n      result.action_id = data.action_id;\n      break;\n      \n    case 'bulk_provision':\n      result.message = `Bulk provisioning initiated for ${originalRequest.devices ? originalRequest.devices.length : 'unknown'} APs`;\n      result.device_count = originalRequest.devices ? originalRequest.devices.length : 0;\n      result.batch_id = data.batch_id;\n      result.provisioning_status = data.status;\n      break;\n      \n    case 'get_provisioning_status':\n      result.message = 'Provisioning status retrieved successfully';\n      result.provisioning_data = data;\n      result.device_count = Array.isArray(data.devices) ? data.devices.length : 0;\n      break;\n      \n    case 'update_ap_location':\n      result.message = `AP '${originalRequest.device_serial}' location updated successfully`;\n      result.device_serial = originalRequest.device_serial;\n      result.location = originalRequest.location_info;\n      break;\n      \n    default:\n      result.message = `AP ${originalRequest.operation} completed successfully`;\n  }\n} else {\n  result.message = `AP API call failed: ${response.error?.message || response.message || 'Unknown error'}`;\n  result.error = {\n    statusCode: statusCode,\n    message: response.error?.message || response.message || 'Unknown error',\n    details: response\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1550,
+        350
+      ],
+      "parameters": {
+        "channel": "#aruba-central-automation",
+        "username": "n8n-ap-bot",
+        "text": "📡 **Aruba Central AP Provisioning**\\n\\n**Operation:** {{ $json.operation }}\\n**Status:** {{ $json.status.toUpperCase() }}\\n**Message:** {{ $json.message }}\\n**Time:** {{ $json.timestamp }}\\n**Request ID:** {{ $json.request_id }}\\n\\n{{ $json.device_serial ? '**Device Serial:** ' + $json.device_serial + '\\\\n' : '' }}{{ $json.hostname ? '**Hostname:** ' + $json.hostname + '\\\\n' : '' }}{{ $json.group_name ? '**Group:** ' + $json.group_name + '\\\\n' : '' }}{{ $json.template_name ? '**Template:** ' + $json.template_name + '\\\\n' : '' }}{{ $json.device_count ? '**Device Count:** ' + $json.device_count + '\\\\n' : '' }}\\n{{ $json.status === 'success' ? '✅ AP operation completed successfully' : '❌ AP operation failed - check Central logs' }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1750,
+        350
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "AP Provisioning Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate AP Provisioning Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate AP Provisioning Request": {
+      "main": [
+        [
+          {
+            "node": "Route AP Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route AP Operation": {
+      "main": [
+        [
+          {
+            "node": "Provision Single AP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update AP Operations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AP Management Operations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AP Query Operations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bulk Operations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provision Single AP": {
+      "main": [
+        [
+          {
+            "node": "Execute Central API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update AP Operations": {
+      "main": [
+        [
+          {
+            "node": "Execute Central API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AP Management Operations": {
+      "main": [
+        [
+          {
+            "node": "Execute Central API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AP Query Operations": {
+      "main": [
+        [
+          {
+            "node": "Execute Central API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bulk Operations": {
+      "main": [
+        [
+          {
+            "node": "Execute Central API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Central API": {
+      "main": [
+        [
+          {
+            "node": "Process AP Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AP Results": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

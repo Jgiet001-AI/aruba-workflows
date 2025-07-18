@@ -1,0 +1,542 @@
+{
+  "name": "UXI Test Configuration",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "UXI Test Config Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "uxi-test-configuration",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate UXI Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// UXI Test Configuration Input Validation\nconst input = items[0].json;\n\n// Required fields validation\nconst requiredFields = ['operation'];\nfor (const field of requiredFields) {\n  if (!input[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Valid operations\nconst validOperations = [\n  'create_test', 'update_test', 'delete_test', 'list_tests', \n  'run_test', 'schedule_test', 'get_test_results', 'cancel_test'\n];\n\nif (!validOperations.includes(input.operation)) {\n  throw new Error(`Invalid operation: ${input.operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Operation-specific validation\nif (['update_test', 'delete_test', 'run_test', 'cancel_test', 'get_test_results'].includes(input.operation)) {\n  if (!input.test_id) {\n    throw new Error(`${input.operation} requires test_id`);\n  }\n}\n\nif (['create_test', 'run_test', 'schedule_test'].includes(input.operation)) {\n  if (!input.sensor_id) {\n    throw new Error(`${input.operation} requires sensor_id`);\n  }\n}\n\nif (input.operation === 'create_test') {\n  if (!input.test_type) {\n    throw new Error('create_test requires test_type');\n  }\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  ...input,\n  timestamp: new Date().toISOString(),\n  request_id: `uxi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed',\n  \n  // Set UXI API defaults\n  uxi_api_url: input.uxi_api_url || 'https://api.uxi.arubanetworks.com',\n  test_type: input.test_type || 'network_performance',\n  frequency: input.frequency || 300,\n  timeout: input.timeout || 60,\n  enabled: input.enabled !== false,\n  \n  // Test configuration defaults\n  test_config: {\n    ...input.test_config,\n    name: input.test_name || input.test_config?.name || 'Automated Network Test',\n    description: input.description || input.test_config?.description || 'Automated test via n8n workflow',\n    test_type: input.test_type || 'network_performance',\n    frequency: input.frequency || 300,\n    timeout: input.timeout || 60,\n    enabled: input.enabled !== false\n  }\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "route-operation",
+      "name": "Route UXI Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "create_test",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "update_test",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "delete_test",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "list_tests",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "run_test",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "schedule_test",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "get_test_results",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "cancel_test",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "prepare-create-test",
+      "name": "Prepare Create Test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Create Test API call\nconst data = items[0].json;\n\n// Build comprehensive test configuration\nconst testConfig = {\n  method: 'POST',\n  url: `${data.uxi_api_url}/api/v1/sensors/${data.sensor_id}/tests`,\n  body: {\n    name: data.test_config.name,\n    description: data.test_config.description,\n    test_type: data.test_type,\n    frequency: data.frequency,\n    timeout: data.timeout,\n    enabled: data.enabled,\n    configuration: {\n      targets: data.test_targets || ['auto'],\n      thresholds: {\n        download_speed: data.min_download_speed || 25,\n        upload_speed: data.min_upload_speed || 5,\n        latency: data.max_latency || 50,\n        jitter: data.max_jitter || 20,\n        packet_loss: data.max_packet_loss || 1\n      },\n      advanced: {\n        parallel_connections: data.parallel_connections || 4,\n        test_duration: data.test_duration || 10,\n        retry_attempts: data.retry_attempts || 3\n      }\n    },\n    tags: data.tags || ['automated', 'n8n']\n  },\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-uxi-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: data.operation,\n  request_id: data.request_id,\n  sensor_id: data.sensor_id\n};\n\nreturn [{ json: testConfig }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-update-test",
+      "name": "Prepare Update Test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Update Test API call\nconst data = items[0].json;\n\nconst updateConfig = {\n  method: 'PUT',\n  url: `${data.uxi_api_url}/api/v1/tests/${data.test_id}`,\n  body: {\n    name: data.test_config.name,\n    description: data.test_config.description,\n    frequency: data.frequency,\n    timeout: data.timeout,\n    enabled: data.enabled,\n    configuration: {\n      thresholds: {\n        download_speed: data.min_download_speed || 25,\n        upload_speed: data.min_upload_speed || 5,\n        latency: data.max_latency || 50,\n        jitter: data.max_jitter || 20\n      }\n    }\n  },\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-uxi-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: data.operation,\n  request_id: data.request_id,\n  test_id: data.test_id\n};\n\nreturn [{ json: updateConfig }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-delete-test",
+      "name": "Prepare Delete Test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Delete Test API call\nconst data = items[0].json;\n\nconst deleteConfig = {\n  method: 'DELETE',\n  url: `${data.uxi_api_url}/api/v1/tests/${data.test_id}`,\n  body: null,\n  headers: {\n    'Authorization': `Bearer ${data.api_token || 'your-uxi-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: data.operation,\n  request_id: data.request_id,\n  test_id: data.test_id\n};\n\nreturn [{ json: deleteConfig }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-list-tests",
+      "name": "Prepare List Tests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Prepare List Tests API call\nconst data = items[0].json;\n\nconst listConfig = {\n  method: 'GET',\n  url: `${data.uxi_api_url}/api/v1/tests`,\n  queryParams: {\n    sensor_id: data.sensor_id || undefined,\n    test_type: data.test_type_filter || undefined,\n    status: data.status_filter || undefined,\n    limit: data.limit || 100,\n    offset: data.offset || 0\n  },\n  body: null,\n  headers: {\n    'Authorization': `Bearer ${data.api_token || 'your-uxi-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: data.operation,\n  request_id: data.request_id\n};\n\nreturn [{ json: listConfig }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-run-test",
+      "name": "Prepare Run Test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        500
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Run Test API call\nconst data = items[0].json;\n\nconst runConfig = {\n  method: 'POST',\n  url: `${data.uxi_api_url}/api/v1/tests/${data.test_id}/execute`,\n  body: {\n    immediate: data.immediate || true,\n    timeout: data.execution_timeout || 60,\n    retry_on_failure: data.retry_on_failure || true,\n    max_retries: data.max_retries || 3,\n    execution_options: {\n      priority: data.priority || 'normal',\n      notification_enabled: data.notification_enabled || true\n    }\n  },\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${data.api_token || 'your-uxi-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: data.operation,\n  request_id: data.request_id,\n  test_id: data.test_id\n};\n\nreturn [{ json: runConfig }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-other-operations",
+      "name": "Prepare Other Operations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        600
+      ],
+      "parameters": {
+        "jsCode": "// Prepare Schedule/Results/Cancel API calls\nconst data = items[0].json;\nconst operation = data.operation;\n\nlet method = 'GET';\nlet url = `${data.uxi_api_url}/api/v1/tests`;\nlet body = null;\n\nswitch (operation) {\n  case 'schedule_test':\n    method = 'POST';\n    url = `${data.uxi_api_url}/api/v1/tests/${data.test_id}/schedule`;\n    body = {\n      schedule_type: data.schedule_type || 'interval',\n      interval: data.schedule_interval || 300,\n      start_time: data.start_time || new Date().toISOString(),\n      end_time: data.end_time || null,\n      timezone: data.timezone || 'UTC',\n      enabled: data.schedule_enabled !== false\n    };\n    break;\n    \n  case 'get_test_results':\n    method = 'GET';\n    url = `${data.uxi_api_url}/api/v1/tests/${data.test_id}/results`;\n    if (data.execution_id) {\n      url += `/${data.execution_id}`;\n    }\n    break;\n    \n  case 'cancel_test':\n    method = 'POST';\n    url = `${data.uxi_api_url}/api/v1/tests/${data.test_id}/cancel`;\n    body = {\n      reason: data.cancel_reason || 'Manual cancellation via automation'\n    };\n    break;\n}\n\nconst config = {\n  method: method,\n  url: url,\n  body: body,\n  headers: {\n    'Authorization': `Bearer ${data.api_token || 'your-uxi-api-token'}`,\n    'Accept': 'application/json'\n  },\n  operation: operation,\n  request_id: data.request_id,\n  test_id: data.test_id\n};\n\nif (body) {\n  config.headers['Content-Type'] = 'application/json';\n}\n\nreturn [{ json: config }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-uxi-api",
+      "name": "Execute UXI API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1150,
+        350
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "={{ $json.method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $json.headers.Authorization }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "sensor_id",
+              "value": "={{ $json.queryParams?.sensor_id }}"
+            },
+            {
+              "name": "test_type",
+              "value": "={{ $json.queryParams?.test_type }}"
+            },
+            {
+              "name": "status",
+              "value": "={{ $json.queryParams?.status }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $json.queryParams?.limit }}"
+            },
+            {
+              "name": "offset",
+              "value": "={{ $json.queryParams?.offset }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body || {}) }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "process-results",
+      "name": "Process UXI Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        350
+      ],
+      "parameters": {
+        "jsCode": "// Process UXI Test API response\nconst response = items[0].json;\nconst statusCode = response.statusCode || 0;\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\n// Get original request data\nconst preparedData = $('Route UXI Operation').first().json;\nconst originalRequest = $('Validate UXI Request').first().json;\n\nlet result = {\n  request_id: originalRequest.request_id,\n  operation: originalRequest.operation,\n  timestamp: new Date().toISOString(),\n  status: isSuccess ? 'success' : 'error',\n  statusCode: statusCode\n};\n\nif (isSuccess) {\n  const data = response.result || response.body || response;\n  result.data = data;\n  \n  switch (originalRequest.operation) {\n    case 'create_test':\n      result.message = `UXI test '${data.name || 'Unknown'}' created successfully`;\n      result.test_id = data.id || data.test_id;\n      result.test_name = data.name;\n      result.sensor_id = originalRequest.sensor_id;\n      result.test_type = originalRequest.test_type;\n      break;\n      \n    case 'update_test':\n      result.message = `UXI test '${originalRequest.test_id}' updated successfully`;\n      result.test_id = originalRequest.test_id;\n      break;\n      \n    case 'delete_test':\n      result.message = `UXI test '${originalRequest.test_id}' deleted successfully`;\n      result.test_id = originalRequest.test_id;\n      break;\n      \n    case 'list_tests':\n      result.message = `Retrieved ${Array.isArray(data.tests) ? data.tests.length : 'unknown'} UXI tests`;\n      result.test_count = Array.isArray(data.tests) ? data.tests.length : 0;\n      result.tests = data.tests || data;\n      break;\n      \n    case 'run_test':\n      result.message = `UXI test '${originalRequest.test_id}' execution started`;\n      result.test_id = originalRequest.test_id;\n      result.execution_id = data.execution_id;\n      result.execution_status = data.status || 'running';\n      break;\n      \n    case 'schedule_test':\n      result.message = `UXI test '${originalRequest.test_id}' scheduled successfully`;\n      result.test_id = originalRequest.test_id;\n      result.schedule_id = data.schedule_id;\n      result.next_execution = data.next_execution;\n      break;\n      \n    case 'get_test_results':\n      result.message = `UXI test results retrieved successfully`;\n      result.test_id = originalRequest.test_id;\n      result.results = data.results || data;\n      result.result_count = Array.isArray(data.results) ? data.results.length : 1;\n      break;\n      \n    case 'cancel_test':\n      result.message = `UXI test '${originalRequest.test_id}' cancelled successfully`;\n      result.test_id = originalRequest.test_id;\n      result.cancellation_reason = data.reason;\n      break;\n      \n    default:\n      result.message = `UXI ${originalRequest.operation} completed successfully`;\n  }\n} else {\n  result.message = `UXI API call failed: ${response.error?.message || response.message || 'Unknown error'}`;\n  result.error = {\n    statusCode: statusCode,\n    message: response.error?.message || response.message || 'Unknown error',\n    details: response\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1550,
+        350
+      ],
+      "parameters": {
+        "channel": "#uxi-operations",
+        "username": "n8n-uxi-bot",
+        "text": "🧪 **UXI Test Configuration Operation**\\n\\n**Operation:** {{ $json.operation }}\\n**Status:** {{ $json.status.toUpperCase() }}\\n**Message:** {{ $json.message }}\\n**Time:** {{ $json.timestamp }}\\n**Request ID:** {{ $json.request_id }}\\n\\n{{ $json.test_id ? '**Test ID:** ' + $json.test_id + '\\\\n' : '' }}{{ $json.test_name ? '**Test Name:** ' + $json.test_name + '\\\\n' : '' }}{{ $json.sensor_id ? '**Sensor ID:** ' + $json.sensor_id + '\\\\n' : '' }}{{ $json.test_type ? '**Test Type:** ' + $json.test_type + '\\\\n' : '' }}{{ $json.execution_id ? '**Execution ID:** ' + $json.execution_id + '\\\\n' : '' }}\\n{{ $json.status === 'success' ? '✅ UXI operation completed successfully' : '❌ UXI operation failed - check logs' }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1750,
+        350
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "UXI Test Config Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate UXI Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate UXI Request": {
+      "main": [
+        [
+          {
+            "node": "Route UXI Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route UXI Operation": {
+      "main": [
+        [
+          {
+            "node": "Prepare Create Test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Update Test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Delete Test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare List Tests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Run Test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Other Operations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Create Test": {
+      "main": [
+        [
+          {
+            "node": "Execute UXI API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Update Test": {
+      "main": [
+        [
+          {
+            "node": "Execute UXI API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Delete Test": {
+      "main": [
+        [
+          {
+            "node": "Execute UXI API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare List Tests": {
+      "main": [
+        [
+          {
+            "node": "Execute UXI API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Run Test": {
+      "main": [
+        [
+          {
+            "node": "Execute UXI API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Other Operations": {
+      "main": [
+        [
+          {
+            "node": "Execute UXI API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute UXI API": {
+      "main": [
+        [
+          {
+            "node": "Process UXI Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process UXI Results": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}
