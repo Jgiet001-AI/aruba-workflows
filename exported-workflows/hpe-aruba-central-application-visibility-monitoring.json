@@ -1,0 +1,425 @@
+{
+  "name": "HPE Aruba Central Application Visibility Monitoring",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Application Visibility Monitoring Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hpe-aruba-application-visibility-monitoring",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Application Visibility Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// HPE Aruba Central Application Visibility Monitoring Input Validation\nconst input = items[0].json;\n\n// Valid operations\nconst validOperations = [\n  'get_application_usage', 'get_top_applications', 'get_application_performance', \n  'get_bandwidth_by_application', 'get_user_application_usage', 'analyze_application_trends',\n  'get_application_categories', 'comprehensive_app_analysis'\n];\n\nconst operation = input.operation || 'get_top_applications';\n\nif (!validOperations.includes(operation)) {\n  throw new Error(`Invalid operation: ${operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  operation: operation,\n  \n  // Filtering parameters\n  site_id: input.site_id || null,\n  site_name: input.site_name || null,\n  group_name: input.group_name || null,\n  \n  // Application filtering\n  application_name: input.application_name || null,\n  application_category: input.application_category || null,\n  \n  // User/device filtering\n  user_id: input.user_id || null,\n  username: input.username || null,\n  device_mac: input.device_mac || null,\n  device_type: input.device_type || null,\n  \n  // Time range for analysis\n  time_range: input.time_range || '24h', // 1h, 6h, 24h, 7d, 30d\n  start_time: input.start_time || null,\n  end_time: input.end_time || null,\n  \n  // Query parameters\n  limit: Math.min(parseInt(input.limit) || 50, 500),\n  offset: parseInt(input.offset) || 0,\n  \n  // Analysis thresholds\n  thresholds: {\n    high_usage_threshold: parseInt(input.usage_threshold) || 1000, // MB\n    response_time_max: parseInt(input.response_time_threshold) || 500, // milliseconds\n    bandwidth_high_threshold: parseInt(input.bandwidth_threshold) || 50, // Mbps\n    session_duration_max: parseInt(input.session_duration_threshold) || 3600, // seconds\n    concurrent_users_max: parseInt(input.concurrent_users_threshold) || 100\n  },\n  \n  // Reporting options\n  include_user_details: input.include_user_details !== false,\n  include_bandwidth_analysis: input.include_bandwidth_analysis !== false,\n  include_performance_metrics: input.include_performance_metrics !== false,\n  include_trends: input.include_trends !== false,\n  \n  // Sorting and grouping\n  sort_by: input.sort_by || 'usage', // usage, bandwidth, users, performance\n  group_by: input.group_by || 'application', // application, category, site, user\n  \n  timestamp: new Date().toISOString(),\n  requestId: `hpe-app-vis-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "get-authentication",
+      "name": "Get Authentication Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [650, 300],
+      "parameters": {
+        "url": "http://192.168.40.100:8006/webhook/hpe-aruba-central-auth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"operation\": \"get_token\",\n  \"client_id\": \"{{ $vars.HPE_ARUBA_CLIENT_ID }}\",\n  \"client_secret\": \"{{ $vars.HPE_ARUBA_CLIENT_SECRET }}\",\n  \"customer_id\": \"{{ $vars.HPE_ARUBA_CUSTOMER_ID }}\"\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-app-visibility-requests",
+      "name": "Prepare Application Visibility API Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "// Prepare HPE Aruba Central Application Visibility monitoring API calls\nconst authResponse = items[1].json;\nconst requestData = items[0].json;\n\n// Check authentication success\nif (authResponse.status !== 'success' || !authResponse.access_token) {\n  throw new Error(`Authentication failed: ${authResponse.message || 'No access token received'}`);\n}\n\nconst accessToken = authResponse.access_token;\nconst baseUrl = authResponse.base_url || 'https://apigw-prod2.central.arubanetworks.com';\nconst operation = requestData.operation;\nconst requestId = requestData.requestId;\n\nlet apiRequests = [];\n\n// Build API requests based on operation\nswitch (operation) {\n  case 'get_application_usage':\n    const usageUrl = `${baseUrl}/monitoring/v1/application_visibility/usage`;\n    const usageParams = [];\n    \n    if (requestData.site_id) usageParams.push(`site=${requestData.site_id}`);\n    if (requestData.application_name) usageParams.push(`application=${requestData.application_name}`);\n    if (requestData.application_category) usageParams.push(`category=${requestData.application_category}`);\n    if (requestData.time_range) usageParams.push(`duration=${requestData.time_range}`);\n    usageParams.push(`limit=${requestData.limit}`);\n    usageParams.push(`offset=${requestData.offset}`);\n    \n    apiRequests.push({\n      url: usageParams.length > 0 ? `${usageUrl}?${usageParams.join('&')}` : usageUrl,\n      method: 'GET',\n      operation: 'get_application_usage',\n      description: 'Get application usage statistics'\n    });\n    break;\n    \n  case 'get_top_applications':\n    const topAppsUrl = `${baseUrl}/monitoring/v1/application_visibility/top_applications`;\n    const topAppsParams = [];\n    \n    if (requestData.site_id) topAppsParams.push(`site=${requestData.site_id}`);\n    if (requestData.time_range) topAppsParams.push(`duration=${requestData.time_range}`);\n    topAppsParams.push(`limit=${requestData.limit}`);\n    topAppsParams.push(`sort_by=${requestData.sort_by}`);\n    \n    apiRequests.push({\n      url: topAppsParams.length > 0 ? `${topAppsUrl}?${topAppsParams.join('&')}` : topAppsUrl,\n      method: 'GET',\n      operation: 'get_top_applications',\n      description: 'Get top applications by usage'\n    });\n    break;\n    \n  case 'get_application_performance':\n    if (!requestData.application_name) {\n      throw new Error('application_name is required for get_application_performance operation');\n    }\n    \n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/application_visibility/applications/${requestData.application_name}/performance?duration=${requestData.time_range}`,\n      method: 'GET',\n      operation: 'get_application_performance',\n      description: `Get performance metrics for ${requestData.application_name}`\n    });\n    break;\n    \n  case 'get_bandwidth_by_application':\n    const bandwidthUrl = `${baseUrl}/monitoring/v1/application_visibility/bandwidth`;\n    const bandwidthParams = [];\n    \n    if (requestData.site_id) bandwidthParams.push(`site=${requestData.site_id}`);\n    if (requestData.time_range) bandwidthParams.push(`duration=${requestData.time_range}`);\n    bandwidthParams.push(`group_by=${requestData.group_by}`);\n    bandwidthParams.push(`limit=${requestData.limit}`);\n    \n    apiRequests.push({\n      url: bandwidthParams.length > 0 ? `${bandwidthUrl}?${bandwidthParams.join('&')}` : bandwidthUrl,\n      method: 'GET',\n      operation: 'get_bandwidth_by_application',\n      description: 'Get bandwidth usage by application'\n    });\n    break;\n    \n  case 'get_user_application_usage':\n    if (!requestData.user_id && !requestData.username && !requestData.device_mac) {\n      throw new Error('user_id, username, or device_mac is required for get_user_application_usage operation');\n    }\n    \n    const userUsageUrl = `${baseUrl}/monitoring/v1/application_visibility/users`;\n    const userUsageParams = [];\n    \n    if (requestData.user_id) userUsageParams.push(`user_id=${requestData.user_id}`);\n    if (requestData.username) userUsageParams.push(`username=${requestData.username}`);\n    if (requestData.device_mac) userUsageParams.push(`device_mac=${requestData.device_mac}`);\n    if (requestData.time_range) userUsageParams.push(`duration=${requestData.time_range}`);\n    userUsageParams.push(`limit=${requestData.limit}`);\n    \n    apiRequests.push({\n      url: userUsageParams.length > 0 ? `${userUsageUrl}?${userUsageParams.join('&')}` : userUsageUrl,\n      method: 'GET',\n      operation: 'get_user_application_usage',\n      description: 'Get application usage by user'\n    });\n    break;\n    \n  case 'analyze_application_trends':\n    const trendsUrl = `${baseUrl}/monitoring/v1/application_visibility/trends`;\n    const trendsParams = [];\n    \n    if (requestData.site_id) trendsParams.push(`site=${requestData.site_id}`);\n    if (requestData.application_category) trendsParams.push(`category=${requestData.application_category}`);\n    if (requestData.time_range) trendsParams.push(`duration=${requestData.time_range}`);\n    if (requestData.start_time) trendsParams.push(`start_time=${requestData.start_time}`);\n    if (requestData.end_time) trendsParams.push(`end_time=${requestData.end_time}`);\n    \n    apiRequests.push({\n      url: trendsParams.length > 0 ? `${trendsUrl}?${trendsParams.join('&')}` : trendsUrl,\n      method: 'GET',\n      operation: 'analyze_application_trends',\n      description: 'Analyze application usage trends'\n    });\n    break;\n    \n  case 'get_application_categories':\n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/application_visibility/categories`,\n      method: 'GET',\n      operation: 'get_application_categories',\n      description: 'Get application categories and their usage'\n    });\n    break;\n    \n  case 'comprehensive_app_analysis':\n    // Multiple API calls for comprehensive application analysis\n    apiRequests = [\n      {\n        url: `${baseUrl}/monitoring/v1/application_visibility/top_applications?duration=${requestData.time_range}&limit=${requestData.limit}`,\n        method: 'GET',\n        operation: 'top_applications',\n        description: 'Get top applications'\n      },\n      {\n        url: `${baseUrl}/monitoring/v1/application_visibility/bandwidth?duration=${requestData.time_range}&group_by=application`,\n        method: 'GET',\n        operation: 'bandwidth_by_app',\n        description: 'Get bandwidth usage by application'\n      },\n      {\n        url: `${baseUrl}/monitoring/v1/application_visibility/categories`,\n        method: 'GET',\n        operation: 'app_categories',\n        description: 'Get application categories'\n      },\n      {\n        url: `${baseUrl}/monitoring/v1/application_visibility/trends?duration=${requestData.time_range}`,\n        method: 'GET',\n        operation: 'app_trends',\n        description: 'Get application trends'\n      }\n    ];\n    \n    if (requestData.site_id) {\n      apiRequests.push({\n        url: `${baseUrl}/monitoring/v1/application_visibility/usage?site=${requestData.site_id}&duration=${requestData.time_range}`,\n        method: 'GET',\n        operation: 'site_app_usage',\n        description: `Get application usage for site ${requestData.site_id}`\n      });\n    }\n    break;\n    \n  default:\n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/application_visibility/top_applications`,\n      method: 'GET',\n      operation: 'default_top_apps',\n      description: 'Default top applications'\n    });\n}\n\n// Prepare common headers\nconst headers = {\n  'Authorization': `Bearer ${accessToken}`,\n  'Accept': 'application/json',\n  'Content-Type': 'application/json'\n};\n\n// Return prepared requests\nconst result = {\n  requests: apiRequests,\n  headers: headers,\n  baseUrl: baseUrl,\n  operation: operation,\n  requestId: requestId,\n  thresholds: requestData.thresholds,\n  timestamp: requestData.timestamp,\n  config: requestData\n};\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-app-visibility-apis",
+      "name": "Execute Application Visibility API Calls",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1050, 300],
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      }
+    },
+    {
+      "id": "make-api-call",
+      "name": "Make Individual API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 300],
+      "parameters": {
+        "url": "={{ $('Prepare Application Visibility API Requests').first().json.requests[$json.index].url }}",
+        "method": "={{ $('Prepare Application Visibility API Requests').first().json.requests[$json.index].method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $('Prepare Application Visibility API Requests').first().json.headers.Authorization }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "aggregate-api-results",
+      "name": "Aggregate API Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      }
+    },
+    {
+      "id": "process-app-visibility-data",
+      "name": "Process Application Visibility Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "parameters": {
+        "jsCode": "// Process HPE Aruba Central Application Visibility monitoring data\nconst apiResults = items;\nconst configData = $('Prepare Application Visibility API Requests').first().json;\nconst thresholds = configData.thresholds;\nconst operation = configData.operation;\nconst requestId = configData.requestId;\n\nlet processedData = {\n  requestId: requestId,\n  operation: operation,\n  timestamp: new Date().toISOString(),\n  status: 'success',\n  summary: {\n    total_applications: 0,\n    top_applications: [],\n    total_bandwidth_usage: 0,\n    total_users: 0,\n    high_usage_applications: 0,\n    performance_issues: 0,\n    categories_analyzed: 0\n  },\n  applications: [],\n  bandwidth_analysis: [],\n  user_analysis: [],\n  performance_metrics: [],\n  categories: [],\n  trends: [],\n  alerts: []\n};\n\ntry {\n  // Process each API result\n  for (const result of apiResults) {\n    const statusCode = result.statusCode || 0;\n    const isSuccess = statusCode >= 200 && statusCode < 300;\n    \n    if (!isSuccess) {\n      processedData.alerts.push({\n        type: 'error',\n        category: 'api_error',\n        message: `Application visibility API call failed with status ${statusCode}`,\n        details: result,\n        timestamp: new Date().toISOString()\n      });\n      continue;\n    }\n    \n    const data = result.result || result.body || result;\n    \n    // Process applications data\n    if (data.applications && Array.isArray(data.applications)) {\n      processedData.summary.total_applications += data.applications.length;\n      \n      for (const app of data.applications) {\n        const appData = {\n          application_name: app.name || app.application_name,\n          category: app.category || 'unknown',\n          \n          // Usage statistics\n          data_usage: app.data_usage || 0,\n          session_count: app.session_count || 0,\n          user_count: app.user_count || 0,\n          bandwidth_usage: app.bandwidth_usage || 0,\n          \n          // Performance metrics\n          response_time: app.response_time || 0,\n          session_duration: app.session_duration || 0,\n          concurrent_users: app.concurrent_users || 0,\n          \n          // Quality metrics\n          success_rate: app.success_rate || 100,\n          error_rate: app.error_rate || 0,\n          \n          // Risk assessment\n          risk_score: 0,\n          alerts: []\n        };\n        \n        // Check for high usage\n        if (appData.data_usage > thresholds.high_usage_threshold) {\n          const usageAlert = {\n            type: 'warning',\n            category: 'high_data_usage',\n            application: appData.application_name,\n            message: `High data usage detected: ${appData.data_usage}MB`,\n            threshold: thresholds.high_usage_threshold,\n            actual: appData.data_usage,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(usageAlert);\n          appData.alerts.push(usageAlert);\n          processedData.summary.high_usage_applications++;\n          appData.risk_score += 30;\n        }\n        \n        // Check response time\n        if (appData.response_time > thresholds.response_time_max) {\n          const responseAlert = {\n            type: 'warning',\n            category: 'high_response_time',\n            application: appData.application_name,\n            message: `High response time: ${appData.response_time}ms`,\n            threshold: thresholds.response_time_max,\n            actual: appData.response_time,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(responseAlert);\n          appData.alerts.push(responseAlert);\n          processedData.summary.performance_issues++;\n          appData.risk_score += 25;\n        }\n        \n        // Check bandwidth usage\n        if (appData.bandwidth_usage > thresholds.bandwidth_high_threshold) {\n          const bandwidthAlert = {\n            type: 'warning',\n            category: 'high_bandwidth_usage',\n            application: appData.application_name,\n            message: `High bandwidth usage: ${appData.bandwidth_usage}Mbps`,\n            threshold: thresholds.bandwidth_high_threshold,\n            actual: appData.bandwidth_usage,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(bandwidthAlert);\n          appData.alerts.push(bandwidthAlert);\n          appData.risk_score += 20;\n        }\n        \n        // Check concurrent users\n        if (appData.concurrent_users > thresholds.concurrent_users_max) {\n          const usersAlert = {\n            type: 'info',\n            category: 'high_concurrent_users',\n            application: appData.application_name,\n            message: `High concurrent users: ${appData.concurrent_users}`,\n            threshold: thresholds.concurrent_users_max,\n            actual: appData.concurrent_users,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(usersAlert);\n          appData.alerts.push(usersAlert);\n          appData.risk_score += 15;\n        }\n        \n        // Check error rate\n        if (appData.error_rate > 5) {\n          const errorAlert = {\n            type: 'critical',\n            category: 'high_error_rate',\n            application: appData.application_name,\n            message: `High error rate detected: ${appData.error_rate}%`,\n            actual: appData.error_rate,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(errorAlert);\n          appData.alerts.push(errorAlert);\n          appData.risk_score += 40;\n        }\n        \n        // Calculate risk level\n        if (appData.risk_score >= 60) {\n          appData.risk_level = 'high';\n        } else if (appData.risk_score >= 30) {\n          appData.risk_level = 'medium';\n        } else {\n          appData.risk_level = 'low';\n        }\n        \n        processedData.applications.push(appData);\n        processedData.summary.total_users += appData.user_count;\n        processedData.summary.total_bandwidth_usage += appData.bandwidth_usage;\n      }\n      \n      // Sort applications by usage and get top 10\n      const sortedApps = processedData.applications\n        .sort((a, b) => b.data_usage - a.data_usage)\n        .slice(0, 10);\n      \n      processedData.summary.top_applications = sortedApps.map(app => ({\n        name: app.application_name,\n        category: app.category,\n        usage: app.data_usage,\n        users: app.user_count,\n        risk_level: app.risk_level\n      }));\n    }\n    \n    // Process bandwidth data\n    if (data.bandwidth && Array.isArray(data.bandwidth)) {\n      processedData.bandwidth_analysis = data.bandwidth.map(bw => ({\n        application: bw.application,\n        category: bw.category,\n        bandwidth_used: bw.bandwidth_used,\n        percentage_of_total: bw.percentage_of_total,\n        peak_usage: bw.peak_usage,\n        average_usage: bw.average_usage\n      }));\n    }\n    \n    // Process user analysis data\n    if (data.users && Array.isArray(data.users)) {\n      processedData.user_analysis = data.users.map(user => ({\n        user_id: user.user_id,\n        username: user.username,\n        device_mac: user.device_mac,\n        applications_used: user.applications_used || [],\n        total_usage: user.total_usage || 0,\n        session_duration: user.session_duration || 0,\n        last_activity: user.last_activity\n      }));\n    }\n    \n    // Process categories data\n    if (data.categories && Array.isArray(data.categories)) {\n      processedData.summary.categories_analyzed = data.categories.length;\n      processedData.categories = data.categories.map(cat => ({\n        category_name: cat.name,\n        application_count: cat.application_count || 0,\n        total_usage: cat.total_usage || 0,\n        bandwidth_usage: cat.bandwidth_usage || 0,\n        user_count: cat.user_count || 0,\n        risk_level: cat.total_usage > (thresholds.high_usage_threshold * 5) ? 'high' : 'low'\n      }));\n    }\n    \n    // Process trends data\n    if (data.trends || data.historical) {\n      processedData.trends.push({\n        type: 'application_trends',\n        data: data.trends || data.historical,\n        collected_at: new Date().toISOString()\n      });\n    }\n    \n    // Process performance metrics\n    if (data.performance || data.metrics) {\n      processedData.performance_metrics.push({\n        type: 'performance_analysis',\n        data: data.performance || data.metrics,\n        collected_at: new Date().toISOString()\n      });\n    }\n  }\n  \n  // Calculate summary statistics\n  if (processedData.applications.length > 0) {\n    const avgResponseTime = processedData.applications\n      .reduce((sum, app) => sum + app.response_time, 0) / processedData.applications.length;\n    \n    processedData.summary.average_response_time = Math.round(avgResponseTime);\n    processedData.summary.applications_at_risk = processedData.applications\n      .filter(app => app.risk_level === 'high' || app.risk_level === 'medium').length;\n  }\n  \n  // Set overall status based on alerts and performance\n  const criticalAlerts = processedData.alerts.filter(a => a.type === 'critical').length;\n  const warningAlerts = processedData.alerts.filter(a => a.type === 'warning').length;\n  \n  if (criticalAlerts > 0 || processedData.summary.performance_issues > 5) {\n    processedData.summary.overall_status = 'critical';\n  } else if (warningAlerts > 0 || processedData.summary.high_usage_applications > 3) {\n    processedData.summary.overall_status = 'warning';\n  } else {\n    processedData.summary.overall_status = 'healthy';\n  }\n  \n  processedData.message = `Application visibility analysis completed. ${processedData.summary.total_applications} applications analyzed, ${processedData.alerts.length} alerts generated.`;\n  \n} catch (error) {\n  processedData.status = 'error';\n  processedData.message = `Error processing application visibility data: ${error.message}`;\n  processedData.error = {\n    message: error.message,\n    stack: error.stack,\n    timestamp: new Date().toISOString()\n  };\n}\n\nreturn [{ json: processedData }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-app-visibility-status",
+      "name": "Check Application Visibility Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1850, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "warning",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "healthy",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "send-critical-app-alert",
+      "name": "Send Critical Application Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 150],
+      "parameters": {
+        "channel": "#hpe-aruba-critical",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "🚨 **HPE Aruba Central - CRITICAL Application Visibility Alert**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Applications Analyzed:** {{ $json.summary.total_applications }}\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• High Usage Apps: {{ $json.summary.high_usage_applications }}\\n• Performance Issues: {{ $json.summary.performance_issues }}\\n• Total Bandwidth: {{ $json.summary.total_bandwidth_usage }}Mbps\\n• Total Users: {{ $json.summary.total_users }}\\n• Applications at Risk: {{ $json.summary.applications_at_risk }}\\n\\n**Critical Issues:**\\n{{ $json.alerts.filter(alert => alert.type === 'critical').slice(0, 5).map(alert => `❌ **${alert.category}**: ${alert.message} (App: ${alert.application})`).join('\\\\n') }}\\n\\n**🔧 IMMEDIATE ACTION REQUIRED**\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-warning-app-alert",
+      "name": "Send Warning Application Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 300],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "⚠️ **HPE Aruba Central - Application Visibility Warning**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Applications Analyzed:** {{ $json.summary.total_applications }}\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• High Usage Apps: {{ $json.summary.high_usage_applications }}\\n• Performance Issues: {{ $json.summary.performance_issues }}\\n• Total Bandwidth: {{ $json.summary.total_bandwidth_usage }}Mbps\\n• Average Response Time: {{ $json.summary.average_response_time }}ms\\n\\n**Top Applications:**\\n{{ $json.summary.top_applications.slice(0, 3).map(app => `📱 **${app.name}** (${app.category}): ${app.usage}MB, ${app.users} users, Risk: ${app.risk_level}`).join('\\\\n') }}\\n\\n**Warning Issues:**\\n{{ $json.alerts.filter(alert => alert.type === 'warning').slice(0, 3).map(alert => `⚠️ **${alert.category}**: ${alert.message} (App: ${alert.application})`).join('\\\\n') }}\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-healthy-app-report",
+      "name": "Send Healthy Application Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 450],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "✅ **HPE Aruba Central - Application Visibility Health Report**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Applications Analyzed:** {{ $json.summary.total_applications }}\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Bandwidth: {{ $json.summary.total_bandwidth_usage }}Mbps\\n• Total Users: {{ $json.summary.total_users }}\\n• Categories: {{ $json.summary.categories_analyzed }}\\n• Average Response Time: {{ $json.summary.average_response_time }}ms\\n\\n**Top Applications:**\\n{{ $json.summary.top_applications.slice(0, 3).map(app => `📱 **${app.name}** (${app.category}): ${app.usage}MB, ${app.users} users`).join('\\\\n') }}\\n\\n• All applications performing within normal parameters\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2300, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Application Visibility Monitoring Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Application Visibility Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Application Visibility Request": {
+      "main": [
+        [
+          {
+            "node": "Get Authentication Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Authentication Token": {
+      "main": [
+        [
+          {
+            "node": "Prepare Application Visibility API Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Application Visibility API Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Application Visibility API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Application Visibility API Calls": {
+      "main": [
+        [
+          {
+            "node": "Make Individual API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Individual API Call": {
+      "main": [
+        [
+          {
+            "node": "Aggregate API Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate API Results": {
+      "main": [
+        [
+          {
+            "node": "Process Application Visibility Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Application Visibility Data": {
+      "main": [
+        [
+          {
+            "node": "Check Application Visibility Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Application Visibility Status": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Application Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Warning Application Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Healthy Application Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Critical Application Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Warning Application Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Healthy Application Report": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

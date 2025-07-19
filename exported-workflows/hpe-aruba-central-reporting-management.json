@@ -1,0 +1,383 @@
+{
+  "name": "HPE Aruba Central Reporting Management",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Reporting Management Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hpe-aruba-reporting-management",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Reporting Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// HPE Aruba Central Reporting Management Input Validation\nconst input = items[0].json;\n\n// Valid operations\nconst validOperations = [\n  'health_check', 'list_reports', 'create_report', 'update_report', \n  'delete_report', 'get_report_details', 'list_report_runs', \n  'delete_report_run', 'get_report_download_link', 'execute_report'\n];\n\nconst operation = input.operation || 'health_check';\n\nif (!validOperations.includes(operation)) {\n  throw new Error(`Invalid operation: ${operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  operation: operation,\n  \n  // Report management parameters\n  report_id: input.report_id || null,\n  report_name: input.report_name || null,\n  report_type: input.report_type || 'standard', // standard, custom, scheduled\n  \n  // Report run parameters\n  run_id: input.run_id || null,\n  execution_id: input.execution_id || null,\n  \n  // Report creation/update parameters\n  report_config: input.report_config || {\n    name: input.report_name || `Auto Report ${Date.now()}`,\n    description: input.description || 'Automated report generated via n8n',\n    category: input.category || 'network_monitoring',\n    format: input.format || 'pdf', // pdf, csv, xlsx\n    schedule: input.schedule || null,\n    recipients: input.recipients || [],\n    parameters: input.parameters || {}\n  },\n  \n  // Query parameters\n  limit: Math.min(parseInt(input.limit) || 50, 1000),\n  offset: parseInt(input.offset) || 0,\n  \n  // Filtering\n  status: input.status || null, // pending, running, completed, failed\n  created_after: input.created_after || null,\n  created_before: input.created_before || null,\n  \n  // Download parameters\n  download_format: input.download_format || 'pdf',\n  include_metadata: input.include_metadata !== false,\n  \n  timestamp: new Date().toISOString(),\n  requestId: `hpe-report-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\n// Operation-specific validation\nif (['update_report', 'delete_report', 'get_report_details'].includes(operation)) {\n  if (!validatedInput.report_id) {\n    throw new Error(`${operation} operation requires report_id parameter`);\n  }\n}\n\nif (['delete_report_run', 'get_report_download_link'].includes(operation)) {\n  if (!validatedInput.run_id && !validatedInput.execution_id) {\n    throw new Error(`${operation} operation requires run_id or execution_id parameter`);\n  }\n}\n\nif (operation === 'create_report') {\n  if (!validatedInput.report_config.name) {\n    throw new Error('create_report operation requires report name');\n  }\n}\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "get-authentication",
+      "name": "Get Authentication Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [650, 300],
+      "parameters": {
+        "url": "http://192.168.40.100:8006/webhook/hpe-aruba-central-auth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"operation\": \"get_token\",\n  \"client_id\": \"{{ $vars.HPE_ARUBA_CLIENT_ID }}\",\n  \"client_secret\": \"{{ $vars.HPE_ARUBA_CLIENT_SECRET }}\",\n  \"customer_id\": \"{{ $vars.HPE_ARUBA_CUSTOMER_ID }}\"\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-reporting-requests",
+      "name": "Prepare Reporting API Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "// Prepare HPE Aruba Central Reporting API calls\nconst authResponse = items[1].json;\nconst requestData = items[0].json;\n\n// Check authentication success\nif (authResponse.status !== 'success' || !authResponse.access_token) {\n  throw new Error(`Authentication failed: ${authResponse.message || 'No access token received'}`);\n}\n\nconst accessToken = authResponse.access_token;\nconst baseUrl = authResponse.base_url || 'https://apigw-prod2.central.arubanetworks.com';\nconst operation = requestData.operation;\nconst requestId = requestData.requestId;\n\nlet apiRequest = null;\n\n// Build API request based on operation\nswitch (operation) {\n  case 'health_check':\n    apiRequest = {\n      url: `${baseUrl}/reports/v1/health`,\n      method: 'GET',\n      operation: 'health_check',\n      description: 'Check reporting service health'\n    };\n    break;\n    \n  case 'list_reports':\n    const listUrl = `${baseUrl}/reports/v1/reports`;\n    const queryParams = [];\n    \n    if (requestData.status) queryParams.push(`status=${requestData.status}`);\n    if (requestData.created_after) queryParams.push(`created_after=${requestData.created_after}`);\n    if (requestData.created_before) queryParams.push(`created_before=${requestData.created_before}`);\n    queryParams.push(`limit=${requestData.limit}`);\n    queryParams.push(`offset=${requestData.offset}`);\n    \n    apiRequest = {\n      url: queryParams.length > 0 ? `${listUrl}?${queryParams.join('&')}` : listUrl,\n      method: 'GET',\n      operation: 'list_reports',\n      description: 'Get list of reports'\n    };\n    break;\n    \n  case 'get_report_details':\n    apiRequest = {\n      url: `${baseUrl}/reports/v1/reports/${requestData.report_id}`,\n      method: 'GET',\n      operation: 'get_report_details',\n      description: `Get details for report ${requestData.report_id}`\n    };\n    break;\n    \n  case 'create_report':\n    apiRequest = {\n      url: `${baseUrl}/reports/v1/reports`,\n      method: 'POST',\n      operation: 'create_report',\n      description: 'Create new report',\n      body: {\n        name: requestData.report_config.name,\n        description: requestData.report_config.description,\n        category: requestData.report_config.category,\n        type: requestData.report_type,\n        format: requestData.report_config.format,\n        schedule: requestData.report_config.schedule,\n        recipients: requestData.report_config.recipients,\n        parameters: requestData.report_config.parameters,\n        created_by: 'n8n-automation',\n        tags: ['automated', 'n8n']\n      }\n    };\n    break;\n    \n  case 'update_report':\n    apiRequest = {\n      url: `${baseUrl}/reports/v1/reports/${requestData.report_id}`,\n      method: 'PUT',\n      operation: 'update_report',\n      description: `Update report ${requestData.report_id}`,\n      body: {\n        name: requestData.report_config.name,\n        description: requestData.report_config.description,\n        category: requestData.report_config.category,\n        format: requestData.report_config.format,\n        schedule: requestData.report_config.schedule,\n        recipients: requestData.report_config.recipients,\n        parameters: requestData.report_config.parameters,\n        updated_by: 'n8n-automation',\n        updated_at: new Date().toISOString()\n      }\n    };\n    break;\n    \n  case 'delete_report':\n    apiRequest = {\n      url: `${baseUrl}/reports/v1/reports/${requestData.report_id}`,\n      method: 'DELETE',\n      operation: 'delete_report',\n      description: `Delete report ${requestData.report_id}`\n    };\n    break;\n    \n  case 'execute_report':\n    apiRequest = {\n      url: `${baseUrl}/reports/v1/reports/${requestData.report_id}/execute`,\n      method: 'POST',\n      operation: 'execute_report',\n      description: `Execute report ${requestData.report_id}`,\n      body: {\n        format: requestData.download_format,\n        parameters: requestData.report_config.parameters || {},\n        triggered_by: 'n8n-automation',\n        execution_time: new Date().toISOString()\n      }\n    };\n    break;\n    \n  case 'list_report_runs':\n    const runsUrl = requestData.report_id \n      ? `${baseUrl}/reports/v1/reports/${requestData.report_id}/runs`\n      : `${baseUrl}/reports/v1/runs`;\n    \n    const runsParams = [];\n    if (requestData.status) runsParams.push(`status=${requestData.status}`);\n    runsParams.push(`limit=${requestData.limit}`);\n    runsParams.push(`offset=${requestData.offset}`);\n    \n    apiRequest = {\n      url: runsParams.length > 0 ? `${runsUrl}?${runsParams.join('&')}` : runsUrl,\n      method: 'GET',\n      operation: 'list_report_runs',\n      description: requestData.report_id ? `Get runs for report ${requestData.report_id}` : 'Get all report runs'\n    };\n    break;\n    \n  case 'delete_report_run':\n    const runId = requestData.run_id || requestData.execution_id;\n    apiRequest = {\n      url: `${baseUrl}/reports/v1/runs/${runId}`,\n      method: 'DELETE',\n      operation: 'delete_report_run',\n      description: `Delete report run ${runId}`\n    };\n    break;\n    \n  case 'get_report_download_link':\n    const downloadRunId = requestData.run_id || requestData.execution_id;\n    const downloadParams = [];\n    if (requestData.download_format) downloadParams.push(`format=${requestData.download_format}`);\n    if (requestData.include_metadata) downloadParams.push(`include_metadata=true`);\n    \n    const downloadUrl = `${baseUrl}/reports/v1/runs/${downloadRunId}/download`;\n    \n    apiRequest = {\n      url: downloadParams.length > 0 ? `${downloadUrl}?${downloadParams.join('&')}` : downloadUrl,\n      method: 'GET',\n      operation: 'get_report_download_link',\n      description: `Get download link for report run ${downloadRunId}`\n    };\n    break;\n    \n  default:\n    apiRequest = {\n      url: `${baseUrl}/reports/v1/health`,\n      method: 'GET',\n      operation: 'default_health',\n      description: 'Default health check'\n    };\n}\n\n// Prepare common headers\nconst headers = {\n  'Authorization': `Bearer ${accessToken}`,\n  'Accept': 'application/json',\n  'Content-Type': 'application/json'\n};\n\n// Return prepared request\nconst result = {\n  request: apiRequest,\n  headers: headers,\n  baseUrl: baseUrl,\n  operation: operation,\n  requestId: requestId,\n  timestamp: requestData.timestamp,\n  config: requestData\n};\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-reporting-api",
+      "name": "Execute Reporting API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1050, 300],
+      "parameters": {
+        "url": "={{ $json.request.url }}",
+        "method": "={{ $json.request.method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $json.headers.Authorization }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request.body || {}) }}",
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "process-reporting-results",
+      "name": "Process Reporting Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "parameters": {
+        "jsCode": "// Process HPE Aruba Central Reporting API response\nconst response = items[0].json;\nconst configData = $('Prepare Reporting API Requests').first().json;\nconst statusCode = response.statusCode || 0;\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\nconst operation = configData.operation;\nconst requestId = configData.requestId;\n\nlet processedData = {\n  requestId: requestId,\n  operation: operation,\n  timestamp: new Date().toISOString(),\n  status: isSuccess ? 'success' : 'error',\n  statusCode: statusCode,\n  summary: {\n    operation_completed: isSuccess,\n    api_response_time: response.response_time || null,\n    data_processed: false\n  },\n  data: null,\n  alerts: []\n};\n\nif (isSuccess) {\n  const data = response.result || response.body || response;\n  processedData.data = data;\n  processedData.summary.data_processed = true;\n  \n  // Operation-specific processing\n  switch (operation) {\n    case 'health_check':\n      processedData.summary.service_status = data.status || 'unknown';\n      processedData.summary.service_version = data.version || 'unknown';\n      processedData.summary.uptime = data.uptime || null;\n      processedData.summary.last_check = data.last_health_check || new Date().toISOString();\n      \n      if (data.status !== 'healthy' && data.status !== 'ok') {\n        processedData.alerts.push({\n          type: 'warning',\n          category: 'service_health',\n          message: `Reporting service status: ${data.status}`,\n          timestamp: new Date().toISOString()\n        });\n      }\n      \n      processedData.message = `Reporting service health check completed. Status: ${data.status || 'unknown'}`;\n      break;\n      \n    case 'list_reports':\n      const reports = data.reports || data.items || [];\n      processedData.summary.total_reports = reports.length;\n      processedData.summary.report_types = [...new Set(reports.map(r => r.type || 'unknown'))];\n      processedData.summary.report_statuses = [...new Set(reports.map(r => r.status || 'unknown'))];\n      \n      // Analyze report health\n      const failedReports = reports.filter(r => r.status === 'failed' || r.status === 'error');\n      if (failedReports.length > 0) {\n        processedData.alerts.push({\n          type: 'warning',\n          category: 'failed_reports',\n          message: `${failedReports.length} reports have failed`,\n          failed_reports: failedReports.map(r => ({ id: r.id, name: r.name, status: r.status })),\n          timestamp: new Date().toISOString()\n        });\n      }\n      \n      processedData.message = `Retrieved ${reports.length} reports. ${failedReports.length} failed reports found.`;\n      break;\n      \n    case 'get_report_details':\n      processedData.summary.report_id = data.id || configData.config.report_id;\n      processedData.summary.report_name = data.name || 'Unknown';\n      processedData.summary.report_status = data.status || 'unknown';\n      processedData.summary.last_execution = data.last_execution || null;\n      processedData.summary.next_execution = data.next_execution || null;\n      \n      processedData.message = `Report details retrieved for ${data.name || configData.config.report_id}`;\n      break;\n      \n    case 'create_report':\n      processedData.summary.created_report_id = data.id || data.report_id;\n      processedData.summary.created_report_name = data.name || configData.config.report_config.name;\n      processedData.summary.creation_status = data.status || 'created';\n      \n      processedData.message = `Report '${data.name || configData.config.report_config.name}' created successfully with ID: ${data.id || data.report_id}`;\n      break;\n      \n    case 'update_report':\n      processedData.summary.updated_report_id = configData.config.report_id;\n      processedData.summary.update_status = data.status || 'updated';\n      \n      processedData.message = `Report ${configData.config.report_id} updated successfully`;\n      break;\n      \n    case 'delete_report':\n      processedData.summary.deleted_report_id = configData.config.report_id;\n      processedData.summary.deletion_status = 'deleted';\n      \n      processedData.message = `Report ${configData.config.report_id} deleted successfully`;\n      break;\n      \n    case 'execute_report':\n      processedData.summary.execution_id = data.execution_id || data.run_id;\n      processedData.summary.execution_status = data.status || 'started';\n      processedData.summary.estimated_completion = data.estimated_completion || null;\n      \n      processedData.message = `Report execution started. Execution ID: ${data.execution_id || data.run_id}`;\n      break;\n      \n    case 'list_report_runs':\n      const runs = data.runs || data.executions || data.items || [];\n      processedData.summary.total_runs = runs.length;\n      processedData.summary.run_statuses = [...new Set(runs.map(r => r.status || 'unknown'))];\n      \n      const recentRuns = runs.filter(r => {\n        const runTime = new Date(r.created_at || r.started_at);\n        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);\n        return runTime > oneDayAgo;\n      });\n      \n      processedData.summary.recent_runs_24h = recentRuns.length;\n      \n      const failedRuns = runs.filter(r => r.status === 'failed' || r.status === 'error');\n      if (failedRuns.length > 0) {\n        processedData.alerts.push({\n          type: 'warning',\n          category: 'failed_runs',\n          message: `${failedRuns.length} report runs have failed`,\n          failed_runs: failedRuns.slice(0, 5).map(r => ({ id: r.id, status: r.status, error: r.error })),\n          timestamp: new Date().toISOString()\n        });\n      }\n      \n      processedData.message = `Retrieved ${runs.length} report runs. ${failedRuns.length} failed runs found.`;\n      break;\n      \n    case 'delete_report_run':\n      processedData.summary.deleted_run_id = configData.config.run_id || configData.config.execution_id;\n      processedData.summary.deletion_status = 'deleted';\n      \n      processedData.message = `Report run ${configData.config.run_id || configData.config.execution_id} deleted successfully`;\n      break;\n      \n    case 'get_report_download_link':\n      processedData.summary.download_url = data.download_url || data.url;\n      processedData.summary.download_expires = data.expires_at || data.expiry;\n      processedData.summary.file_size = data.file_size || null;\n      processedData.summary.file_format = data.format || configData.config.download_format;\n      \n      if (!data.download_url && !data.url) {\n        processedData.alerts.push({\n          type: 'warning',\n          category: 'download_unavailable',\n          message: 'Download URL not available in response',\n          timestamp: new Date().toISOString()\n        });\n      }\n      \n      processedData.message = data.download_url || data.url \n        ? `Download link retrieved successfully`\n        : `Download link request processed but URL not available`;\n      break;\n      \n    default:\n      processedData.message = `${operation} completed successfully`;\n  }\n  \n} else {\n  processedData.message = `Reporting API call failed: ${response.error?.message || response.message || 'Unknown error'}`;\n  processedData.error = {\n    statusCode: statusCode,\n    message: response.error?.message || response.message || 'Unknown error',\n    details: response\n  };\n  \n  processedData.alerts.push({\n    type: 'error',\n    category: 'api_error',\n    message: `${operation} operation failed with status ${statusCode}`,\n    error_details: response.error || response.message,\n    timestamp: new Date().toISOString()\n  });\n}\n\n// Set overall status based on operation success and alerts\nif (processedData.status === 'success' && processedData.alerts.filter(a => a.type === 'error').length === 0) {\n  if (processedData.alerts.filter(a => a.type === 'warning').length > 0) {\n    processedData.summary.overall_status = 'warning';\n  } else {\n    processedData.summary.overall_status = 'healthy';\n  }\n} else {\n  processedData.summary.overall_status = 'error';\n}\n\nreturn [{ json: processedData }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-reporting-status",
+      "name": "Check Reporting Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1450, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "error",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "warning",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "healthy",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "send-error-alert",
+      "name": "Send Error Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [1700, 150],
+      "parameters": {
+        "channel": "#hpe-aruba-critical",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "🚨 **HPE Aruba Central - Reporting Service ERROR**\\n\\n**Operation:** {{ $json.operation }}\\n**Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Status Code:** {{ $json.statusCode }}\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Error Details:**\\n{{ $json.alerts.filter(alert => alert.type === 'error').map(alert => `❌ **${alert.category}**: ${alert.message}`).join('\\\\n') }}\\n\\n**Message:** {{ $json.message }}\\n\\n**🔧 IMMEDIATE ACTION REQUIRED**\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-warning-alert",
+      "name": "Send Warning Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [1700, 300],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "⚠️ **HPE Aruba Central - Reporting Service Warning**\\n\\n**Operation:** {{ $json.operation }}\\n**Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Warning Issues:**\\n{{ $json.alerts.filter(alert => alert.type === 'warning').map(alert => `⚠️ **${alert.category}**: ${alert.message}`).join('\\\\n') }}\\n\\n**Message:** {{ $json.message }}\\n\\n{{ $json.summary.total_reports ? '**Report Summary:**\\\\n• Total Reports: ' + $json.summary.total_reports : '' }}\\n{{ $json.summary.total_runs ? '• Total Runs: ' + $json.summary.total_runs : '' }}\\n{{ $json.summary.service_status ? '• Service Status: ' + $json.summary.service_status : '' }}\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-success-notification",
+      "name": "Send Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [1700, 450],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "✅ **HPE Aruba Central - Reporting Operation Successful**\\n\\n**Operation:** {{ $json.operation }}\\n**Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Results:**\\n{{ $json.message }}\\n\\n{{ $json.summary.created_report_id ? '**Created Report ID:** ' + $json.summary.created_report_id + '\\\\n' : '' }}{{ $json.summary.execution_id ? '**Execution ID:** ' + $json.summary.execution_id + '\\\\n' : '' }}{{ $json.summary.download_url ? '**Download Available:** Yes\\\\n' : '' }}{{ $json.summary.total_reports ? '**Total Reports:** ' + $json.summary.total_reports + '\\\\n' : '' }}{{ $json.summary.service_status ? '**Service Status:** ' + $json.summary.service_status + '\\\\n' : '' }}\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1900, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Reporting Management Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Reporting Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Reporting Request": {
+      "main": [
+        [
+          {
+            "node": "Get Authentication Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Authentication Token": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reporting API Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reporting API Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Reporting API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Reporting API Call": {
+      "main": [
+        [
+          {
+            "node": "Process Reporting Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Reporting Results": {
+      "main": [
+        [
+          {
+            "node": "Check Reporting Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Reporting Status": {
+      "main": [
+        [
+          {
+            "node": "Send Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Warning Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Warning Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

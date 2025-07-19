@@ -1,0 +1,547 @@
+{
+  "name": "Aruba Security Response Template",
+  "description": "Standardized template for Aruba security event processing workflows",
+  "template_version": "1.0.0",
+  "template_type": "security",
+  "nodes": [
+    {
+      "id": "security-webhook",
+      "name": "Security Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "security-event-handler",
+        "responseMode": "responseNode",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Standard security event webhook endpoint"
+    },
+    {
+      "id": "security-validation",
+      "name": "Validate Security Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// Standard Security Event Validation Template\nconst eventData = items[0].json;\n\n// Required field validation\nconst requiredFields = {\n  event_id: { type: 'string', pattern: /^[A-Za-z0-9_-]{6,50}$/, maxLength: 50 },\n  threat_type: { type: 'string', enum: ['malware', 'intrusion', 'dos', 'vulnerability', 'policy_violation', 'anomaly', 'phishing', 'ransomware', 'other'] },\n  severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },\n  device_id: { type: 'string', pattern: /^[A-Za-z0-9._-]{3,50}$/, maxLength: 50 },\n  timestamp: { type: 'string', format: 'iso_date' }\n};\n\n// Validation functions\nconst validateField = (value, fieldName, rules) => {\n  if (!value && rules.required !== false) {\n    throw new Error(`Missing required field: ${fieldName}`);\n  }\n  \n  if (value && typeof value !== rules.type) {\n    throw new Error(`Invalid ${fieldName} type: expected ${rules.type}`);\n  }\n  \n  if (rules.pattern && !rules.pattern.test(value)) {\n    throw new Error(`Invalid ${fieldName} format`);\n  }\n  \n  if (rules.enum && !rules.enum.includes(String(value).toLowerCase())) {\n    throw new Error(`Invalid ${fieldName}: must be one of ${rules.enum.join(', ')}`);\n  }\n  \n  if (rules.maxLength && String(value).length > rules.maxLength) {\n    return String(value).substring(0, rules.maxLength);\n  }\n  \n  return value;\n};\n\nconst validateIpAddress = (ip) => {\n  if (!ip) return null;\n  const ipPattern = /^(?:(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)$/;\n  if (!ipPattern.test(ip)) {\n    throw new Error('Invalid IP address format');\n  }\n  return ip;\n};\n\nconst validateConfidenceScore = (score) => {\n  if (score === undefined || score === null) return 0.8; // Default\n  const numScore = parseFloat(score);\n  if (isNaN(numScore) || numScore < 0 || numScore > 1) {\n    throw new Error('confidence_score must be between 0 and 1');\n  }\n  return numScore;\n};\n\n// Validate all required fields\nconst validatedEvent = {};\nfor (const [fieldName, rules] of Object.entries(requiredFields)) {\n  validatedEvent[fieldName] = validateField(eventData[fieldName], fieldName, rules);\n}\n\n// Normalize and validate optional fields\nvalidatedEvent.threat_type = String(validatedEvent.threat_type).toLowerCase();\nvalidatedEvent.severity = String(validatedEvent.severity).toLowerCase();\nvalidatedEvent.timestamp = new Date(validatedEvent.timestamp).toISOString();\n\n// Validate and sanitize optional fields\nvalidatedEvent.source_ip = validateIpAddress(eventData.source_ip);\nvalidatedEvent.destination_ip = validateIpAddress(eventData.destination_ip);\nvalidatedEvent.user_id = eventData.user_id ? String(eventData.user_id).substring(0, 100) : null;\nvalidatedEvent.description = eventData.description ? String(eventData.description).substring(0, 1000) : '';\nvalidatedEvent.confidence_score = validateConfidenceScore(eventData.confidence_score);\nvalidatedEvent.external_reference = eventData.external_reference ? String(eventData.external_reference).substring(0, 200) : null;\n\n// Add system metadata\nvalidatedEvent.received_at = new Date().toISOString();\nvalidatedEvent.processing_id = `sec-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;\nvalidatedEvent.workflow_template = 'aruba-security-v1.0.0';\n\n// Calculate threat score using standard algorithm\nconst severityScores = {\n  'low': 25,\n  'medium': 50,\n  'high': 75,\n  'critical': 95\n};\n\nconst threatTypeMultipliers = {\n  'malware': 1.2,\n  'ransomware': 1.3,\n  'intrusion': 1.1,\n  'dos': 1.0,\n  'vulnerability': 0.9,\n  'policy_violation': 0.8,\n  'anomaly': 0.9,\n  'phishing': 1.1,\n  'other': 1.0\n};\n\nconst baseThreatScore = severityScores[validatedEvent.severity];\nconst typeMultiplier = threatTypeMultipliers[validatedEvent.threat_type] || 1.0;\nconst threatScore = Math.min(Math.round(baseThreatScore * typeMultiplier * validatedEvent.confidence_score), 100);\n\n// Determine response actions\nconst responseMatrix = {\n  isolation_required: threatScore >= 90,\n  quarantine_required: threatScore >= 80,\n  enhanced_monitoring: threatScore >= 70,\n  alert_soc: threatScore >= 60,\n  log_only: threatScore < 60,\n  escalation_required: threatScore >= 95,\n  auto_response_enabled: threatScore >= 85\n};\n\n// Determine notification level\nlet notificationLevel = 'info';\nif (threatScore >= 90) notificationLevel = 'critical';\nelse if (threatScore >= 75) notificationLevel = 'high';\nelse if (threatScore >= 50) notificationLevel = 'medium';\nelse notificationLevel = 'low';\n\n// Create enriched security event\nconst enrichedEvent = {\n  ...validatedEvent,\n  \n  // Threat assessment\n  threat_score: threatScore,\n  threat_category: threatScore >= 80 ? 'high_risk' : threatScore >= 60 ? 'medium_risk' : 'low_risk',\n  \n  // Response configuration\n  response_actions: responseMatrix,\n  notification_level: notificationLevel,\n  \n  // Processing metadata\n  processing_status: 'validated',\n  validation_timestamp: new Date().toISOString()\n};\n\nreturn [{ json: enrichedEvent }];"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Comprehensive security event validation with threat scoring"
+    },
+    {
+      "id": "threat-router",
+      "name": "Route by Threat Level",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "parameters": {
+        "values": {
+          "options": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.threat_score }}",
+                    "rightValue": 90,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 0
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.threat_score }}",
+                    "rightValue": 70,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 1
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.threat_score }}",
+                    "rightValue": 50,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 2
+            }
+          ]
+        }
+      },
+      "notes": "Route based on calculated threat score"
+    },
+    {
+      "id": "critical-handler",
+      "name": "Critical Threat Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 150],
+      "parameters": {
+        "jsCode": "// Critical Threat Response Handler\nconst event = items[0].json;\n\n// Log critical security event\nconsole.log('CRITICAL_SECURITY_EVENT:', {\n  event_id: event.event_id,\n  processing_id: event.processing_id,\n  device_id: event.device_id,\n  threat_type: event.threat_type,\n  threat_score: event.threat_score,\n  severity: event.severity,\n  source_ip: event.source_ip,\n  timestamp: event.timestamp\n});\n\n// Prepare immediate isolation request\nconst isolationPayload = {\n  action: 'isolate_device',\n  device_id: event.device_id,\n  reason: `Critical security threat: ${event.threat_type} (Score: ${event.threat_score})`,\n  threat_score: event.threat_score,\n  event_id: event.event_id,\n  processing_id: event.processing_id,\n  isolation_type: 'immediate',\n  rollback_timer: 3600, // 1 hour auto-rollback\n  approval_required: false, // Auto-approve for critical threats\n  timestamp: new Date().toISOString()\n};\n\n// Prepare SOC escalation\nconst socEscalation = {\n  priority: 'P1',\n  event_id: event.event_id,\n  processing_id: event.processing_id,\n  threat_category: event.threat_category,\n  threat_score: event.threat_score,\n  affected_device: event.device_id,\n  threat_type: event.threat_type,\n  automated_actions: ['device_isolation', 'enhanced_monitoring'],\n  requires_immediate_attention: true,\n  escalation_timestamp: new Date().toISOString()\n};\n\n// Create response\nconst criticalResponse = {\n  ...event,\n  response_type: 'critical_automated',\n  isolation_payload: isolationPayload,\n  soc_escalation: socEscalation,\n  actions_taken: ['device_isolation_initiated', 'soc_escalation_created'],\n  status: 'processing_critical_response',\n  processing_timestamp: new Date().toISOString()\n};\n\nreturn [{ json: criticalResponse }];"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Handle critical threats with immediate isolation"
+    },
+    {
+      "id": "high-handler",
+      "name": "High Threat Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "// High Threat Response Handler\nconst event = items[0].json;\n\n// Log high security event\nconsole.log('HIGH_SECURITY_EVENT:', {\n  event_id: event.event_id,\n  processing_id: event.processing_id,\n  device_id: event.device_id,\n  threat_type: event.threat_type,\n  threat_score: event.threat_score\n});\n\n// Prepare enhanced monitoring request\nconst monitoringPayload = {\n  action: 'enhance_monitoring',\n  device_id: event.device_id,\n  reason: `High security threat detected: ${event.threat_type} (Score: ${event.threat_score})`,\n  threat_score: event.threat_score,\n  event_id: event.event_id,\n  processing_id: event.processing_id,\n  monitoring_level: 'enhanced',\n  monitoring_duration: 3600, // 1 hour enhanced monitoring\n  include_network_traffic: true,\n  include_process_monitoring: true,\n  alert_threshold: 'low', // Lower threshold for alerts\n  timestamp: new Date().toISOString()\n};\n\n// Prepare quarantine assessment\nconst quarantineAssessment = {\n  recommended: event.response_actions.quarantine_required,\n  device_id: event.device_id,\n  threat_score: event.threat_score,\n  manual_approval_required: true,\n  assessment_criteria: {\n    threat_type: event.threat_type,\n    confidence_score: event.confidence_score,\n    device_criticality: 'unknown' // To be assessed\n  },\n  timestamp: new Date().toISOString()\n};\n\nconst highResponse = {\n  ...event,\n  response_type: 'high_monitored',\n  monitoring_payload: monitoringPayload,\n  quarantine_assessment: quarantineAssessment,\n  actions_taken: ['enhanced_monitoring_initiated', 'quarantine_assessment_created'],\n  status: 'processing_high_response',\n  processing_timestamp: new Date().toISOString()\n};\n\nreturn [{ json: highResponse }];"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Handle high threats with enhanced monitoring"
+    },
+    {
+      "id": "medium-handler",
+      "name": "Medium Threat Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 450],
+      "parameters": {
+        "jsCode": "// Medium Threat Response Handler\nconst event = items[0].json;\n\n// Log medium security event\nconsole.log('MEDIUM_SECURITY_EVENT:', {\n  event_id: event.event_id,\n  processing_id: event.processing_id,\n  device_id: event.device_id,\n  threat_type: event.threat_type,\n  threat_score: event.threat_score\n});\n\n// Prepare analysis and logging request\nconst analysisPayload = {\n  action: 'analyze_and_log',\n  device_id: event.device_id,\n  reason: `Medium security threat detected: ${event.threat_type} (Score: ${event.threat_score})`,\n  threat_score: event.threat_score,\n  event_id: event.event_id,\n  processing_id: event.processing_id,\n  analysis_priority: 'normal',\n  log_retention: '30_days',\n  correlation_enabled: true,\n  baseline_comparison: true,\n  timestamp: new Date().toISOString()\n};\n\n// Prepare trend analysis\nconst trendAnalysis = {\n  device_id: event.device_id,\n  threat_type: event.threat_type,\n  look_back_period: '7_days',\n  correlation_fields: ['source_ip', 'user_id', 'threat_type'],\n  alert_on_pattern: true,\n  timestamp: new Date().toISOString()\n};\n\nconst mediumResponse = {\n  ...event,\n  response_type: 'medium_analyzed',\n  analysis_payload: analysisPayload,\n  trend_analysis: trendAnalysis,\n  actions_taken: ['threat_analysis_initiated', 'trend_analysis_queued'],\n  status: 'processing_medium_response',\n  processing_timestamp: new Date().toISOString()\n};\n\nreturn [{ json: mediumResponse }];"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Handle medium threats with analysis and logging"
+    },
+    {
+      "id": "execute-isolation",
+      "name": "Execute Device Isolation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 150],
+      "parameters": {
+        "url": "={{$credentials.arubaApiUrl}}/api/v2/security/isolate",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Event-ID",
+              "value": "={{ $json.event_id }}"
+            },
+            {
+              "name": "X-Processing-ID",
+              "value": "={{ $json.processing_id }}"
+            },
+            {
+              "name": "X-Threat-Score",
+              "value": "={{ $json.threat_score }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "device_id",
+              "value": "={{ $json.device_id }}"
+            },
+            {
+              "name": "action",
+              "value": "isolate"
+            },
+            {
+              "name": "reason",
+              "value": "{{ $json.isolation_payload.reason }}"
+            },
+            {
+              "name": "isolation_type",
+              "value": "{{ $json.isolation_payload.isolation_type }}"
+            },
+            {
+              "name": "rollback_timer",
+              "value": "{{ $json.isolation_payload.rollback_timer }}"
+            },
+            {
+              "name": "event_reference",
+              "value": "{{ $json.event_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 2,
+            "waitBetweenTries": 1000
+          }
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Execute device isolation via Aruba API"
+    },
+    {
+      "id": "soc-notification",
+      "name": "SOC Alert Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1250, 200],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#soc-alerts",
+        "username": "aruba-security-bot",
+        "text": "🚨 CRITICAL SECURITY EVENT\n\nEvent ID: {{ $json.event_id }}\nProcessing ID: {{ $json.processing_id }}\nThreat Type: {{ $json.threat_type }}\nSeverity: {{ $json.severity }}\nThreat Score: {{ $json.threat_score }}\nDevice ID: {{ $json.device_id }}\nSource IP: {{ $json.source_ip }}\n\nResponse Type: {{ $json.response_type }}\nActions Taken: {{ $json.actions_taken.join(', ') }}\n\nTimestamp: {{ $json.timestamp }}\n\n*Immediate SOC attention required*"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Critical security alert to SOC"
+    },
+    {
+      "id": "security-audit",
+      "name": "Security Audit Logger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 400],
+      "parameters": {
+        "jsCode": "// Comprehensive Security Audit Logging\nconst event = items[0].json;\n\n// Create detailed audit entry\nconst auditEntry = {\n  // Audit metadata\n  audit_id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,\n  audit_timestamp: new Date().toISOString(),\n  workflow_template: event.workflow_template || 'aruba-security-v1.0.0',\n  \n  // Event identification\n  event_id: event.event_id,\n  processing_id: event.processing_id,\n  external_reference: event.external_reference,\n  \n  // Threat details\n  threat_assessment: {\n    type: event.threat_type,\n    severity: event.severity,\n    score: event.threat_score,\n    category: event.threat_category,\n    confidence: event.confidence_score,\n    description: event.description\n  },\n  \n  // Affected assets\n  affected_assets: {\n    primary_device: event.device_id,\n    source_ip: event.source_ip,\n    destination_ip: event.destination_ip,\n    user_id: event.user_id\n  },\n  \n  // Response details\n  response_summary: {\n    type: event.response_type,\n    actions_taken: event.actions_taken || [],\n    isolation_executed: event.isolation_payload ? true : false,\n    monitoring_enhanced: event.monitoring_payload ? true : false,\n    analysis_queued: event.analysis_payload ? true : false,\n    soc_escalated: event.soc_escalation ? true : false\n  },\n  \n  // Compliance and governance\n  compliance: {\n    processed_within_sla: true, // Immediate processing\n    automated_response: true,\n    human_intervention_required: event.response_actions?.escalation_required || false,\n    approval_bypass_authorized: event.threat_score >= 90,\n    data_retention_period: '7_years' // Security events\n  },\n  \n  // Processing performance\n  processing_metrics: {\n    validation_time: new Date(event.validation_timestamp).getTime() - new Date(event.received_at).getTime(),\n    total_processing_time: Date.now() - new Date(event.received_at).getTime(),\n    workflow_version: event.workflow_template\n  }\n};\n\n// Create SIEM-compatible log entry\nconst siemLog = {\n  timestamp: new Date().toISOString(),\n  event_type: 'security_workflow_completed',\n  severity: event.severity,\n  source: 'n8n_aruba_security_workflow',\n  event_id: event.event_id,\n  device_id: event.device_id,\n  threat_score: event.threat_score,\n  response_type: event.response_type,\n  actions_taken: event.actions_taken,\n  processing_id: event.processing_id\n};\n\n// Output for audit trail\nconsole.log('SECURITY_AUDIT:', JSON.stringify(auditEntry, null, 2));\nconsole.log('SIEM_LOG:', JSON.stringify(siemLog));\n\nconst response = {\n  ...event,\n  audit_entry: auditEntry,\n  siem_log: siemLog,\n  status: 'audit_completed',\n  audit_timestamp: new Date().toISOString()\n};\n\nreturn [{ json: response }];"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Comprehensive security audit logging"
+    },
+    {
+      "id": "response-formatter",
+      "name": "Format Security Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300],
+      "parameters": {
+        "jsCode": "// Format standardized security response\nconst data = items[0].json;\n\nconst securityResponse = {\n  status: 'success',\n  timestamp: new Date().toISOString(),\n  workflow: {\n    template: data.workflow_template || 'aruba-security-v1.0.0',\n    version: '1.0.0'\n  },\n  \n  event_summary: {\n    event_id: data.event_id,\n    processing_id: data.processing_id,\n    threat_type: data.threat_type,\n    severity: data.severity,\n    threat_score: data.threat_score,\n    threat_category: data.threat_category,\n    device_id: data.device_id\n  },\n  \n  response_summary: {\n    response_type: data.response_type,\n    actions_taken: data.actions_taken || [],\n    processing_time: Date.now() - new Date(data.received_at).getTime(),\n    automated_actions: {\n      isolation: data.isolation_payload ? 'executed' : 'not_required',\n      monitoring: data.monitoring_payload ? 'enhanced' : 'standard',\n      analysis: data.analysis_payload ? 'queued' : 'not_required',\n      soc_escalation: data.soc_escalation ? 'escalated' : 'not_required'\n    }\n  },\n  \n  compliance: {\n    audit_logged: data.audit_entry ? true : false,\n    siem_integration: data.siem_log ? true : false,\n    processing_status: data.status\n  }\n};\n\nreturn [{ json: securityResponse }];"
+      },
+      "notes": "Format standardized security response"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Security Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1650, 300],
+      "parameters": {
+        "respondWith": "json",\n        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "notes": "Final security response to webhook caller"
+    },
+    {
+      "id": "security-error-handler",
+      "name": "Security Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 600],
+      "parameters": {
+        "jsCode": "// Security-focused Error Handler\nconst error = $input.first().error;\nconst context = $input.first().json || {};\n\n// Create security error response\nconst securityError = {\n  error_id: `sec-err-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,\n  timestamp: new Date().toISOString(),\n  template: 'aruba-security-v1.0.0',\n  error_type: error.name || 'SecurityProcessingError',\n  error_severity: 'high', // Security errors are always high severity\n  message: 'Security event processing failed',\n  \n  // Context preservation\n  event_id: context.event_id || 'unknown',\n  processing_id: context.processing_id || 'unknown',\n  device_id: context.device_id || 'unknown',\n  threat_score: context.threat_score || 0,\n  \n  // Processing metadata\n  failed_step: $runIndex || 'unknown',\n  workflow_name: $workflow.name || 'unknown',\n  \n  status: 'error'\n};\n\n// Security incident logging\nconsole.error('SECURITY_PROCESSING_ERROR:', {\n  error_id: securityError.error_id,\n  event_id: context.event_id,\n  processing_id: context.processing_id,\n  error_type: error.name,\n  error_message: error.message?.substring(0, 200),\n  stack_trace: error.stack?.substring(0, 500),\n  context: {\n    device_id: context.device_id,\n    threat_score: context.threat_score,\n    step: $runIndex,\n    workflow: $workflow.name\n  }\n});\n\nreturn [{ json: securityError }];"
+      },
+      "notes": "Centralized security error handling"
+    },
+    {
+      "id": "security-error-alert",
+      "name": "Security Error Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [850, 600],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#security-errors",
+        "username": "n8n-security-error-bot",
+        "text": "🔥 SECURITY WORKFLOW ERROR\n\nError ID: {{ $json.error_id }}\nTemplate: {{ $json.template }}\nEvent ID: {{ $json.event_id }}\nProcessing ID: {{ $json.processing_id }}\nDevice ID: {{ $json.device_id }}\nThreat Score: {{ $json.threat_score }}\nError Type: {{ $json.error_type }}\nFailed Step: {{ $json.failed_step }}\n\n**IMMEDIATE ATTENTION REQUIRED**\n\nTimestamp: {{ $json.timestamp }}"
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Critical security error notifications"
+    },
+    {
+      "id": "error-response",
+      "name": "Security Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 600],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', error_id: $json.error_id, message: 'Security event processing failed', event_id: $json.event_id, processing_id: $json.processing_id, template: $json.template }, null, 2) }}",
+        "responseCode": 500
+      },
+      "notes": "Error response with security context"
+    }
+  ],
+  "connections": {
+    "Security Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Security Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Security Event": {
+      "main": [
+        [
+          {
+            "node": "Route by Threat Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Threat Level": {
+      "main": [
+        [
+          {
+            "node": "Critical Threat Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "High Threat Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Medium Threat Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Threat Handler": {
+      "main": [
+        [
+          {
+            "node": "Execute Device Isolation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Threat Handler": {
+      "main": [
+        [
+          {
+            "node": "SOC Alert Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Medium Threat Handler": {
+      "main": [
+        [
+          {
+            "node": "Security Audit Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Device Isolation": {
+      "main": [
+        [
+          {
+            "node": "SOC Alert Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SOC Alert Notification": {
+      "main": [
+        [
+          {
+            "node": "Security Audit Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security Audit Logger": {
+      "main": [
+        [
+          {
+            "node": "Format Security Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Security Response": {
+      "main": [
+        [
+          {
+            "node": "Send Security Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Security Response": {
+      "main": []
+    },
+    "Security Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Security Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Security Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security Error Response": {
+      "main": []
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "errorWorkflow": {
+      "enabled": true
+    }
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "templateId": "aruba-security-v1.0.0"
+  },
+  "pinData": null
+}

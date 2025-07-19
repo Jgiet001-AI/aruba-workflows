@@ -1,0 +1,419 @@
+{
+  "name": "HPE Aruba Central Authentication",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Authentication Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hpe-aruba-central-auth",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Authentication Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// HPE Aruba Central Authentication Input Validation\nconst input = items[0].json;\n\n// Check if we need to refresh token or get new one\nconst operation = input.operation || 'get_token';\nconst validOperations = ['get_token', 'refresh_token', 'validate_token'];\n\nif (!validOperations.includes(operation)) {\n  throw new Error(`Invalid operation: ${operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  operation: operation,\n  client_id: input.client_id || $vars.HPE_ARUBA_CLIENT_ID || 'your-client-id',\n  client_secret: input.client_secret || $vars.HPE_ARUBA_CLIENT_SECRET || 'your-client-secret',\n  base_url: input.base_url || $vars.HPE_ARUBA_BASE_URL || 'https://apigw-prod2.central.arubanetworks.com',\n  customer_id: input.customer_id || $vars.HPE_ARUBA_CUSTOMER_ID || 'your-customer-id',\n  \n  // Token validation\n  existing_token: input.access_token || null,\n  token_expires_at: input.expires_at || null,\n  \n  timestamp: new Date().toISOString(),\n  requestId: `hpe-auth-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-token-validity",
+      "name": "Check Existing Token Validity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "parameters": {
+        "jsCode": "// Check if existing token is still valid\nconst input = items[0].json;\nconst currentTime = Math.floor(Date.now() / 1000);\n\nlet needNewToken = true;\nlet tokenStatus = 'expired';\n\n// Check if we have a valid existing token\nif (input.existing_token && input.token_expires_at) {\n  const expiresAt = parseInt(input.token_expires_at);\n  const timeBuffer = 300; // 5 minutes buffer\n  \n  if (expiresAt > (currentTime + timeBuffer)) {\n    needNewToken = false;\n    tokenStatus = 'valid';\n  } else if (expiresAt > currentTime) {\n    tokenStatus = 'expiring_soon';\n  }\n}\n\nconst result = {\n  ...input,\n  need_new_token: needNewToken,\n  token_status: tokenStatus,\n  current_timestamp: currentTime,\n  check_performed_at: new Date().toISOString()\n};\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "route-token-action",
+      "name": "Route Token Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [850, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.need_new_token }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.token_status }}",
+                    "rightValue": "valid",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "get-new-token",
+      "name": "Get New Access Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 200],
+      "parameters": {
+        "url": "={{ $json.base_url }}/oauth2/token",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "form",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "name": "client_id",
+              "value": "={{ $json.client_id }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $json.client_secret }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "return-existing-token",
+      "name": "Return Existing Valid Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400],
+      "parameters": {
+        "jsCode": "// Return existing valid token\nconst input = items[0].json;\n\nconst result = {\n  requestId: input.requestId,\n  operation: 'existing_token_valid',\n  access_token: input.existing_token,\n  token_type: 'Bearer',\n  expires_at: input.token_expires_at,\n  customer_id: input.customer_id,\n  base_url: input.base_url,\n  status: 'success',\n  message: 'Using existing valid token',\n  token_source: 'cached',\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "process-token-response",
+      "name": "Process Token Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 200],
+      "parameters": {
+        "jsCode": "// Process OAuth token response\nconst response = items[0].json;\nconst originalRequest = $('Validate Authentication Request').first().json;\nconst statusCode = response.statusCode || 0;\nconst isSuccess = statusCode >= 200 && statusCode < 300;\n\nlet result = {\n  requestId: originalRequest.requestId,\n  operation: originalRequest.operation,\n  customer_id: originalRequest.customer_id,\n  base_url: originalRequest.base_url,\n  timestamp: new Date().toISOString(),\n  status: isSuccess ? 'success' : 'error',\n  statusCode: statusCode\n};\n\nif (isSuccess && response.access_token) {\n  const currentTime = Math.floor(Date.now() / 1000);\n  const expiresIn = response.expires_in || 7200; // Default 2 hours\n  const expiresAt = currentTime + expiresIn;\n  \n  result = {\n    ...result,\n    access_token: response.access_token,\n    token_type: response.token_type || 'Bearer',\n    expires_in: expiresIn,\n    expires_at: expiresAt,\n    issued_at: currentTime,\n    message: 'Authentication successful',\n    token_source: 'new',\n    \n    // Additional metadata\n    scope: response.scope || 'full_access',\n    auth_headers: {\n      'Authorization': `Bearer ${response.access_token}`,\n      'Content-Type': 'application/json',\n      'Accept': 'application/json'\n    }\n  };\n} else {\n  result = {\n    ...result,\n    message: `Authentication failed: ${response.error_description || response.error || response.message || 'Unknown error'}`,\n    error: {\n      error: response.error || 'authentication_failed',\n      error_description: response.error_description || 'Failed to obtain access token',\n      statusCode: statusCode,\n      details: response\n    }\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "merge-responses",
+      "name": "Merge Authentication Responses",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1500, 300],
+      "parameters": {
+        "mode": "passThrough",
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "requestId",
+              "field2": "requestId"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "validate-final-token",
+      "name": "Validate Final Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 300],
+      "parameters": {
+        "jsCode": "// Final token validation and response preparation\nconst authResult = items[0].json;\n\n// Ensure we have a valid token result\nif (!authResult.access_token) {\n  throw new Error('No access token available after authentication process');\n}\n\n// Prepare final response\nconst finalResult = {\n  ...authResult,\n  \n  // Add convenience fields for other workflows\n  auth_header: `Bearer ${authResult.access_token}`,\n  is_valid: true,\n  ready_for_api_calls: true,\n  \n  // API endpoints for reference\n  api_endpoints: {\n    base_url: authResult.base_url,\n    monitoring: `${authResult.base_url}/monitoring/v1`,\n    reporting: `${authResult.base_url}/reports/v1`,\n    configuration: `${authResult.base_url}/configuration/v1`\n  },\n  \n  // Usage instructions\n  usage_example: {\n    headers: {\n      'Authorization': `Bearer ${authResult.access_token}`,\n      'Content-Type': 'application/json',\n      'Accept': 'application/json'\n    },\n    sample_api_call: `${authResult.base_url}/monitoring/v1/aps`\n  },\n  \n  validation_completed_at: new Date().toISOString()\n};\n\nreturn [{ json: finalResult }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-auth-success",
+      "name": "Check Authentication Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1900, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success_check",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "send-success-notification",
+      "name": "Send Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 200],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "✅ **HPE Aruba Central Authentication Successful**\\n\\n**Token Details:**\\n• Request ID: {{ $json.requestId }}\\n• Token Type: {{ $json.token_type }}\\n• Expires At: {{ new Date($json.expires_at * 1000).toISOString() }}\\n• Token Source: {{ $json.token_source }}\\n• Customer ID: {{ $json.customer_id }}\\n• Base URL: {{ $json.base_url }}\\n\\n**Status:** {{ $json.status.toUpperCase() }}\\n**Time:** {{ $json.timestamp }}\\n\\n🔑 **Token ready for API calls**"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-error-notification",
+      "name": "Send Error Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 400],
+      "parameters": {
+        "channel": "#hpe-aruba-alerts",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "❌ **HPE Aruba Central Authentication Failed**\\n\\n**Error Details:**\\n• Request ID: {{ $json.requestId }}\\n• Error: {{ $json.message }}\\n• Status Code: {{ $json.statusCode }}\\n• Customer ID: {{ $json.customer_id }}\\n• Base URL: {{ $json.base_url }}\\n\\n**Status:** {{ $json.status.toUpperCase() }}\\n**Time:** {{ $json.timestamp }}\\n\\n🔧 **Recommended Actions:**\\n- Verify client credentials\\n- Check API endpoint availability\\n- Review network connectivity\\n- Validate customer configuration"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2300, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Authentication Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Authentication Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Authentication Request": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Token Validity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing Token Validity": {
+      "main": [
+        [
+          {
+            "node": "Route Token Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Token Action": {
+      "main": [
+        [
+          {
+            "node": "Get New Access Token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Existing Valid Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get New Access Token": {
+      "main": [
+        [
+          {
+            "node": "Process Token Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Existing Valid Token": {
+      "main": [
+        [
+          {
+            "node": "Merge Authentication Responses",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Process Token Response": {
+      "main": [
+        [
+          {
+            "node": "Merge Authentication Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Authentication Responses": {
+      "main": [
+        [
+          {
+            "node": "Validate Final Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Final Token": {
+      "main": [
+        [
+          {
+            "node": "Check Authentication Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Authentication Success": {
+      "main": [
+        [
+          {
+            "node": "Send Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Error Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

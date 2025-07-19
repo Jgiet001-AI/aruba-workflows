@@ -1,0 +1,425 @@
+{
+  "name": "HPE Aruba Central Site Health Monitoring",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Site Health Monitoring Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hpe-aruba-site-health-monitoring",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Site Health Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// HPE Aruba Central Site Health Monitoring Input Validation\nconst input = items[0].json;\n\n// Valid operations\nconst validOperations = [\n  'get_site_health', 'get_all_sites_health', 'get_site_details', 'get_site_connectivity',\n  'get_site_performance', 'analyze_site_trends', 'comprehensive_health_check'\n];\n\nconst operation = input.operation || 'get_all_sites_health';\n\nif (!validOperations.includes(operation)) {\n  throw new Error(`Invalid operation: ${operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  operation: operation,\n  \n  // Site filtering parameters\n  site_id: input.site_id || null,\n  site_name: input.site_name || null,\n  group_name: input.group_name || null,\n  \n  // Geographic filtering\n  country: input.country || null,\n  region: input.region || null,\n  city: input.city || null,\n  \n  // Health filtering\n  health_status: input.health_status || null, // 'good', 'fair', 'poor'\n  min_health_score: parseInt(input.min_health_score) || 0,\n  max_health_score: parseInt(input.max_health_score) || 100,\n  \n  // Time range for trend analysis\n  time_range: input.time_range || '24h', // 1h, 6h, 24h, 7d, 30d\n  start_time: input.start_time || null,\n  end_time: input.end_time || null,\n  \n  // Query parameters\n  limit: Math.min(parseInt(input.limit) || 100, 1000),\n  offset: parseInt(input.offset) || 0,\n  \n  // Health thresholds\n  thresholds: {\n    health_score_min: parseInt(input.health_threshold) || 70,\n    uptime_min: parseFloat(input.uptime_threshold) || 98.0, // percentage\n    device_down_max: parseInt(input.device_down_threshold) || 5, // max devices down\n    bandwidth_utilization_max: parseInt(input.bandwidth_threshold) || 80, // percentage\n    latency_max: parseInt(input.latency_threshold) || 100, // milliseconds\n    packet_loss_max: parseFloat(input.packet_loss_threshold) || 1.0 // percentage\n  },\n  \n  // Analysis options\n  include_trends: input.include_trends !== false,\n  include_devices: input.include_devices !== false,\n  include_performance: input.include_performance !== false,\n  include_connectivity: input.include_connectivity !== false,\n  \n  timestamp: new Date().toISOString(),\n  requestId: `hpe-site-health-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "get-authentication",
+      "name": "Get Authentication Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [650, 300],
+      "parameters": {
+        "url": "http://192.168.40.100:8006/webhook/hpe-aruba-central-auth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"operation\": \"get_token\",\n  \"client_id\": \"{{ $vars.HPE_ARUBA_CLIENT_ID }}\",\n  \"client_secret\": \"{{ $vars.HPE_ARUBA_CLIENT_SECRET }}\",\n  \"customer_id\": \"{{ $vars.HPE_ARUBA_CUSTOMER_ID }}\"\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-site-health-requests",
+      "name": "Prepare Site Health API Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "// Prepare HPE Aruba Central Site Health monitoring API calls\nconst authResponse = items[1].json;\nconst requestData = items[0].json;\n\n// Check authentication success\nif (authResponse.status !== 'success' || !authResponse.access_token) {\n  throw new Error(`Authentication failed: ${authResponse.message || 'No access token received'}`);\n}\n\nconst accessToken = authResponse.access_token;\nconst baseUrl = authResponse.base_url || 'https://apigw-prod2.central.arubanetworks.com';\nconst operation = requestData.operation;\nconst requestId = requestData.requestId;\n\nlet apiRequests = [];\n\n// Build API requests based on operation\nswitch (operation) {\n  case 'get_site_health':\n    if (!requestData.site_id) {\n      throw new Error('site_id is required for get_site_health operation');\n    }\n    \n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/sites/${requestData.site_id}/health`,\n      method: 'GET',\n      operation: 'get_site_health',\n      description: `Get health for site ${requestData.site_id}`\n    });\n    break;\n    \n  case 'get_all_sites_health':\n    const healthUrl = `${baseUrl}/monitoring/v1/sites/health`;\n    const healthParams = [];\n    \n    if (requestData.health_status) healthParams.push(`status=${requestData.health_status}`);\n    if (requestData.country) healthParams.push(`country=${requestData.country}`);\n    if (requestData.group_name) healthParams.push(`group=${requestData.group_name}`);\n    healthParams.push(`limit=${requestData.limit}`);\n    healthParams.push(`offset=${requestData.offset}`);\n    \n    apiRequests.push({\n      url: healthParams.length > 0 ? `${healthUrl}?${healthParams.join('&')}` : healthUrl,\n      method: 'GET',\n      operation: 'get_all_sites_health',\n      description: 'Get health status for all sites'\n    });\n    break;\n    \n  case 'get_site_details':\n    if (!requestData.site_id) {\n      throw new Error('site_id is required for get_site_details operation');\n    }\n    \n    apiRequests = [\n      {\n        url: `${baseUrl}/central/v2/sites/${requestData.site_id}`,\n        method: 'GET',\n        operation: 'site_info',\n        description: `Get site ${requestData.site_id} information`\n      },\n      {\n        url: `${baseUrl}/monitoring/v1/sites/${requestData.site_id}/devices`,\n        method: 'GET',\n        operation: 'site_devices',\n        description: `Get devices for site ${requestData.site_id}`\n      },\n      {\n        url: `${baseUrl}/monitoring/v1/sites/${requestData.site_id}/connectivity`,\n        method: 'GET',\n        operation: 'site_connectivity',\n        description: `Get connectivity for site ${requestData.site_id}`\n      }\n    ];\n    break;\n    \n  case 'get_site_connectivity':\n    if (!requestData.site_id) {\n      throw new Error('site_id is required for get_site_connectivity operation');\n    }\n    \n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/sites/${requestData.site_id}/connectivity?duration=${requestData.time_range}`,\n      method: 'GET',\n      operation: 'get_site_connectivity',\n      description: `Get connectivity status for site ${requestData.site_id}`\n    });\n    break;\n    \n  case 'get_site_performance':\n    if (!requestData.site_id) {\n      throw new Error('site_id is required for get_site_performance operation');\n    }\n    \n    apiRequests = [\n      {\n        url: `${baseUrl}/monitoring/v1/sites/${requestData.site_id}/stats?duration=${requestData.time_range}`,\n        method: 'GET',\n        operation: 'site_stats',\n        description: `Get performance stats for site ${requestData.site_id}`\n      },\n      {\n        url: `${baseUrl}/monitoring/v1/sites/${requestData.site_id}/bandwidth?duration=${requestData.time_range}`,\n        method: 'GET',\n        operation: 'site_bandwidth',\n        description: `Get bandwidth usage for site ${requestData.site_id}`\n      }\n    ];\n    break;\n    \n  case 'analyze_site_trends':\n    const trendsUrl = requestData.site_id \n      ? `${baseUrl}/monitoring/v1/sites/${requestData.site_id}/trends`\n      : `${baseUrl}/monitoring/v1/sites/trends`;\n    \n    const trendsParams = [];\n    if (requestData.time_range) trendsParams.push(`duration=${requestData.time_range}`);\n    if (requestData.start_time) trendsParams.push(`start_time=${requestData.start_time}`);\n    if (requestData.end_time) trendsParams.push(`end_time=${requestData.end_time}`);\n    \n    apiRequests.push({\n      url: trendsParams.length > 0 ? `${trendsUrl}?${trendsParams.join('&')}` : trendsUrl,\n      method: 'GET',\n      operation: 'analyze_site_trends',\n      description: requestData.site_id ? `Analyze trends for site ${requestData.site_id}` : 'Analyze trends for all sites'\n    });\n    break;\n    \n  case 'comprehensive_health_check':\n    // Multiple API calls for comprehensive health assessment\n    apiRequests = [\n      {\n        url: `${baseUrl}/monitoring/v1/sites/health?limit=${requestData.limit}`,\n        method: 'GET',\n        operation: 'all_sites_health',\n        description: 'Get health for all sites'\n      },\n      {\n        url: `${baseUrl}/central/v2/sites`,\n        method: 'GET',\n        operation: 'sites_list',\n        description: 'Get sites information'\n      },\n      {\n        url: `${baseUrl}/monitoring/v1/sites/connectivity`,\n        method: 'GET',\n        operation: 'all_sites_connectivity',\n        description: 'Get connectivity for all sites'\n      },\n      {\n        url: `${baseUrl}/monitoring/v1/sites/uptime?duration=${requestData.time_range}`,\n        method: 'GET',\n        operation: 'sites_uptime',\n        description: 'Get uptime statistics for all sites'\n      }\n    ];\n    break;\n    \n  default:\n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/sites/health`,\n      method: 'GET',\n      operation: 'default_health',\n      description: 'Default sites health check'\n    });\n}\n\n// Prepare common headers\nconst headers = {\n  'Authorization': `Bearer ${accessToken}`,\n  'Accept': 'application/json',\n  'Content-Type': 'application/json'\n};\n\n// Return prepared requests\nconst result = {\n  requests: apiRequests,\n  headers: headers,\n  baseUrl: baseUrl,\n  operation: operation,\n  requestId: requestId,\n  thresholds: requestData.thresholds,\n  timestamp: requestData.timestamp,\n  config: requestData\n};\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-site-health-apis",
+      "name": "Execute Site Health API Calls",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1050, 300],
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      }
+    },
+    {
+      "id": "make-api-call",
+      "name": "Make Individual API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 300],
+      "parameters": {
+        "url": "={{ $('Prepare Site Health API Requests').first().json.requests[$json.index].url }}",
+        "method": "={{ $('Prepare Site Health API Requests').first().json.requests[$json.index].method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $('Prepare Site Health API Requests').first().json.headers.Authorization }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "aggregate-api-results",
+      "name": "Aggregate API Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      }
+    },
+    {
+      "id": "process-site-health-data",
+      "name": "Process Site Health Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "parameters": {
+        "jsCode": "// Process HPE Aruba Central Site Health monitoring data\nconst apiResults = items;\nconst configData = $('Prepare Site Health API Requests').first().json;\nconst thresholds = configData.thresholds;\nconst operation = configData.operation;\nconst requestId = configData.requestId;\n\nlet processedData = {\n  requestId: requestId,\n  operation: operation,\n  timestamp: new Date().toISOString(),\n  status: 'success',\n  summary: {\n    total_sites: 0,\n    healthy_sites: 0,\n    warning_sites: 0,\n    critical_sites: 0,\n    average_health_score: 0,\n    total_devices: 0,\n    devices_down: 0,\n    connectivity_issues: 0\n  },\n  sites: [],\n  health_scores: [],\n  connectivity_status: [],\n  performance_metrics: [],\n  trends: [],\n  alerts: []\n};\n\ntry {\n  // Process each API result\n  for (const result of apiResults) {\n    const statusCode = result.statusCode || 0;\n    const isSuccess = statusCode >= 200 && statusCode < 300;\n    \n    if (!isSuccess) {\n      processedData.alerts.push({\n        type: 'error',\n        category: 'api_error',\n        message: `Site health API call failed with status ${statusCode}`,\n        details: result,\n        timestamp: new Date().toISOString()\n      });\n      continue;\n    }\n    \n    const data = result.result || result.body || result;\n    \n    // Process sites health data\n    if (data.sites && Array.isArray(data.sites)) {\n      processedData.summary.total_sites += data.sites.length;\n      \n      for (const site of data.sites) {\n        const siteData = {\n          site_id: site.site_id,\n          site_name: site.site_name || site.name,\n          health_score: site.health_score || 0,\n          health_status: site.health_status || 'unknown',\n          \n          // Location information\n          address: site.address || null,\n          country: site.country || null,\n          region: site.region || null,\n          city: site.city || null,\n          latitude: site.latitude || null,\n          longitude: site.longitude || null,\n          \n          // Status information\n          uptime: site.uptime || 0,\n          connectivity_status: site.connectivity_status || 'unknown',\n          last_seen: site.last_seen || null,\n          \n          // Device counts\n          total_devices: site.total_devices || 0,\n          devices_up: site.devices_up || 0,\n          devices_down: site.devices_down || 0,\n          \n          // Performance metrics\n          bandwidth_utilization: site.bandwidth_utilization || 0,\n          latency: site.latency || 0,\n          packet_loss: site.packet_loss || 0,\n          \n          // Health classification\n          health_category: 'unknown',\n          alerts: []\n        };\n        \n        // Classify health status\n        if (siteData.health_score >= thresholds.health_score_min) {\n          siteData.health_category = 'healthy';\n          processedData.summary.healthy_sites++;\n        } else if (siteData.health_score >= 50) {\n          siteData.health_category = 'warning';\n          processedData.summary.warning_sites++;\n          \n          const healthAlert = {\n            type: 'warning',\n            category: 'low_health_score',\n            site_id: siteData.site_id,\n            site_name: siteData.site_name,\n            message: `Site health score below threshold: ${siteData.health_score}%`,\n            threshold: thresholds.health_score_min,\n            actual: siteData.health_score,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(healthAlert);\n          siteData.alerts.push(healthAlert);\n        } else {\n          siteData.health_category = 'critical';\n          processedData.summary.critical_sites++;\n          \n          const criticalAlert = {\n            type: 'critical',\n            category: 'critical_health_score',\n            site_id: siteData.site_id,\n            site_name: siteData.site_name,\n            message: `Site in critical health state: ${siteData.health_score}%`,\n            threshold: thresholds.health_score_min,\n            actual: siteData.health_score,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(criticalAlert);\n          siteData.alerts.push(criticalAlert);\n        }\n        \n        // Check uptime threshold\n        if (siteData.uptime < thresholds.uptime_min) {\n          const uptimeAlert = {\n            type: 'warning',\n            category: 'low_uptime',\n            site_id: siteData.site_id,\n            site_name: siteData.site_name,\n            message: `Low site uptime: ${siteData.uptime}%`,\n            threshold: thresholds.uptime_min,\n            actual: siteData.uptime,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(uptimeAlert);\n          siteData.alerts.push(uptimeAlert);\n        }\n        \n        // Check devices down threshold\n        if (siteData.devices_down > thresholds.device_down_max) {\n          const deviceAlert = {\n            type: 'critical',\n            category: 'devices_down',\n            site_id: siteData.site_id,\n            site_name: siteData.site_name,\n            message: `${siteData.devices_down} devices are down at site`,\n            threshold: thresholds.device_down_max,\n            actual: siteData.devices_down,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(deviceAlert);\n          siteData.alerts.push(deviceAlert);\n        }\n        \n        // Check bandwidth utilization\n        if (siteData.bandwidth_utilization > thresholds.bandwidth_utilization_max) {\n          const bandwidthAlert = {\n            type: 'warning',\n            category: 'high_bandwidth_usage',\n            site_id: siteData.site_id,\n            site_name: siteData.site_name,\n            message: `High bandwidth utilization: ${siteData.bandwidth_utilization}%`,\n            threshold: thresholds.bandwidth_utilization_max,\n            actual: siteData.bandwidth_utilization,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(bandwidthAlert);\n          siteData.alerts.push(bandwidthAlert);\n        }\n        \n        // Check latency and packet loss\n        if (siteData.latency > thresholds.latency_max) {\n          const latencyAlert = {\n            type: 'warning',\n            category: 'high_latency',\n            site_id: siteData.site_id,\n            site_name: siteData.site_name,\n            message: `High latency detected: ${siteData.latency}ms`,\n            threshold: thresholds.latency_max,\n            actual: siteData.latency,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(latencyAlert);\n          siteData.alerts.push(latencyAlert);\n        }\n        \n        if (siteData.packet_loss > thresholds.packet_loss_max) {\n          const packetLossAlert = {\n            type: 'critical',\n            category: 'packet_loss',\n            site_id: siteData.site_id,\n            site_name: siteData.site_name,\n            message: `Packet loss detected: ${siteData.packet_loss}%`,\n            threshold: thresholds.packet_loss_max,\n            actual: siteData.packet_loss,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(packetLossAlert);\n          siteData.alerts.push(packetLossAlert);\n        }\n        \n        // Count devices\n        processedData.summary.total_devices += siteData.total_devices;\n        processedData.summary.devices_down += siteData.devices_down;\n        \n        processedData.sites.push(siteData);\n        processedData.health_scores.push({\n          site_id: siteData.site_id,\n          site_name: siteData.site_name,\n          score: siteData.health_score,\n          category: siteData.health_category\n        });\n      }\n    }\n    \n    // Process connectivity data\n    if (data.connectivity || data.connection_status) {\n      const connectivity = data.connectivity || data.connection_status;\n      processedData.connectivity_status.push({\n        type: 'connectivity_report',\n        data: connectivity,\n        collected_at: new Date().toISOString()\n      });\n      \n      if (connectivity.issues && connectivity.issues.length > 0) {\n        processedData.summary.connectivity_issues += connectivity.issues.length;\n      }\n    }\n    \n    // Process performance metrics\n    if (data.stats || data.performance || data.bandwidth) {\n      processedData.performance_metrics.push({\n        type: 'performance_data',\n        data: data.stats || data.performance || data.bandwidth,\n        collected_at: new Date().toISOString()\n      });\n    }\n    \n    // Process trends data\n    if (data.trends || data.historical) {\n      processedData.trends.push({\n        type: 'trend_analysis',\n        data: data.trends || data.historical,\n        collected_at: new Date().toISOString()\n      });\n    }\n    \n    // Process uptime data\n    if (data.uptime && Array.isArray(data.uptime)) {\n      for (const uptimeRecord of data.uptime) {\n        if (uptimeRecord.uptime_percentage < thresholds.uptime_min) {\n          processedData.alerts.push({\n            type: 'warning',\n            category: 'low_uptime',\n            site_id: uptimeRecord.site_id,\n            message: `Site ${uptimeRecord.site_name || uptimeRecord.site_id} has low uptime: ${uptimeRecord.uptime_percentage}%`,\n            threshold: thresholds.uptime_min,\n            actual: uptimeRecord.uptime_percentage,\n            timestamp: new Date().toISOString()\n          });\n        }\n      }\n    }\n  }\n  \n  // Calculate average health score\n  if (processedData.sites.length > 0) {\n    const totalHealthScore = processedData.sites.reduce((sum, site) => sum + site.health_score, 0);\n    processedData.summary.average_health_score = Math.round(totalHealthScore / processedData.sites.length);\n  }\n  \n  // Set overall status based on critical sites and alerts\n  if (processedData.summary.critical_sites > 0 || processedData.alerts.filter(a => a.type === 'critical').length > 0) {\n    processedData.summary.overall_status = 'critical';\n  } else if (processedData.summary.warning_sites > 0 || processedData.alerts.filter(a => a.type === 'warning').length > 0) {\n    processedData.summary.overall_status = 'warning';\n  } else {\n    processedData.summary.overall_status = 'healthy';\n  }\n  \n  processedData.message = `Site health monitoring completed. ${processedData.summary.total_sites} sites analyzed, average health score: ${processedData.summary.average_health_score}%.`;\n  \n} catch (error) {\n  processedData.status = 'error';\n  processedData.message = `Error processing site health data: ${error.message}`;\n  processedData.error = {\n    message: error.message,\n    stack: error.stack,\n    timestamp: new Date().toISOString()\n  };\n}\n\nreturn [{ json: processedData }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-site-health-status",
+      "name": "Check Site Health Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1850, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "warning",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "healthy",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "send-critical-site-alert",
+      "name": "Send Critical Site Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 150],
+      "parameters": {
+        "channel": "#hpe-aruba-critical",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "🚨 **HPE Aruba Central - CRITICAL Site Health Alert**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Average Health Score:** {{ $json.summary.average_health_score }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Sites: {{ $json.summary.total_sites }}\\n• Healthy: {{ $json.summary.healthy_sites }}\\n• Warning: {{ $json.summary.warning_sites }}\\n• Critical: {{ $json.summary.critical_sites }}\\n• Total Devices: {{ $json.summary.total_devices }}\\n• Devices Down: {{ $json.summary.devices_down }}\\n• Connectivity Issues: {{ $json.summary.connectivity_issues }}\\n\\n**Critical Issues:**\\n{{ $json.alerts.filter(alert => alert.type === 'critical').slice(0, 5).map(alert => `❌ **${alert.category}**: ${alert.message} (Site: ${alert.site_name || alert.site_id})`).join('\\\\n') }}\\n\\n**🔧 IMMEDIATE ACTION REQUIRED**\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-warning-site-alert",
+      "name": "Send Warning Site Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 300],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "⚠️ **HPE Aruba Central - Site Health Warning**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Average Health Score:** {{ $json.summary.average_health_score }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Sites: {{ $json.summary.total_sites }}\\n• Warning Sites: {{ $json.summary.warning_sites }}\\n• Total Devices: {{ $json.summary.total_devices }}\\n• Devices Down: {{ $json.summary.devices_down }}\\n\\n**Warning Issues:**\\n{{ $json.alerts.filter(alert => alert.type === 'warning').slice(0, 3).map(alert => `⚠️ **${alert.category}**: ${alert.message} (Site: ${alert.site_name || alert.site_id})`).join('\\\\n') }}\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-healthy-site-report",
+      "name": "Send Healthy Site Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 450],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "✅ **HPE Aruba Central - Site Health Report**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Average Health Score:** {{ $json.summary.average_health_score }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Sites: {{ $json.summary.total_sites }}\\n• Healthy Sites: {{ $json.summary.healthy_sites }}\\n• Total Devices: {{ $json.summary.total_devices }}\\n• Devices Up: {{ $json.summary.total_devices - $json.summary.devices_down }}\\n• All sites operating within normal parameters\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2300, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Site Health Monitoring Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Site Health Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Site Health Request": {
+      "main": [
+        [
+          {
+            "node": "Get Authentication Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Authentication Token": {
+      "main": [
+        [
+          {
+            "node": "Prepare Site Health API Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Site Health API Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Site Health API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Site Health API Calls": {
+      "main": [
+        [
+          {
+            "node": "Make Individual API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Individual API Call": {
+      "main": [
+        [
+          {
+            "node": "Aggregate API Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate API Results": {
+      "main": [
+        [
+          {
+            "node": "Process Site Health Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Site Health Data": {
+      "main": [
+        [
+          {
+            "node": "Check Site Health Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Site Health Status": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Site Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Warning Site Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Healthy Site Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Critical Site Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Warning Site Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Healthy Site Report": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

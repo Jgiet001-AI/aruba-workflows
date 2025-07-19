@@ -57,15 +57,23 @@ class PostmanAPIExtractor:
     
     def extract_endpoints_from_item(self, item: Dict[str, Any], endpoints: List[Dict[str, Any]], path_prefix: str = "") -> None:
         """Recursively extract endpoints from collection items."""
+        if not isinstance(item, dict):
+            return
+            
         if "request" in item:
             # This is an actual request
             request = item["request"]
             if isinstance(request, dict) and "url" in request:
+                # Validate method is a valid HTTP method
+                method = request.get("method", "GET")
+                if not isinstance(method, str) or method.upper() not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
+                    method = "GET"
+                
                 endpoint = {
-                    "name": item.get("name", "Unnamed"),
-                    "method": request.get("method", "GET"),
+                    "name": str(item.get("name", "Unnamed")),
+                    "method": method.upper(),
                     "url": self._extract_url(request["url"]),
-                    "description": item.get("description", ""),
+                    "description": str(item.get("description", "")),
                     "path": f"{path_prefix}/{item.get('name', 'unnamed')}".strip("/")
                 }
                 
@@ -94,16 +102,25 @@ class PostmanAPIExtractor:
     
     def _extract_url(self, url_data: Any) -> str:
         """Extract URL string from various Postman URL formats."""
-        if isinstance(url_data, str):
-            return url_data
+        if url_data is None:
+            return "unknown"
+            
+        if isinstance(url_data, str) and url_data.strip():
+            return url_data.strip()
         elif isinstance(url_data, dict):
-            if "raw" in url_data:
-                return url_data["raw"]
+            if "raw" in url_data and isinstance(url_data["raw"], str) and url_data["raw"].strip():
+                return url_data["raw"].strip()
             elif "host" in url_data and "path" in url_data:
-                host = ".".join(url_data["host"]) if isinstance(url_data["host"], list) else str(url_data["host"])
-                path = "/".join(url_data["path"]) if isinstance(url_data["path"], list) else str(url_data["path"])
-                protocol = url_data.get("protocol", "https")
-                return f"{protocol}://{host}/{path}"
+                try:
+                    host = ".".join(url_data["host"]) if isinstance(url_data["host"], list) else str(url_data["host"])
+                    path = "/".join(url_data["path"]) if isinstance(url_data["path"], list) else str(url_data["path"])
+                    protocol = url_data.get("protocol", "https")
+                    
+                    # Validate constructed URL
+                    if host and path is not None:
+                        return f"{protocol}://{host}/{path}"
+                except (TypeError, AttributeError):
+                    pass
         return "unknown"
     
     def categorize_endpoints(self, endpoints: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -201,15 +218,27 @@ class PostmanAPIExtractor:
                      categorized_endpoints: Dict[str, Any], recommendations: Dict[str, Any],
                      raw_collections: List[Dict[str, Any]]) -> None:
         """Save all extracted data to files."""
-        os.makedirs(output_dir, exist_ok=True)
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except (OSError, PermissionError) as e:
+            print(f"❌ Error creating output directory: {e}")
+            raise
         
         # Save raw collections data
-        with open(f"{output_dir}/raw_collections_data.json", "w") as f:
-            json.dump(raw_collections, f, indent=2)
+        try:
+            with open(f"{output_dir}/raw_collections_data.json", "w", encoding='utf-8') as f:
+                json.dump(raw_collections, f, indent=2, ensure_ascii=False)
+        except (OSError, IOError, json.JSONEncodeError) as e:
+            print(f"❌ Error saving raw collections data: {e}")
+            raise
         
         # Save all endpoints
-        with open(f"{output_dir}/all_aruba_endpoints.json", "w") as f:
-            json.dump(all_endpoints, f, indent=2)
+        try:
+            with open(f"{output_dir}/all_aruba_endpoints.json", "w", encoding='utf-8') as f:
+                json.dump(all_endpoints, f, indent=2, ensure_ascii=False)
+        except (OSError, IOError, json.JSONEncodeError) as e:
+            print(f"❌ Error saving endpoints data: {e}")
+            raise
         
         # Save categorized endpoints
         with open(f"{output_dir}/n8n_endpoint_categories.json", "w") as f:
@@ -261,9 +290,13 @@ class PostmanAPIExtractor:
     
     def _find_category(self, endpoint: Dict[str, Any], categorized_endpoints: Dict[str, Any]) -> str:
         """Find which category an endpoint belongs to."""
+        # Use endpoint ID for faster lookup if available
+        endpoint_id = id(endpoint)
+        
         for category, endpoints in categorized_endpoints.items():
-            if endpoint in endpoints:
-                return category
+            for ep in endpoints:
+                if id(ep) == endpoint_id or ep == endpoint:
+                    return category
         return "unknown"
 
 def main():

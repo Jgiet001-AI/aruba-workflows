@@ -1,0 +1,416 @@
+{
+  "name": "Device Health Monitor - Enhanced",
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Health Check Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-trigger",
+      "name": "Manual Health Check Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.2,
+      "position": [250, 500],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "device-health-check",
+        "responseMode": "responseNode",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "input-validation",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 400],
+      "parameters": {
+        "jsCode": "// Enhanced Input Validation and Security\nconst input = items[0].json;\n\n// Input validation\nconst validDeviceTypes = ['all', 'switches', 'aps', 'gateways'];\nconst deviceFilter = input.device_filter || 'all';\n\nif (!validDeviceTypes.includes(deviceFilter)) {\n  throw new Error(`Invalid device_filter: ${deviceFilter}. Must be one of: ${validDeviceTypes.join(', ')}`);\n}\n\n// Validate device serial if provided\nif (input.device_serial) {\n  const serialPattern = /^[A-Za-z0-9_-]{6,50}$/;\n  if (!serialPattern.test(input.device_serial)) {\n    throw new Error('Invalid device_serial format. Must be 6-50 alphanumeric characters, hyphens, or underscores.');\n  }\n}\n\n// Validate thresholds\nconst validateThreshold = (value, name, min, max) => {\n  if (value !== undefined && (typeof value !== 'number' || value < min || value > max)) {\n    throw new Error(`Invalid ${name}: must be number between ${min} and ${max}`);\n  }\n};\n\nvalidateThreshold(input.cpu_critical, 'cpu_critical', 50, 100);\nvalidateThreshold(input.cpu_warning, 'cpu_warning', 30, 95);\nvalidateThreshold(input.memory_critical, 'memory_critical', 50, 100);\nvalidateThreshold(input.memory_warning, 'memory_warning', 30, 95);\n\nconst healthRequest = {\n  timestamp: new Date().toISOString(),\n  request_id: `health-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  request_type: input.device_serial ? 'manual' : 'scheduled',\n  \n  // Secure API configuration - use credentials\n  device_filter: deviceFilter,\n  device_serial: input.device_serial || null,\n  \n  // Health check thresholds with defaults\n  thresholds: {\n    cpu_critical: input.cpu_critical || 90,\n    cpu_warning: input.cpu_warning || 80,\n    memory_critical: input.memory_critical || 95,\n    memory_warning: input.memory_warning || 85,\n    temperature_critical: input.temperature_critical || 65,\n    temperature_warning: input.temperature_warning || 55,\n    uptime_minimum: input.uptime_minimum || 300\n  },\n  \n  // Feature flags\n  include_interfaces: input.include_interfaces !== false,\n  include_wireless: input.include_wireless !== false,\n  include_power: input.include_power !== false\n};\n\nreturn [{ json: healthRequest }];"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "get-device-health",
+      "name": "Get Device Health Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 400],
+      "parameters": {
+        "url": "={{$credentials.arubaApiUrl}}/api/v2/monitoring/stats",
+        "method": "GET",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Request-ID",
+              "value": "={{ $json.request_id }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "device_type",
+              "value": "={{ $json.device_filter }}"
+            },
+            {
+              "name": "device_serial",
+              "value": "={{ $json.device_serial }}"
+            },
+            {
+              "name": "include_details",
+              "value": "true"
+            },
+            {
+              "name": "max_results",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "analyze-health",
+      "name": "Analyze Device Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 400],
+      "parameters": {
+        "jsCode": "// Enhanced Device Health Analysis with Security\nconst response = items[0].json;\nconst preparedRequest = $('Validate Input').first().json;\nconst thresholds = preparedRequest.thresholds;\n\n// Handle API errors\nif (response.error || response.status >= 400) {\n  throw new Error(`API Error: ${response.error || response.message || 'Unknown error'}`);\n}\n\n// Parse response data with fallbacks\nconst devices = response.result?.devices || response.devices || (Array.isArray(response) ? response : []);\n\nif (devices.length === 0) {\n  return [{ \n    json: {\n      request_id: preparedRequest.request_id,\n      timestamp: new Date().toISOString(),\n      total_devices: 0,\n      healthy_devices: 0,\n      warning_devices: 0,\n      critical_devices: 0,\n      total_alerts: 0,\n      devices: [],\n      status: 'no_devices_found'\n    }\n  }];\n}\n\nconst healthResults = [];\n\nfor (const device of devices) {\n  // Sanitize device data\n  const deviceSerial = String(device.serial || device.device_serial || 'unknown').substring(0, 50);\n  const deviceName = String(device.name || device.hostname || deviceSerial).substring(0, 100);\n  \n  const healthStatus = {\n    device_serial: deviceSerial,\n    device_name: deviceName,\n    device_type: device.type || device.device_type || 'unknown',\n    timestamp: new Date().toISOString(),\n    overall_status: 'healthy',\n    alerts: [],\n    metrics: {\n      cpu_usage: Math.min(Math.max(parseFloat(device.cpu_usage) || 0, 0), 100),\n      memory_usage: Math.min(Math.max(parseFloat(device.memory_usage) || 0, 0), 100),\n      temperature: Math.min(Math.max(parseFloat(device.temperature) || 25, -50), 150),\n      uptime: Math.max(parseInt(device.uptime) || 0, 0),\n      disk_usage: Math.min(Math.max(parseFloat(device.disk_usage) || 0, 0), 100)\n    },\n    connectivity: {\n      last_seen: device.last_seen || new Date().toISOString(),\n      ip_address: device.ip_address || 'unknown',\n      status: device.status || 'unknown'\n    }\n  };\n  \n  // CPU Analysis\n  if (healthStatus.metrics.cpu_usage >= thresholds.cpu_critical) {\n    healthStatus.alerts.push({\n      type: 'cpu_critical',\n      severity: 'critical',\n      message: `CPU usage critical: ${healthStatus.metrics.cpu_usage.toFixed(1)}%`,\n      threshold: thresholds.cpu_critical,\n      timestamp: new Date().toISOString()\n    });\n    healthStatus.overall_status = 'critical';\n  } else if (healthStatus.metrics.cpu_usage >= thresholds.cpu_warning) {\n    healthStatus.alerts.push({\n      type: 'cpu_warning',\n      severity: 'warning',\n      message: `CPU usage warning: ${healthStatus.metrics.cpu_usage.toFixed(1)}%`,\n      threshold: thresholds.cpu_warning,\n      timestamp: new Date().toISOString()\n    });\n    if (healthStatus.overall_status === 'healthy') healthStatus.overall_status = 'warning';\n  }\n  \n  // Memory Analysis\n  if (healthStatus.metrics.memory_usage >= thresholds.memory_critical) {\n    healthStatus.alerts.push({\n      type: 'memory_critical',\n      severity: 'critical',\n      message: `Memory usage critical: ${healthStatus.metrics.memory_usage.toFixed(1)}%`,\n      threshold: thresholds.memory_critical,\n      timestamp: new Date().toISOString()\n    });\n    healthStatus.overall_status = 'critical';\n  } else if (healthStatus.metrics.memory_usage >= thresholds.memory_warning) {\n    healthStatus.alerts.push({\n      type: 'memory_warning',\n      severity: 'warning',\n      message: `Memory usage warning: ${healthStatus.metrics.memory_usage.toFixed(1)}%`,\n      threshold: thresholds.memory_warning,\n      timestamp: new Date().toISOString()\n    });\n    if (healthStatus.overall_status === 'healthy') healthStatus.overall_status = 'warning';\n  }\n  \n  // Temperature Analysis\n  if (healthStatus.metrics.temperature >= thresholds.temperature_critical) {\n    healthStatus.alerts.push({\n      type: 'temperature_critical',\n      severity: 'critical',\n      message: `Temperature critical: ${healthStatus.metrics.temperature.toFixed(1)}°C`,\n      threshold: thresholds.temperature_critical,\n      timestamp: new Date().toISOString()\n    });\n    healthStatus.overall_status = 'critical';\n  } else if (healthStatus.metrics.temperature >= thresholds.temperature_warning) {\n    healthStatus.alerts.push({\n      type: 'temperature_warning',\n      severity: 'warning',\n      message: `Temperature warning: ${healthStatus.metrics.temperature.toFixed(1)}°C`,\n      threshold: thresholds.temperature_warning,\n      timestamp: new Date().toISOString()\n    });\n    if (healthStatus.overall_status === 'healthy') healthStatus.overall_status = 'warning';\n  }\n  \n  // Connectivity Analysis\n  if (healthStatus.connectivity.status !== 'online' && healthStatus.connectivity.status !== 'up') {\n    healthStatus.alerts.push({\n      type: 'connectivity',\n      severity: 'critical',\n      message: 'Device offline or unreachable',\n      last_seen: healthStatus.connectivity.last_seen,\n      timestamp: new Date().toISOString()\n    });\n    healthStatus.overall_status = 'critical';\n  }\n  \n  healthResults.push(healthStatus);\n}\n\n// Generate comprehensive summary\nconst summary = {\n  request_id: preparedRequest.request_id,\n  timestamp: new Date().toISOString(),\n  total_devices: healthResults.length,\n  healthy_devices: healthResults.filter(d => d.overall_status === 'healthy').length,\n  warning_devices: healthResults.filter(d => d.overall_status === 'warning').length,\n  critical_devices: healthResults.filter(d => d.overall_status === 'critical').length,\n  total_alerts: healthResults.reduce((sum, d) => sum + d.alerts.length, 0),\n  devices: healthResults,\n  status: 'completed'\n};\n\nreturn [{ json: summary }];"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "check-alerts",
+      "name": "Check for Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1050, 400],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has_alerts",
+              "leftValue": "={{ $json.total_alerts }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "send-alert-notification",
+      "name": "Send Alert Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#device-health-alerts",
+        "username": "n8n-health-bot",
+        "text": "🚨 Device Health Alert\n\nSummary:\n• Total Devices: {{ $json.total_devices }}\n• Critical: {{ $json.critical_devices }}\n• Warning: {{ $json.warning_devices }}\n• Healthy: {{ $json.healthy_devices }}\n• Total Alerts: {{ $json.total_alerts }}\n\nRequest ID: {{ $json.request_id }}\nTime: {{ $json.timestamp }}"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "send-success-notification",
+      "name": "Send Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1250, 500],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#device-health-monitoring",
+        "username": "n8n-health-bot",
+        "text": "✅ Device Health Check Complete\n\nSummary:\n• Total Devices: {{ $json.total_devices }}\n• All devices healthy\n• No alerts detected\n\nRequest ID: {{ $json.request_id }}\nTime: {{ $json.timestamp }}"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 400],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', data: $json }, null, 2) }}"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 700],
+      "parameters": {
+        "jsCode": "// Enhanced Error Handling\nconst error = $input.first().error;\nconst context = $input.first().json || {};\n\n// Sanitize error message\nconst sanitizedError = {\n  error_id: `err-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,\n  timestamp: new Date().toISOString(),\n  error_type: error.name || 'UnknownError',\n  message: 'An error occurred during workflow execution',\n  request_id: context.request_id || 'unknown',\n  step: $runIndex || 'unknown',\n  status: 'error'\n};\n\n// Log detailed error (secure logging)\nconsole.error('Workflow Error:', {\n  error_id: sanitizedError.error_id,\n  type: error.name,\n  message: error.message,\n  stack: error.stack?.substring(0, 500),\n  context: {\n    request_id: context.request_id,\n    node: $workflow.name,\n    step: $runIndex\n  }\n});\n\nreturn [{ json: sanitizedError }];"
+      }
+    },
+    {
+      "id": "error-notification",
+      "name": "Error Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [850, 700],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#workflow-errors",
+        "username": "n8n-error-bot",
+        "text": "❌ Workflow Error: Device Health Monitor\n\nError ID: {{ $json.error_id }}\nType: {{ $json.error_type }}\nRequest ID: {{ $json.request_id }}\nStep: {{ $json.step }}\nTime: {{ $json.timestamp }}\n\nPlease check the workflow logs for details."
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 700],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', error: $json }, null, 2) }}",
+        "responseCode": 500
+      }
+    }
+  ],
+  "connections": {
+    "Health Check Schedule": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Health Check Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Get Device Health Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Device Health Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Device Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Device Health": {
+      "main": [
+        [
+          {
+            "node": "Check for Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Alert Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Response": {
+      "main": []
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Notification": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Response": {
+      "main": []
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "errorWorkflow": {
+      "enabled": true
+    }
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": null
+}

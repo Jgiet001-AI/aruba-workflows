@@ -1,0 +1,332 @@
+{
+  "name": "EdgeConnect Alert Handler - Improved",
+  "nodes": [
+    {
+      "id": "webhook-1",
+      "name": "EdgeConnect Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "parameters": {
+        "path": "edgeconnect-alert-secure",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      }
+    },
+    {
+      "id": "validate-1",
+      "name": "Enhanced Input Validation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "parameters": {
+        "functionCode": "// Enhanced EdgeConnect alert payload validation\nconst payload = $input.first().json;\n\n// Security: Validate payload structure\nif (!payload || typeof payload !== 'object') {\n  throw new Error('Invalid payload: must be JSON object');\n}\n\n// Validate required fields with type checking\nconst requiredFields = {\n  alert_type: 'string',\n  device_id: 'string',\n  severity: 'string',\n  timestamp: 'string'\n};\n\nfor (const [field, expectedType] of Object.entries(requiredFields)) {\n  if (!payload[field] || typeof payload[field] !== expectedType) {\n    throw new Error(`Invalid or missing ${field}: must be ${expectedType}`);\n  }\n}\n\n// Validate severity values\nconst validSeverities = ['critical', 'high', 'warning', 'info', 'low'];\nif (!validSeverities.includes(payload.severity.toLowerCase())) {\n  throw new Error(`Invalid severity: must be one of ${validSeverities.join(', ')}`);\n}\n\n// Security: Sanitize string inputs\nconst sanitizeString = (str) => {\n  if (typeof str !== 'string') return '';\n  return str.replace(/[<>\"'&\\x00-\\x1f\\x7f-\\x9f]/g, '').substring(0, 200);\n};\n\n// Security: Validate device_id format\nconst deviceIdPattern = /^[A-Za-z0-9._-]{1,50}$/;\nif (!deviceIdPattern.test(payload.device_id)) {\n  throw new Error('Invalid device_id format');\n}\n\n// Parse and enrich the alert with validation\nreturn [{\n  json: {\n    alert_type: sanitizeString(payload.alert_type),\n    device_id: sanitizeString(payload.device_id),\n    severity: payload.severity.toLowerCase(),\n    timestamp: payload.timestamp,\n    description: sanitizeString(payload.description || ''),\n    processed_at: new Date().toISOString(),\n    source: 'EdgeConnect',\n    validated: true,\n    alert_id: `EC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`\n  }\n}];"
+      }
+    },
+    {
+      "id": "route-1",
+      "name": "Enhanced Severity Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "parameters": {
+        "values": {
+          "options": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "condition-1",
+                    "leftValue": "={{$json.severity}}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 0
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "condition-2",
+                    "leftValue": "={{$json.severity}}",
+                    "rightValue": "high",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 1
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "condition-3",
+                    "leftValue": "={{$json.severity}}",
+                    "rightValue": "warning",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 2
+            }
+          ],
+          "fallbackOutput": 3
+        }
+      }
+    },
+    {
+      "id": "critical-1",
+      "name": "Handle Critical Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 150],
+      "parameters": {
+        "functionCode": "// Handle critical alerts with enhanced security\nconst alert = $input.first().json;\n\n// Null safety checks\nif (!alert || !alert.alert_type || !alert.device_id) {\n  throw new Error('Invalid alert data for critical processing');\n}\n\n// Secure message generation\nconst alertType = String(alert.alert_type).substring(0, 100);\nconst deviceId = String(alert.device_id).substring(0, 50);\n\nreturn [{\n  json: {\n    action: 'immediate_escalation',\n    message: `CRITICAL EdgeConnect Alert: ${alertType} on device ${deviceId}`,\n    notify: ['ops-team', 'network-team', 'management', 'security-team'],\n    priority: 'P1',\n    escalation_level: 'immediate',\n    auto_response: 'isolate_device',\n    alert_id: alert.alert_id,\n    severity: alert.severity,\n    timestamp: alert.timestamp,\n    processed_at: alert.processed_at,\n    response_required: true\n  }\n}];"
+      }
+    },
+    {
+      "id": "high-1",
+      "name": "Handle High Severity",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 250],
+      "parameters": {
+        "functionCode": "// Handle high severity alerts\nconst alert = $input.first().json;\n\n// Null safety checks\nif (!alert || !alert.alert_type || !alert.device_id) {\n  throw new Error('Invalid alert data for high severity processing');\n}\n\nconst alertType = String(alert.alert_type).substring(0, 100);\nconst deviceId = String(alert.device_id).substring(0, 50);\n\nreturn [{\n  json: {\n    action: 'urgent_notification',\n    message: `HIGH EdgeConnect Alert: ${alertType} on device ${deviceId}`,\n    notify: ['ops-team', 'network-team'],\n    priority: 'P2',\n    escalation_level: 'urgent',\n    auto_response: 'quarantine_device',\n    alert_id: alert.alert_id,\n    severity: alert.severity,\n    timestamp: alert.timestamp,\n    processed_at: alert.processed_at,\n    response_required: true\n  }\n}];"
+      }
+    },
+    {
+      "id": "warning-1",
+      "name": "Handle Warning Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 350],
+      "parameters": {
+        "functionCode": "// Handle warning alerts\nconst alert = $input.first().json;\n\n// Null safety checks\nif (!alert || !alert.alert_type || !alert.device_id) {\n  throw new Error('Invalid alert data for warning processing');\n}\n\nconst alertType = String(alert.alert_type).substring(0, 100);\nconst deviceId = String(alert.device_id).substring(0, 50);\n\nreturn [{\n  json: {\n    action: 'standard_notification',\n    message: `Warning EdgeConnect Alert: ${alertType} on device ${deviceId}`,\n    notify: ['network-team'],\n    priority: 'P3',\n    escalation_level: 'normal',\n    auto_response: 'monitor',\n    alert_id: alert.alert_id,\n    severity: alert.severity,\n    timestamp: alert.timestamp,\n    processed_at: alert.processed_at,\n    response_required: false\n  }\n}];"
+      }
+    },
+    {
+      "id": "info-1",
+      "name": "Handle Info/Low Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 450],
+      "parameters": {
+        "functionCode": "// Handle informational and low priority alerts\nconst alert = $input.first().json;\n\n// Null safety checks\nif (!alert || !alert.alert_type || !alert.device_id) {\n  throw new Error('Invalid alert data for info processing');\n}\n\nconst alertType = String(alert.alert_type).substring(0, 100);\nconst deviceId = String(alert.device_id).substring(0, 50);\n\nreturn [{\n  json: {\n    action: 'log_only',\n    message: `Info EdgeConnect Alert: ${alertType} on device ${deviceId}`,\n    notify: [],\n    priority: 'P4',\n    escalation_level: 'none',\n    auto_response: 'log',\n    alert_id: alert.alert_id,\n    severity: alert.severity,\n    timestamp: alert.timestamp,\n    processed_at: alert.processed_at,\n    response_required: false\n  }\n}];"
+      }
+    },
+    {
+      "id": "response-1",
+      "name": "Send Secure Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"received\", \"message\": \"Alert processed successfully\", \"alert_id\": $json.alert_id || 'unknown', \"timestamp\": $json.processed_at || new Date().toISOString() } }}"
+      }
+    },
+    {
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [450, 500],
+      "parameters": {}
+    },
+    {
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [650, 500],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"error\", \"message\": \"Alert validation failed\", \"timestamp\": new Date().toISOString() } }}",
+        "responseCode": 400
+      }
+    },
+    {
+      "id": "audit-log",
+      "name": "Audit Logger",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "parameters": {
+        "functionCode": "// Audit logging for all processed alerts\nconst data = $input.first().json;\n\n// Create audit log entry\nconst auditEntry = {\n  timestamp: new Date().toISOString(),\n  alert_id: data.alert_id || 'unknown',\n  severity: data.severity || 'unknown',\n  action_taken: data.action || 'unknown',\n  device_id: data.device_id || 'unknown',\n  processing_status: 'completed',\n  notifications_sent: data.notify ? data.notify.length : 0\n};\n\n// In production, this would write to a secure audit log\nconsole.log('AUDIT:', JSON.stringify(auditEntry));\n\nreturn [{ json: auditEntry }];"
+      }
+    }
+  ],
+  "connections": {
+    "EdgeConnect Webhook": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Input Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced Input Validation": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Severity Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced Severity Router": {
+      "main": [
+        [
+          {
+            "node": "Handle Critical Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle High Severity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Warning Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Info/Low Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Critical Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Secure Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle High Severity": {
+      "main": [
+        [
+          {
+            "node": "Send Secure Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Warning Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Secure Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Info/Low Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Secure Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "timeoutWorkflow": 30,
+    "errorWorkflow": "error-handler"
+  },
+  "active": false
+}

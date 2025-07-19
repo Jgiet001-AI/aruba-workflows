@@ -1,0 +1,526 @@
+{
+  "name": "Aruba Monitoring Template",
+  "description": "Standardized template for Aruba device monitoring workflows",
+  "template_version": "1.0.0",
+  "template_type": "monitoring",
+  "nodes": [
+    {
+      "id": "trigger-node",
+      "name": "Monitoring Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "notes": "Configurable monitoring interval - default 10 minutes"
+    },
+    {
+      "id": "webhook-trigger",
+      "name": "Manual Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.2,
+      "position": [250, 500],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "manual-monitoring-trigger",
+        "responseMode": "responseNode"
+      },
+      "notes": "Manual execution webhook endpoint"
+    },
+    {
+      "id": "input-validation",
+      "name": "Validate & Prepare Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 400],
+      "parameters": {
+        "jsCode": "// Standard Aruba Monitoring Input Validation Template\nconst input = items[0].json;\n\n// Validation functions\nconst validateDeviceFilter = (filter) => {\n  const validFilters = ['all', 'switches', 'aps', 'gateways', 'controllers'];\n  const cleanFilter = String(filter || 'all').toLowerCase();\n  if (!validFilters.includes(cleanFilter)) {\n    throw new Error(`Invalid device_filter: ${filter}. Must be one of: ${validFilters.join(', ')}`);\n  }\n  return cleanFilter;\n};\n\nconst validateDeviceSerial = (serial) => {\n  if (!serial) return null;\n  const serialPattern = /^[A-Za-z0-9._-]{3,50}$/;\n  if (!serialPattern.test(serial)) {\n    throw new Error('Invalid device_serial format');\n  }\n  return String(serial).substring(0, 50);\n};\n\nconst validateThreshold = (value, name, min, max, defaultValue) => {\n  if (value === undefined || value === null) return defaultValue;\n  const numValue = parseFloat(value);\n  if (isNaN(numValue) || numValue < min || numValue > max) {\n    throw new Error(`Invalid ${name}: must be number between ${min} and ${max}`);\n  }\n  return numValue;\n};\n\n// Create standardized monitoring request\nconst monitoringRequest = {\n  // Request metadata\n  timestamp: new Date().toISOString(),\n  request_id: `mon-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,\n  request_type: input.device_serial ? 'targeted' : 'bulk',\n  workflow_template: 'aruba-monitoring-v1.0.0',\n  \n  // Device targeting\n  device_filter: validateDeviceFilter(input.device_filter),\n  device_serial: validateDeviceSerial(input.device_serial),\n  location_filter: input.location_filter ? String(input.location_filter).substring(0, 100) : null,\n  \n  // Monitoring thresholds\n  thresholds: {\n    cpu_critical: validateThreshold(input.cpu_critical, 'cpu_critical', 50, 100, 90),\n    cpu_warning: validateThreshold(input.cpu_warning, 'cpu_warning', 30, 95, 80),\n    memory_critical: validateThreshold(input.memory_critical, 'memory_critical', 50, 100, 95),\n    memory_warning: validateThreshold(input.memory_warning, 'memory_warning', 30, 95, 85),\n    temperature_critical: validateThreshold(input.temperature_critical, 'temperature_critical', 30, 100, 65),\n    temperature_warning: validateThreshold(input.temperature_warning, 'temperature_warning', 20, 90, 55),\n    uptime_minimum: validateThreshold(input.uptime_minimum, 'uptime_minimum', 60, 86400, 300)\n  },\n  \n  // Feature configuration\n  features: {\n    include_interfaces: input.include_interfaces !== false,\n    include_wireless: input.include_wireless !== false,\n    include_power: input.include_power !== false,\n    include_environment: input.include_environment !== false,\n    detailed_analysis: input.detailed_analysis === true\n  },\n  \n  // Output configuration\n  output: {\n    format: input.output_format || 'json',\n    include_raw_data: input.include_raw_data === true,\n    notification_channels: input.notification_channels || ['slack'],\n    severity_filter: input.severity_filter || 'all'\n  }\n};\n\nreturn [{ json: monitoringRequest }];"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Standardized input validation with security checks"
+    },
+    {
+      "id": "api-request",
+      "name": "Aruba API Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 400],
+      "parameters": {
+        "url": "={{$credentials.arubaApiUrl}}/api/v2/monitoring/devices",
+        "method": "GET",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Request-ID",
+              "value": "={{ $json.request_id }}"
+            },
+            {
+              "name": "X-Workflow-Template",
+              "value": "={{ $json.workflow_template }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "device_filter",
+              "value": "={{ $json.device_filter }}"
+            },
+            {
+              "name": "device_serial",
+              "value": "={{ $json.device_serial }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $json.location_filter }}"
+            },
+            {
+              "name": "include_details",
+              "value": "={{ $json.features.detailed_analysis ? 'true' : 'false' }}"
+            },
+            {
+              "name": "max_results",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 45000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Secure API request with proper authentication and retry logic"
+    },
+    {
+      "id": "data-processor",
+      "name": "Process Monitoring Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 400],
+      "parameters": {
+        "jsCode": "// Standard Aruba Monitoring Data Processor\nconst apiResponse = items[0].json;\nconst request = $('Validate & Prepare Request').first().json;\nconst thresholds = request.thresholds;\nconst features = request.features;\n\n// Handle API errors\nif (apiResponse.error || apiResponse.status >= 400) {\n  throw new Error(`API Error: ${apiResponse.error || apiResponse.message || 'Unknown API error'}`);\n}\n\n// Extract device data\nconst devices = apiResponse.result?.devices || apiResponse.devices || apiResponse.data || [];\n\nif (!Array.isArray(devices) || devices.length === 0) {\n  return [{\n    json: {\n      request_id: request.request_id,\n      timestamp: new Date().toISOString(),\n      status: 'no_devices_found',\n      total_devices: 0,\n      healthy_devices: 0,\n      warning_devices: 0,\n      critical_devices: 0,\n      total_alerts: 0,\n      devices: [],\n      summary: 'No devices found matching the criteria'\n    }\n  }];\n}\n\n// Process each device\nconst processedDevices = devices.map(device => {\n  // Sanitize device data\n  const deviceId = String(device.serial || device.device_serial || device.id || 'unknown').substring(0, 50);\n  const deviceName = String(device.name || device.hostname || deviceId).substring(0, 100);\n  const deviceType = String(device.type || device.device_type || 'unknown').substring(0, 50);\n  \n  // Extract and validate metrics\n  const metrics = {\n    cpu_usage: Math.min(Math.max(parseFloat(device.cpu_usage) || 0, 0), 100),\n    memory_usage: Math.min(Math.max(parseFloat(device.memory_usage) || 0, 0), 100),\n    temperature: Math.min(Math.max(parseFloat(device.temperature) || 25, -50), 150),\n    uptime: Math.max(parseInt(device.uptime) || 0, 0),\n    disk_usage: Math.min(Math.max(parseFloat(device.disk_usage) || 0, 0), 100)\n  };\n  \n  // Additional metrics based on features\n  if (features.include_wireless && device.wireless) {\n    metrics.wireless = {\n      client_count: parseInt(device.wireless.client_count) || 0,\n      channel_utilization: parseFloat(device.wireless.channel_utilization) || 0,\n      signal_strength: parseFloat(device.wireless.signal_strength) || 0\n    };\n  }\n  \n  if (features.include_interfaces && device.interfaces) {\n    metrics.interfaces = {\n      total_ports: parseInt(device.interfaces.total) || 0,\n      active_ports: parseInt(device.interfaces.active) || 0,\n      utilization: parseFloat(device.interfaces.utilization) || 0\n    };\n  }\n  \n  if (features.include_power && device.power) {\n    metrics.power = {\n      consumption: parseFloat(device.power.consumption) || 0,\n      supply_voltage: parseFloat(device.power.voltage) || 0,\n      poe_usage: parseFloat(device.power.poe_usage) || 0\n    };\n  }\n  \n  // Health analysis\n  const alerts = [];\n  let overallStatus = 'healthy';\n  \n  // CPU analysis\n  if (metrics.cpu_usage >= thresholds.cpu_critical) {\n    alerts.push({\n      type: 'cpu_critical',\n      severity: 'critical',\n      message: `CPU usage critical: ${metrics.cpu_usage.toFixed(1)}%`,\n      value: metrics.cpu_usage,\n      threshold: thresholds.cpu_critical,\n      timestamp: new Date().toISOString()\n    });\n    overallStatus = 'critical';\n  } else if (metrics.cpu_usage >= thresholds.cpu_warning) {\n    alerts.push({\n      type: 'cpu_warning',\n      severity: 'warning',\n      message: `CPU usage warning: ${metrics.cpu_usage.toFixed(1)}%`,\n      value: metrics.cpu_usage,\n      threshold: thresholds.cpu_warning,\n      timestamp: new Date().toISOString()\n    });\n    if (overallStatus === 'healthy') overallStatus = 'warning';\n  }\n  \n  // Memory analysis\n  if (metrics.memory_usage >= thresholds.memory_critical) {\n    alerts.push({\n      type: 'memory_critical',\n      severity: 'critical',\n      message: `Memory usage critical: ${metrics.memory_usage.toFixed(1)}%`,\n      value: metrics.memory_usage,\n      threshold: thresholds.memory_critical,\n      timestamp: new Date().toISOString()\n    });\n    overallStatus = 'critical';\n  } else if (metrics.memory_usage >= thresholds.memory_warning) {\n    alerts.push({\n      type: 'memory_warning',\n      severity: 'warning',\n      message: `Memory usage warning: ${metrics.memory_usage.toFixed(1)}%`,\n      value: metrics.memory_usage,\n      threshold: thresholds.memory_warning,\n      timestamp: new Date().toISOString()\n    });\n    if (overallStatus === 'healthy') overallStatus = 'warning';\n  }\n  \n  // Temperature analysis\n  if (metrics.temperature >= thresholds.temperature_critical) {\n    alerts.push({\n      type: 'temperature_critical',\n      severity: 'critical',\n      message: `Temperature critical: ${metrics.temperature.toFixed(1)}°C`,\n      value: metrics.temperature,\n      threshold: thresholds.temperature_critical,\n      timestamp: new Date().toISOString()\n    });\n    overallStatus = 'critical';\n  } else if (metrics.temperature >= thresholds.temperature_warning) {\n    alerts.push({\n      type: 'temperature_warning',\n      severity: 'warning',\n      message: `Temperature warning: ${metrics.temperature.toFixed(1)}°C`,\n      value: metrics.temperature,\n      threshold: thresholds.temperature_warning,\n      timestamp: new Date().toISOString()\n    });\n    if (overallStatus === 'healthy') overallStatus = 'warning';\n  }\n  \n  // Connectivity analysis\n  const isOnline = device.status === 'online' || device.status === 'up' || device.connectivity?.status === 'online';\n  if (!isOnline) {\n    alerts.push({\n      type: 'connectivity',\n      severity: 'critical',\n      message: 'Device offline or unreachable',\n      last_seen: device.last_seen || device.connectivity?.last_seen,\n      timestamp: new Date().toISOString()\n    });\n    overallStatus = 'critical';\n  }\n  \n  return {\n    device_id: deviceId,\n    device_name: deviceName,\n    device_type: deviceType,\n    location: device.location || 'unknown',\n    ip_address: device.ip_address || device.management_ip || 'unknown',\n    firmware_version: device.firmware_version || 'unknown',\n    model: device.model || 'unknown',\n    \n    status: {\n      overall: overallStatus,\n      connectivity: isOnline ? 'online' : 'offline',\n      last_seen: device.last_seen || new Date().toISOString()\n    },\n    \n    metrics: metrics,\n    alerts: alerts,\n    \n    timestamp: new Date().toISOString()\n  };\n});\n\n// Generate summary\nconst summary = {\n  request_id: request.request_id,\n  workflow_template: request.workflow_template,\n  timestamp: new Date().toISOString(),\n  \n  // Device counts\n  total_devices: processedDevices.length,\n  healthy_devices: processedDevices.filter(d => d.status.overall === 'healthy').length,\n  warning_devices: processedDevices.filter(d => d.status.overall === 'warning').length,\n  critical_devices: processedDevices.filter(d => d.status.overall === 'critical').length,\n  offline_devices: processedDevices.filter(d => d.status.connectivity === 'offline').length,\n  \n  // Alert summary\n  total_alerts: processedDevices.reduce((sum, d) => sum + d.alerts.length, 0),\n  critical_alerts: processedDevices.reduce((sum, d) => sum + d.alerts.filter(a => a.severity === 'critical').length, 0),\n  warning_alerts: processedDevices.reduce((sum, d) => sum + d.alerts.filter(a => a.severity === 'warning').length, 0),\n  \n  // Request context\n  request_context: {\n    device_filter: request.device_filter,\n    device_serial: request.device_serial,\n    location_filter: request.location_filter,\n    features_enabled: Object.keys(request.features).filter(key => request.features[key])\n  },\n  \n  // Processed devices\n  devices: processedDevices,\n  \n  status: 'completed'\n};\n\nreturn [{ json: summary }];"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Comprehensive data processing with health analysis"
+    },
+    {
+      "id": "alert-router",
+      "name": "Route Alerts",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "parameters": {
+        "values": {
+          "options": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.critical_devices }}",
+                    "rightValue": 0,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gt"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 0
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.warning_devices }}",
+                    "rightValue": 0,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gt"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 1
+            }
+          ]
+        }
+      },
+      "notes": "Route based on severity level"
+    },
+    {
+      "id": "critical-notification",
+      "name": "Critical Alert Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1250, 250],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#critical-alerts",
+        "username": "aruba-monitoring-bot",
+        "text": "🚨 CRITICAL DEVICE ALERTS\n\nRequest ID: {{ $json.request_id }}\nTotal Devices: {{ $json.total_devices }}\nCritical: {{ $json.critical_devices }}\nWarning: {{ $json.warning_devices }}\nOffline: {{ $json.offline_devices }}\n\nCritical Alerts: {{ $json.critical_alerts }}\nWarning Alerts: {{ $json.warning_alerts }}\n\nTimestamp: {{ $json.timestamp }}"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Critical alert notifications"
+    },
+    {
+      "id": "warning-notification",
+      "name": "Warning Alert Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1250, 400],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#monitoring-alerts",
+        "username": "aruba-monitoring-bot",
+        "text": "⚠️ Device Monitoring Alerts\n\nRequest ID: {{ $json.request_id }}\nTotal Devices: {{ $json.total_devices }}\nWarning: {{ $json.warning_devices }}\nHealthy: {{ $json.healthy_devices }}\n\nTotal Alerts: {{ $json.total_alerts }}\n\nTimestamp: {{ $json.timestamp }}"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Warning alert notifications"
+    },
+    {
+      "id": "success-notification",
+      "name": "Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1250, 550],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#monitoring-status",
+        "username": "aruba-monitoring-bot",
+        "text": "✅ Monitoring Check Complete\n\nRequest ID: {{ $json.request_id }}\nTotal Devices: {{ $json.total_devices }}\nAll devices healthy\n\nTimestamp: {{ $json.timestamp }}"
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Success notifications"
+    },
+    {
+      "id": "response-formatter",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 400],
+      "parameters": {
+        "jsCode": "// Format standardized response\nconst data = items[0].json;\n\nconst response = {\n  status: 'success',\n  timestamp: new Date().toISOString(),\n  workflow: {\n    template: data.workflow_template || 'aruba-monitoring-v1.0.0',\n    version: '1.0.0'\n  },\n  summary: {\n    request_id: data.request_id,\n    total_devices: data.total_devices,\n    healthy_devices: data.healthy_devices,\n    warning_devices: data.warning_devices,\n    critical_devices: data.critical_devices,\n    offline_devices: data.offline_devices,\n    total_alerts: data.total_alerts,\n    critical_alerts: data.critical_alerts,\n    warning_alerts: data.warning_alerts\n  },\n  execution: {\n    completed_at: new Date().toISOString(),\n    processing_time: Date.now() - new Date(data.timestamp).getTime(),\n    status: data.status\n  }\n};\n\n// Include device details if requested\nif (data.request_context?.features_enabled?.includes('detailed_analysis')) {\n  response.devices = data.devices;\n}\n\nreturn [{ json: response }];"
+      },
+      "notes": "Standardized response formatting"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1650, 400],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "notes": "Final webhook response"
+    },
+    {
+      "id": "template-error-handler",
+      "name": "Template Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 700],
+      "parameters": {
+        "jsCode": "// Standardized template error handling\nconst error = $input.first().error;\nconst context = $input.first().json || {};\n\nconst templateError = {\n  error_id: `tmpl-err-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,\n  timestamp: new Date().toISOString(),\n  template: 'aruba-monitoring-v1.0.0',\n  error_type: error.name || 'TemplateError',\n  message: 'Monitoring workflow error',\n  request_id: context.request_id || 'unknown',\n  step: $runIndex || 'unknown',\n  severity: 'high',\n  status: 'error'\n};\n\n// Secure error logging\nconsole.error('TEMPLATE_ERROR:', {\n  error_id: templateError.error_id,\n  template: templateError.template,\n  type: error.name,\n  message: error.message?.substring(0, 200),\n  context: {\n    request_id: context.request_id,\n    workflow: $workflow.name,\n    step: $runIndex\n  }\n});\n\nreturn [{ json: templateError }];"
+      },
+      "notes": "Centralized error handling"
+    },
+    {
+      "id": "error-notification",
+      "name": "Error Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [850, 700],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#workflow-errors",
+        "username": "n8n-error-bot",
+        "text": "❌ Monitoring Template Error\n\nError ID: {{ $json.error_id }}\nTemplate: {{ $json.template }}\nRequest ID: {{ $json.request_id }}\nStep: {{ $json.step }}\nSeverity: {{ $json.severity }}\n\nTimestamp: {{ $json.timestamp }}"
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Error notifications"
+    },
+    {
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 700],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', error_id: $json.error_id, message: 'Monitoring workflow failed', request_id: $json.request_id, template: $json.template }, null, 2) }}",
+        "responseCode": 500
+      },
+      "notes": "Error response to webhook caller"
+    }
+  ],
+  "connections": {
+    "Monitoring Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate & Prepare Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate & Prepare Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Prepare Request": {
+      "main": [
+        [
+          {
+            "node": "Aruba API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Template Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aruba API Request": {
+      "main": [
+        [
+          {
+            "node": "Process Monitoring Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Template Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Monitoring Data": {
+      "main": [
+        [
+          {
+            "node": "Route Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Template Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Alerts": {
+      "main": [
+        [
+          {
+            "node": "Critical Alert Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Warning Alert Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Alert Notification": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Template Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warning Alert Notification": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Template Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Template Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Response": {
+      "main": []
+    },
+    "Template Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Response": {
+      "main": []
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "errorWorkflow": {
+      "enabled": true
+    }
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "templateId": "aruba-monitoring-v1.0.0"
+  },
+  "pinData": null
+}

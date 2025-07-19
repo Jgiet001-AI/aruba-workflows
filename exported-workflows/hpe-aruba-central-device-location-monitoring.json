@@ -1,0 +1,425 @@
+{
+  "name": "HPE Aruba Central Device Location Monitoring",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Device Location Monitoring Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hpe-aruba-device-location-monitoring",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Location Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// HPE Aruba Central Device Location Monitoring Input Validation\nconst input = items[0].json;\n\n// Valid operations\nconst validOperations = [\n  'get_device_locations', 'track_device_movement', 'get_location_analytics',\n  'get_floor_plan_data', 'get_site_locations', 'get_zone_analytics'\n];\n\nconst operation = input.operation || 'get_device_locations';\n\nif (!validOperations.includes(operation)) {\n  throw new Error(`Invalid operation: ${operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  operation: operation,\n  \n  // Location filtering parameters\n  site_id: input.site_id || null,\n  site_name: input.site_name || null,\n  building: input.building || null,\n  floor: input.floor || null,\n  zone: input.zone || null,\n  \n  // Device filtering\n  device_type: input.device_type || null, // 'ap', 'gateway', 'switch', 'client'\n  device_serial: input.device_serial || null,\n  mac_address: input.mac_address || null,\n  \n  // Time range for movement tracking\n  time_range: input.time_range || '1h', // 1h, 6h, 24h, 7d\n  start_time: input.start_time || null,\n  end_time: input.end_time || null,\n  \n  // Query parameters\n  limit: Math.min(parseInt(input.limit) || 100, 1000),\n  offset: parseInt(input.offset) || 0,\n  \n  // Location accuracy thresholds\n  thresholds: {\n    location_accuracy_min: parseFloat(input.accuracy_threshold) || 1.0, // meters\n    movement_threshold: parseFloat(input.movement_threshold) || 5.0, // meters\n    inactive_threshold: parseInt(input.inactive_threshold) || 3600 // seconds\n  },\n  \n  // Coordinate system\n  coordinate_system: input.coordinate_system || 'cartesian', // cartesian, gps\n  include_history: input.include_history !== false,\n  \n  timestamp: new Date().toISOString(),\n  requestId: `hpe-location-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "get-authentication",
+      "name": "Get Authentication Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [650, 300],
+      "parameters": {
+        "url": "http://192.168.40.100:8006/webhook/hpe-aruba-central-auth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"operation\": \"get_token\",\n  \"client_id\": \"{{ $vars.HPE_ARUBA_CLIENT_ID }}\",\n  \"client_secret\": \"{{ $vars.HPE_ARUBA_CLIENT_SECRET }}\",\n  \"customer_id\": \"{{ $vars.HPE_ARUBA_CUSTOMER_ID }}\"\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-location-requests",
+      "name": "Prepare Location API Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "// Prepare HPE Aruba Central Device Location monitoring API calls\nconst authResponse = items[1].json;\nconst requestData = items[0].json;\n\n// Check authentication success\nif (authResponse.status !== 'success' || !authResponse.access_token) {\n  throw new Error(`Authentication failed: ${authResponse.message || 'No access token received'}`);\n}\n\nconst accessToken = authResponse.access_token;\nconst baseUrl = authResponse.base_url || 'https://apigw-prod2.central.arubanetworks.com';\nconst operation = requestData.operation;\nconst requestId = requestData.requestId;\n\nlet apiRequests = [];\n\n// Build API requests based on operation\nswitch (operation) {\n  case 'get_device_locations':\n    const locationUrl = `${baseUrl}/location/v1/devices`;\n    const queryParams = [];\n    \n    if (requestData.site_id) queryParams.push(`site=${requestData.site_id}`);\n    if (requestData.device_type) queryParams.push(`device_type=${requestData.device_type}`);\n    if (requestData.building) queryParams.push(`building=${requestData.building}`);\n    if (requestData.floor) queryParams.push(`floor=${requestData.floor}`);\n    queryParams.push(`limit=${requestData.limit}`);\n    queryParams.push(`offset=${requestData.offset}`);\n    \n    apiRequests.push({\n      url: queryParams.length > 0 ? `${locationUrl}?${queryParams.join('&')}` : locationUrl,\n      method: 'GET',\n      operation: 'get_device_locations',\n      description: 'Get device location data'\n    });\n    break;\n    \n  case 'track_device_movement':\n    if (!requestData.device_serial && !requestData.mac_address) {\n      throw new Error('device_serial or mac_address is required for track_device_movement operation');\n    }\n    \n    const trackingUrl = requestData.device_serial \n      ? `${baseUrl}/location/v1/devices/${requestData.device_serial}/history`\n      : `${baseUrl}/location/v1/devices/mac/${requestData.mac_address}/history`;\n    \n    const trackingParams = [];\n    if (requestData.start_time) trackingParams.push(`start_time=${requestData.start_time}`);\n    if (requestData.end_time) trackingParams.push(`end_time=${requestData.end_time}`);\n    if (requestData.time_range) trackingParams.push(`duration=${requestData.time_range}`);\n    \n    apiRequests.push({\n      url: trackingParams.length > 0 ? `${trackingUrl}?${trackingParams.join('&')}` : trackingUrl,\n      method: 'GET',\n      operation: 'track_device_movement',\n      description: `Track movement for device ${requestData.device_serial || requestData.mac_address}`\n    });\n    break;\n    \n  case 'get_floor_plan_data':\n    if (!requestData.site_id) {\n      throw new Error('site_id is required for get_floor_plan_data operation');\n    }\n    \n    apiRequests.push({\n      url: `${baseUrl}/location/v1/sites/${requestData.site_id}/floorplans`,\n      method: 'GET',\n      operation: 'get_floor_plan_data',\n      description: `Get floor plan data for site ${requestData.site_id}`\n    });\n    break;\n    \n  case 'get_location_analytics':\n    const analyticsUrl = `${baseUrl}/location/v1/analytics`;\n    const analyticsParams = [];\n    \n    if (requestData.site_id) analyticsParams.push(`site=${requestData.site_id}`);\n    if (requestData.zone) analyticsParams.push(`zone=${requestData.zone}`);\n    if (requestData.time_range) analyticsParams.push(`duration=${requestData.time_range}`);\n    \n    apiRequests.push({\n      url: analyticsParams.length > 0 ? `${analyticsUrl}?${analyticsParams.join('&')}` : analyticsUrl,\n      method: 'GET',\n      operation: 'get_location_analytics',\n      description: 'Get location analytics data'\n    });\n    break;\n    \n  case 'get_site_locations':\n    // Get comprehensive site location information\n    apiRequests = [\n      {\n        url: `${baseUrl}/central/v2/sites`,\n        method: 'GET',\n        operation: 'list_sites',\n        description: 'Get all sites information'\n      },\n      {\n        url: `${baseUrl}/location/v1/devices?limit=${requestData.limit}`,\n        method: 'GET',\n        operation: 'all_device_locations',\n        description: 'Get all device locations'\n      }\n    ];\n    \n    if (requestData.site_id) {\n      apiRequests.push({\n        url: `${baseUrl}/location/v1/sites/${requestData.site_id}/zones`,\n        method: 'GET',\n        operation: 'site_zones',\n        description: `Get zones for site ${requestData.site_id}`\n      });\n    }\n    break;\n    \n  case 'get_zone_analytics':\n    if (!requestData.site_id || !requestData.zone) {\n      throw new Error('site_id and zone are required for get_zone_analytics operation');\n    }\n    \n    apiRequests.push({\n      url: `${baseUrl}/location/v1/sites/${requestData.site_id}/zones/${requestData.zone}/analytics?duration=${requestData.time_range}`,\n      method: 'GET',\n      operation: 'get_zone_analytics',\n      description: `Get analytics for zone ${requestData.zone} in site ${requestData.site_id}`\n    });\n    break;\n    \n  default:\n    apiRequests.push({\n      url: `${baseUrl}/location/v1/devices`,\n      method: 'GET',\n      operation: 'default_locations',\n      description: 'Default device locations'\n    });\n}\n\n// Prepare common headers\nconst headers = {\n  'Authorization': `Bearer ${accessToken}`,\n  'Accept': 'application/json',\n  'Content-Type': 'application/json'\n};\n\n// Return prepared requests\nconst result = {\n  requests: apiRequests,\n  headers: headers,\n  baseUrl: baseUrl,\n  operation: operation,\n  requestId: requestId,\n  thresholds: requestData.thresholds,\n  timestamp: requestData.timestamp,\n  config: requestData\n};\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-location-apis",
+      "name": "Execute Location API Calls",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1050, 300],
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      }
+    },
+    {
+      "id": "make-api-call",
+      "name": "Make Individual API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 300],
+      "parameters": {
+        "url": "={{ $('Prepare Location API Requests').first().json.requests[$json.index].url }}",
+        "method": "={{ $('Prepare Location API Requests').first().json.requests[$json.index].method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $('Prepare Location API Requests').first().json.headers.Authorization }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "aggregate-api-results",
+      "name": "Aggregate API Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      }
+    },
+    {
+      "id": "process-location-data",
+      "name": "Process Device Location Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "parameters": {
+        "jsCode": "// Process HPE Aruba Central Device Location monitoring data\nconst apiResults = items;\nconst configData = $('Prepare Location API Requests').first().json;\nconst thresholds = configData.thresholds;\nconst operation = configData.operation;\nconst requestId = configData.requestId;\n\nlet processedData = {\n  requestId: requestId,\n  operation: operation,\n  timestamp: new Date().toISOString(),\n  status: 'success',\n  summary: {\n    total_devices: 0,\n    located_devices: 0,\n    unlocated_devices: 0,\n    sites_count: 0,\n    zones_count: 0,\n    accuracy_issues: 0\n  },\n  device_locations: [],\n  sites: [],\n  zones: [],\n  movement_data: [],\n  analytics: [],\n  alerts: []\n};\n\ntry {\n  // Process each API result\n  for (const result of apiResults) {\n    const statusCode = result.statusCode || 0;\n    const isSuccess = statusCode >= 200 && statusCode < 300;\n    \n    if (!isSuccess) {\n      processedData.alerts.push({\n        type: 'error',\n        category: 'api_error',\n        message: `Location API call failed with status ${statusCode}`,\n        details: result,\n        timestamp: new Date().toISOString()\n      });\n      continue;\n    }\n    \n    const data = result.result || result.body || result;\n    \n    // Process device location data\n    if (data.devices && Array.isArray(data.devices)) {\n      processedData.summary.total_devices += data.devices.length;\n      \n      for (const device of data.devices) {\n        const locationData = {\n          device_id: device.serial || device.mac_address,\n          device_name: device.name || device.hostname,\n          device_type: device.device_type,\n          mac_address: device.mac_address,\n          \n          // Location information\n          site: device.site,\n          building: device.building,\n          floor: device.floor,\n          zone: device.zone,\n          \n          // Coordinates\n          coordinates: {\n            x: device.x || null,\n            y: device.y || null,\n            latitude: device.latitude || null,\n            longitude: device.longitude || null\n          },\n          \n          // Location metadata\n          accuracy: device.accuracy || null,\n          confidence: device.confidence || null,\n          last_located: device.last_located || device.last_seen,\n          location_method: device.location_method || 'triangulation',\n          \n          // Status\n          is_located: !!(device.x && device.y) || !!(device.latitude && device.longitude),\n          location_age: device.location_age || null,\n          \n          alerts: []\n        };\n        \n        // Check location status\n        if (locationData.is_located) {\n          processedData.summary.located_devices++;\n          \n          // Check location accuracy\n          if (locationData.accuracy && locationData.accuracy > thresholds.location_accuracy_min) {\n            const accuracyAlert = {\n              type: 'warning',\n              category: 'low_accuracy',\n              device_id: locationData.device_id,\n              device_name: locationData.device_name,\n              message: `Low location accuracy: ${locationData.accuracy}m`,\n              threshold: thresholds.location_accuracy_min,\n              actual: locationData.accuracy,\n              timestamp: new Date().toISOString()\n            };\n            \n            processedData.alerts.push(accuracyAlert);\n            locationData.alerts.push(accuracyAlert);\n            processedData.summary.accuracy_issues++;\n          }\n        } else {\n          processedData.summary.unlocated_devices++;\n          \n          const unlocatedAlert = {\n            type: 'warning',\n            category: 'device_unlocated',\n            device_id: locationData.device_id,\n            device_name: locationData.device_name,\n            message: `Device location not available`,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(unlocatedAlert);\n          locationData.alerts.push(unlocatedAlert);\n        }\n        \n        // Check for stale location data\n        if (locationData.last_located) {\n          const lastLocatedTime = new Date(locationData.last_located).getTime();\n          const currentTime = Date.now();\n          const ageSeconds = (currentTime - lastLocatedTime) / 1000;\n          \n          if (ageSeconds > thresholds.inactive_threshold) {\n            const staleAlert = {\n              type: 'warning',\n              category: 'stale_location',\n              device_id: locationData.device_id,\n              device_name: locationData.device_name,\n              message: `Location data is stale (${Math.round(ageSeconds / 60)} minutes old)`,\n              threshold: `${thresholds.inactive_threshold / 60} minutes`,\n              actual: `${Math.round(ageSeconds / 60)} minutes`,\n              timestamp: new Date().toISOString()\n            };\n            \n            processedData.alerts.push(staleAlert);\n            locationData.alerts.push(staleAlert);\n          }\n        }\n        \n        processedData.device_locations.push(locationData);\n      }\n    }\n    \n    // Process sites data\n    if (data.sites && Array.isArray(data.sites)) {\n      processedData.summary.sites_count = data.sites.length;\n      processedData.sites = data.sites.map(site => ({\n        site_id: site.site_id,\n        site_name: site.site_name,\n        address: site.address,\n        country: site.country,\n        latitude: site.latitude,\n        longitude: site.longitude,\n        timezone: site.timezone,\n        associated_device_count: site.associated_device_count || 0\n      }));\n    }\n    \n    // Process zones data\n    if (data.zones && Array.isArray(data.zones)) {\n      processedData.summary.zones_count += data.zones.length;\n      processedData.zones = processedData.zones.concat(data.zones.map(zone => ({\n        zone_id: zone.zone_id,\n        zone_name: zone.zone_name,\n        site_id: zone.site_id,\n        floor: zone.floor,\n        zone_type: zone.zone_type,\n        boundaries: zone.boundaries || [],\n        device_count: zone.device_count || 0\n      })));\n    }\n    \n    // Process movement/history data\n    if (data.history && Array.isArray(data.history)) {\n      processedData.movement_data = data.history.map(point => ({\n        timestamp: point.timestamp,\n        coordinates: {\n          x: point.x,\n          y: point.y,\n          latitude: point.latitude,\n          longitude: point.longitude\n        },\n        accuracy: point.accuracy,\n        building: point.building,\n        floor: point.floor,\n        zone: point.zone\n      }));\n      \n      // Analyze movement patterns\n      if (data.history.length > 1) {\n        let totalDistance = 0;\n        for (let i = 1; i < data.history.length; i++) {\n          const prev = data.history[i - 1];\n          const curr = data.history[i];\n          \n          if (prev.x && prev.y && curr.x && curr.y) {\n            const distance = Math.sqrt(\n              Math.pow(curr.x - prev.x, 2) + Math.pow(curr.y - prev.y, 2)\n            );\n            totalDistance += distance;\n            \n            // Check for significant movement\n            if (distance > thresholds.movement_threshold) {\n              processedData.alerts.push({\n                type: 'info',\n                category: 'significant_movement',\n                message: `Device moved ${distance.toFixed(2)}m between ${prev.timestamp} and ${curr.timestamp}`,\n                distance: distance,\n                timestamp: new Date().toISOString()\n              });\n            }\n          }\n        }\n        \n        processedData.movement_data.summary = {\n          total_distance: totalDistance,\n          total_points: data.history.length,\n          time_span: {\n            start: data.history[0].timestamp,\n            end: data.history[data.history.length - 1].timestamp\n          }\n        };\n      }\n    }\n    \n    // Process analytics data\n    if (data.analytics || data.occupancy || data.dwell_time) {\n      processedData.analytics.push({\n        type: 'location_analytics',\n        data: data.analytics || { occupancy: data.occupancy, dwell_time: data.dwell_time },\n        collected_at: new Date().toISOString()\n      });\n    }\n  }\n  \n  // Calculate location coverage percentage\n  processedData.summary.location_coverage = processedData.summary.total_devices > 0\n    ? Math.round((processedData.summary.located_devices / processedData.summary.total_devices) * 100)\n    : 0;\n  \n  // Set overall status based on coverage and alerts\n  if (processedData.summary.location_coverage < 70 || processedData.summary.accuracy_issues > (processedData.summary.total_devices * 0.3)) {\n    processedData.summary.overall_status = 'critical';\n  } else if (processedData.summary.location_coverage < 90 || processedData.summary.accuracy_issues > 0) {\n    processedData.summary.overall_status = 'warning';\n  } else {\n    processedData.summary.overall_status = 'healthy';\n  }\n  \n  processedData.message = `Location monitoring completed. ${processedData.summary.total_devices} devices processed, ${processedData.summary.location_coverage}% location coverage.`;\n  \n} catch (error) {\n  processedData.status = 'error';\n  processedData.message = `Error processing location data: ${error.message}`;\n  processedData.error = {\n    message: error.message,\n    stack: error.stack,\n    timestamp: new Date().toISOString()\n  };\n}\n\nreturn [{ json: processedData }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-location-status",
+      "name": "Check Location Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1850, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "warning",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "healthy",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "send-critical-alert",
+      "name": "Send Critical Location Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 150],
+      "parameters": {
+        "channel": "#hpe-aruba-critical",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "🚨 **HPE Aruba Central - CRITICAL Device Location Alert**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Location Coverage:** {{ $json.summary.location_coverage }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Devices: {{ $json.summary.total_devices }}\\n• Located: {{ $json.summary.located_devices }}\\n• Unlocated: {{ $json.summary.unlocated_devices }}\\n• Accuracy Issues: {{ $json.summary.accuracy_issues }}\\n• Sites: {{ $json.summary.sites_count }}\\n• Zones: {{ $json.summary.zones_count }}\\n\\n**Critical Issues:**\\n{{ $json.alerts.filter(alert => alert.type === 'error' || alert.category === 'device_unlocated').slice(0, 5).map(alert => `❌ **${alert.category}**: ${alert.message}`).join('\\\\n') }}\\n\\n**🔧 IMMEDIATE ACTION REQUIRED**\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-warning-alert",
+      "name": "Send Warning Location Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 300],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "⚠️ **HPE Aruba Central - Device Location Warning**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Location Coverage:** {{ $json.summary.location_coverage }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Devices: {{ $json.summary.total_devices }}\\n• Located: {{ $json.summary.located_devices }}\\n• Accuracy Issues: {{ $json.summary.accuracy_issues }}\\n• Sites: {{ $json.summary.sites_count }}\\n\\n**Warning Issues:**\\n{{ $json.alerts.filter(alert => alert.type === 'warning').slice(0, 3).map(alert => `⚠️ **${alert.category}**: ${alert.message}`).join('\\\\n') }}\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-healthy-report",
+      "name": "Send Healthy Location Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 450],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "✅ **HPE Aruba Central - Device Location Health Report**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Location Coverage:** {{ $json.summary.location_coverage }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total Devices: {{ $json.summary.total_devices }}\\n• Located: {{ $json.summary.located_devices }}\\n• Sites: {{ $json.summary.sites_count }}\\n• Zones: {{ $json.summary.zones_count }}\\n• All location services operating normally\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2300, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Device Location Monitoring Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Location Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Location Request": {
+      "main": [
+        [
+          {
+            "node": "Get Authentication Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Authentication Token": {
+      "main": [
+        [
+          {
+            "node": "Prepare Location API Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Location API Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Location API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Location API Calls": {
+      "main": [
+        [
+          {
+            "node": "Make Individual API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Individual API Call": {
+      "main": [
+        [
+          {
+            "node": "Aggregate API Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate API Results": {
+      "main": [
+        [
+          {
+            "node": "Process Device Location Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Device Location Data": {
+      "main": [
+        [
+          {
+            "node": "Check Location Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Location Status": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Location Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Warning Location Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Healthy Location Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Critical Location Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Warning Location Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Healthy Location Report": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

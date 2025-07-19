@@ -1,0 +1,494 @@
+{
+  "name": "Security Event Response Automation - Enhanced",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Security Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "parameters": {
+        "path": "security-event-response",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "input-validation",
+      "name": "Validate Security Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// Enhanced Security Event Validation\nconst eventData = items[0].json;\n\n// Validate required fields\nconst requiredFields = ['event_id', 'threat_type', 'severity', 'device_id', 'timestamp'];\nfor (const field of requiredFields) {\n  if (!eventData[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Validate field formats and sanitize\nconst validateEventId = (id) => {\n  const pattern = /^[A-Za-z0-9_-]{6,50}$/;\n  if (!pattern.test(id)) {\n    throw new Error('Invalid event_id format. Must be 6-50 alphanumeric characters, hyphens, or underscores.');\n  }\n  return String(id).substring(0, 50);\n};\n\nconst validateSeverity = (severity) => {\n  const validSeverities = ['low', 'medium', 'high', 'critical'];\n  const cleanSeverity = String(severity).toLowerCase().trim();\n  if (!validSeverities.includes(cleanSeverity)) {\n    throw new Error(`Invalid severity: ${severity}. Must be one of: ${validSeverities.join(', ')}`);\n  }\n  return cleanSeverity;\n};\n\nconst validateDeviceId = (deviceId) => {\n  const pattern = /^[A-Za-z0-9._-]{3,50}$/;\n  if (!pattern.test(deviceId)) {\n    throw new Error('Invalid device_id format. Must be 3-50 alphanumeric characters, dots, hyphens, or underscores.');\n  }\n  return String(deviceId).substring(0, 50);\n};\n\nconst validateThreatType = (threatType) => {\n  const validTypes = ['malware', 'intrusion', 'dos', 'vulnerability', 'policy_violation', 'anomaly', 'other'];\n  const cleanType = String(threatType).toLowerCase().replace(/[^a-z_]/g, '');\n  if (!validTypes.includes(cleanType)) {\n    return 'other'; // Default to 'other' if invalid\n  }\n  return cleanType;\n};\n\n// Validate and sanitize input\nconst validatedEvent = {\n  event_id: validateEventId(eventData.event_id),\n  threat_type: validateThreatType(eventData.threat_type),\n  severity: validateSeverity(eventData.severity),\n  device_id: validateDeviceId(eventData.device_id),\n  timestamp: new Date(eventData.timestamp).toISOString(),\n  \n  // Optional fields with validation\n  source_ip: eventData.source_ip ? String(eventData.source_ip).substring(0, 45) : null,\n  destination_ip: eventData.destination_ip ? String(eventData.destination_ip).substring(0, 45) : null,\n  description: eventData.description ? String(eventData.description).substring(0, 500) : '',\n  confidence_score: Math.min(Math.max(parseFloat(eventData.confidence_score) || 0.8, 0), 1),\n  \n  // System metadata\n  received_at: new Date().toISOString(),\n  processing_id: `sec-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`\n};\n\n// Calculate threat score\nconst severityScores = {\n  'low': 25,\n  'medium': 50,\n  'high': 75,\n  'critical': 95\n};\n\nconst baseThreatScore = severityScores[validatedEvent.severity];\nconst threatScore = Math.round(baseThreatScore * validatedEvent.confidence_score);\n\n// Enrich with response parameters\nconst enrichedEvent = {\n  ...validatedEvent,\n  threat_score: threatScore,\n  response_required: threatScore >= 70,\n  isolation_required: threatScore >= 90,\n  notification_level: threatScore >= 80 ? 'critical' : threatScore >= 60 ? 'high' : 'medium',\n  auto_quarantine: threatScore >= 85,\n  escalation_required: threatScore >= 95\n};\n\nreturn [{ json: enrichedEvent }];"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "check-threat-level",
+      "name": "Route by Threat Level",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "parameters": {
+        "values": {
+          "options": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.threat_score }}",
+                    "rightValue": 90,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 0
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.threat_score }}",
+                    "rightValue": 70,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 1
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.threat_score }}",
+                    "rightValue": 40,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "critical-response",
+      "name": "Critical Threat Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 100],
+      "parameters": {
+        "jsCode": "// Critical Threat Response Handler\nconst event = items[0].json;\n\n// Log critical event\nconsole.log('CRITICAL SECURITY EVENT:', {\n  event_id: event.event_id,\n  device_id: event.device_id,\n  threat_score: event.threat_score,\n  threat_type: event.threat_type,\n  timestamp: event.timestamp\n});\n\n// Prepare isolation request\nconst isolationRequest = {\n  action: 'isolate_device',\n  device_id: event.device_id,\n  reason: `Critical security threat detected: ${event.threat_type}`,\n  threat_score: event.threat_score,\n  event_id: event.event_id,\n  isolation_level: 'full',\n  rollback_timer: 3600, // 1 hour auto-rollback\n  timestamp: new Date().toISOString()\n};\n\n// Prepare notification\nconst response = {\n  ...event,\n  response_action: 'device_isolation',\n  isolation_request: isolationRequest,\n  status: 'processing_critical_response'\n};\n\nreturn [{ json: response }];"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "high-response",
+      "name": "High Threat Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "// High Threat Response Handler\nconst event = items[0].json;\n\n// Log high threat event\nconsole.log('HIGH SECURITY EVENT:', {\n  event_id: event.event_id,\n  device_id: event.device_id,\n  threat_score: event.threat_score,\n  threat_type: event.threat_type\n});\n\n// Prepare monitoring enhancement\nconst monitoringRequest = {\n  action: 'enhance_monitoring',\n  device_id: event.device_id,\n  reason: `High security threat detected: ${event.threat_type}`,\n  threat_score: event.threat_score,\n  event_id: event.event_id,\n  monitoring_level: 'enhanced',\n  duration: 1800, // 30 minutes enhanced monitoring\n  timestamp: new Date().toISOString()\n};\n\nconst response = {\n  ...event,\n  response_action: 'enhanced_monitoring',\n  monitoring_request: monitoringRequest,\n  status: 'processing_high_response'\n};\n\nreturn [{ json: response }];"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "medium-response",
+      "name": "Medium Threat Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 500],
+      "parameters": {
+        "jsCode": "// Medium Threat Response Handler\nconst event = items[0].json;\n\n// Log medium threat event\nconsole.log('MEDIUM SECURITY EVENT:', {\n  event_id: event.event_id,\n  device_id: event.device_id,\n  threat_score: event.threat_score,\n  threat_type: event.threat_type\n});\n\n// Prepare logging and analysis\nconst analysisRequest = {\n  action: 'log_and_analyze',\n  device_id: event.device_id,\n  reason: `Medium security threat detected: ${event.threat_type}`,\n  threat_score: event.threat_score,\n  event_id: event.event_id,\n  analysis_priority: 'normal',\n  timestamp: new Date().toISOString()\n};\n\nconst response = {\n  ...event,\n  response_action: 'log_and_analyze',\n  analysis_request: analysisRequest,\n  status: 'processing_medium_response'\n};\n\nreturn [{ json: response }];"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "isolate-device",
+      "name": "Execute Device Isolation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 100],
+      "parameters": {
+        "url": "={{$credentials.arubaApiUrl}}/api/v2/devices/isolate",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "arubaApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Event-ID",
+              "value": "={{ $json.event_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "device_id",
+              "value": "={{ $json.device_id }}"
+            },
+            {
+              "name": "action",
+              "value": "isolate"
+            },
+            {
+              "name": "reason",
+              "value": "Security threat isolation - Event: {{ $json.event_id }}"
+            },
+            {
+              "name": "rollback_timer",
+              "value": "3600"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 2,
+            "waitBetweenTries": 1000
+          }
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "send-security-alert",
+      "name": "Send Security Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1250, 200],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#security-alerts",
+        "username": "n8n-security-bot",
+        "text": "🚨 SECURITY THREAT DETECTED\n\nEvent ID: {{ $json.event_id }}\nThreat Type: {{ $json.threat_type }}\nSeverity: {{ $json.severity }}\nThreat Score: {{ $json.threat_score }}\nDevice ID: {{ $json.device_id }}\nAction Taken: {{ $json.response_action }}\n\nTimestamp: {{ $json.timestamp }}\nProcessing ID: {{ $json.processing_id }}"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "audit-log",
+      "name": "Security Audit Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 400],
+      "parameters": {
+        "jsCode": "// Security Audit Logging\nconst event = items[0].json;\n\n// Create comprehensive audit entry\nconst auditEntry = {\n  audit_id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,\n  event_id: event.event_id,\n  processing_id: event.processing_id,\n  timestamp: new Date().toISOString(),\n  \n  // Threat details\n  threat: {\n    type: event.threat_type,\n    severity: event.severity,\n    score: event.threat_score,\n    confidence: event.confidence_score\n  },\n  \n  // Device information\n  device: {\n    id: event.device_id,\n    source_ip: event.source_ip,\n    destination_ip: event.destination_ip\n  },\n  \n  // Response details\n  response: {\n    action: event.response_action,\n    isolation_executed: event.isolation_request ? true : false,\n    monitoring_enhanced: event.monitoring_request ? true : false,\n    analysis_queued: event.analysis_request ? true : false\n  },\n  \n  // Compliance\n  compliance: {\n    processed_within_sla: true,\n    automated_response: true,\n    escalation_required: event.escalation_required || false\n  }\n};\n\n// Log for security operations center\nconsole.log('SECURITY_AUDIT:', JSON.stringify(auditEntry, null, 2));\n\nconst response = {\n  ...event,\n  audit_entry: auditEntry,\n  status: 'audit_logged'\n};\n\nreturn [{ json: response }];"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', event_id: $json.event_id, processing_id: $json.processing_id, response_action: $json.response_action, threat_score: $json.threat_score }, null, 2) }}"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "error-handler",
+      "name": "Security Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 600],
+      "parameters": {
+        "jsCode": "// Security-focused Error Handling\nconst error = $input.first().error;\nconst context = $input.first().json || {};\n\n// Create secure error response\nconst securityError = {\n  error_id: `sec-err-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,\n  timestamp: new Date().toISOString(),\n  error_type: error.name || 'SecurityProcessingError',\n  message: 'Security event processing failed',\n  event_id: context.event_id || 'unknown',\n  processing_id: context.processing_id || 'unknown',\n  status: 'error',\n  severity: 'high' // Security errors are always high severity\n};\n\n// Security audit log for failed processing\nconsole.error('SECURITY_PROCESSING_ERROR:', {\n  error_id: securityError.error_id,\n  event_id: context.event_id,\n  error_type: error.name,\n  message: error.message,\n  stack: error.stack?.substring(0, 500),\n  workflow: 'security-event-response'\n});\n\nreturn [{ json: securityError }];"
+      }
+    },
+    {
+      "id": "security-error-alert",
+      "name": "Security Error Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [850, 600],
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "channel": "#security-errors",
+        "username": "n8n-security-error-bot",
+        "text": "🔥 SECURITY WORKFLOW ERROR\n\nError ID: {{ $json.error_id }}\nEvent ID: {{ $json.event_id }}\nProcessing ID: {{ $json.processing_id }}\nError Type: {{ $json.error_type }}\nSeverity: {{ $json.severity }}\n\nImmediate attention required!\nTimestamp: {{ $json.timestamp }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "error-response",
+      "name": "Security Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 600],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', error_id: $json.error_id, message: 'Security event processing failed', event_id: $json.event_id }, null, 2) }}",
+        "responseCode": 500
+      }
+    }
+  ],
+  "connections": {
+    "Security Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Security Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Security Event": {
+      "main": [
+        [
+          {
+            "node": "Route by Threat Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Threat Level": {
+      "main": [
+        [
+          {
+            "node": "Critical Threat Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "High Threat Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Medium Threat Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Threat Response": {
+      "main": [
+        [
+          {
+            "node": "Execute Device Isolation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Threat Response": {
+      "main": [
+        [
+          {
+            "node": "Send Security Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Medium Threat Response": {
+      "main": [
+        [
+          {
+            "node": "Security Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Device Isolation": {
+      "main": [
+        [
+          {
+            "node": "Send Security Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Security Alert": {
+      "main": [
+        [
+          {
+            "node": "Security Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security Audit Log": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Security Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Response": {
+      "main": []
+    },
+    "Security Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Security Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Security Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security Error Response": {
+      "main": []
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "errorWorkflow": {
+      "enabled": true
+    }
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": null
+}

@@ -1,0 +1,425 @@
+{
+  "name": "HPE Aruba Central Access Points Monitoring",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Access Points Monitoring Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hpe-aruba-access-points-monitoring",
+        "responseMode": "responseNode"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate-input",
+      "name": "Validate Monitoring Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// HPE Aruba Central Access Points Monitoring Input Validation\nconst input = items[0].json;\n\n// Valid operations\nconst validOperations = [\n  'list_aps', 'get_ap_details', 'get_ap_clients', 'get_ap_performance',\n  'get_ap_events', 'get_site_aps', 'health_check_all'\n];\n\nconst operation = input.operation || 'list_aps';\n\nif (!validOperations.includes(operation)) {\n  throw new Error(`Invalid operation: ${operation}. Valid operations: ${validOperations.join(', ')}`);\n}\n\n// Set defaults and prepare request\nconst validatedInput = {\n  operation: operation,\n  \n  // Filtering parameters\n  site_id: input.site_id || null,\n  site_name: input.site_name || null,\n  ap_serial: input.ap_serial || input.serial || null,\n  ap_name: input.ap_name || null,\n  swarm_id: input.swarm_id || null,\n  \n  // Query parameters\n  limit: Math.min(parseInt(input.limit) || 100, 1000),\n  offset: parseInt(input.offset) || 0,\n  \n  // Monitoring thresholds\n  thresholds: {\n    cpu_usage: parseInt(input.cpu_threshold) || 80,\n    memory_usage: parseInt(input.memory_threshold) || 85,\n    client_count_max: parseInt(input.client_threshold) || 100,\n    uptime_min: parseInt(input.uptime_threshold) || 86400, // 24 hours\n    signal_strength_min: parseInt(input.signal_threshold) || -70 // dBm\n  },\n  \n  // Time range for performance data\n  time_range: input.time_range || '1h', // 1h, 6h, 24h, 7d\n  \n  timestamp: new Date().toISOString(),\n  requestId: `hpe-ap-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,\n  validation_status: 'passed'\n};\n\nreturn [{ json: validatedInput }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "get-authentication",
+      "name": "Get Authentication Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [650, 300],
+      "parameters": {
+        "url": "http://192.168.40.100:8006/webhook/hpe-aruba-central-auth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"operation\": \"get_token\",\n  \"client_id\": \"{{ $vars.HPE_ARUBA_CLIENT_ID }}\",\n  \"client_secret\": \"{{ $vars.HPE_ARUBA_CLIENT_SECRET }}\",\n  \"customer_id\": \"{{ $vars.HPE_ARUBA_CUSTOMER_ID }}\"\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "prepare-monitoring-requests",
+      "name": "Prepare Monitoring API Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "// Prepare HPE Aruba Central Access Points monitoring API calls\nconst authResponse = items[1].json;\nconst requestData = items[0].json;\n\n// Check authentication success\nif (authResponse.status !== 'success' || !authResponse.access_token) {\n  throw new Error(`Authentication failed: ${authResponse.message || 'No access token received'}`);\n}\n\nconst accessToken = authResponse.access_token;\nconst baseUrl = authResponse.base_url || 'https://apigw-prod2.central.arubanetworks.com';\nconst operation = requestData.operation;\nconst requestId = requestData.requestId;\n\nlet apiRequests = [];\n\n// Build API requests based on operation\nswitch (operation) {\n  case 'list_aps':\n    const listUrl = `${baseUrl}/monitoring/v1/aps`;\n    const queryParams = [];\n    \n    if (requestData.site_id) queryParams.push(`site=${requestData.site_id}`);\n    if (requestData.swarm_id) queryParams.push(`swarm_id=${requestData.swarm_id}`);\n    queryParams.push(`limit=${requestData.limit}`);\n    queryParams.push(`offset=${requestData.offset}`);\n    \n    apiRequests.push({\n      url: queryParams.length > 0 ? `${listUrl}?${queryParams.join('&')}` : listUrl,\n      method: 'GET',\n      operation: 'list_aps',\n      description: 'Get list of access points'\n    });\n    break;\n    \n  case 'get_ap_details':\n    if (!requestData.ap_serial) {\n      throw new Error('ap_serial is required for get_ap_details operation');\n    }\n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/aps/${requestData.ap_serial}`,\n      method: 'GET',\n      operation: 'get_ap_details',\n      description: `Get details for AP ${requestData.ap_serial}`\n    });\n    break;\n    \n  case 'get_ap_clients':\n    if (!requestData.ap_serial) {\n      throw new Error('ap_serial is required for get_ap_clients operation');\n    }\n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/aps/${requestData.ap_serial}/clients`,\n      method: 'GET',\n      operation: 'get_ap_clients',\n      description: `Get clients for AP ${requestData.ap_serial}`\n    });\n    break;\n    \n  case 'get_ap_performance':\n    if (!requestData.ap_serial) {\n      throw new Error('ap_serial is required for get_ap_performance operation');\n    }\n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/aps/${requestData.ap_serial}/performance?duration=${requestData.time_range}`,\n      method: 'GET',\n      operation: 'get_ap_performance',\n      description: `Get performance data for AP ${requestData.ap_serial}`\n    });\n    break;\n    \n  case 'health_check_all':\n    // Multiple API calls for comprehensive health check\n    apiRequests = [\n      {\n        url: `${baseUrl}/monitoring/v1/aps?limit=${requestData.limit}`,\n        method: 'GET',\n        operation: 'list_all_aps',\n        description: 'Get all access points for health check'\n      },\n      {\n        url: `${baseUrl}/monitoring/v1/sites`,\n        method: 'GET',\n        operation: 'list_sites',\n        description: 'Get sites information'\n      }\n    ];\n    break;\n    \n  default:\n    apiRequests.push({\n      url: `${baseUrl}/monitoring/v1/aps`,\n      method: 'GET',\n      operation: 'default_list',\n      description: 'Default AP listing'\n    });\n}\n\n// Prepare common headers\nconst headers = {\n  'Authorization': `Bearer ${accessToken}`,\n  'Accept': 'application/json',\n  'Content-Type': 'application/json'\n};\n\n// Return prepared requests\nconst result = {\n  requests: apiRequests,\n  headers: headers,\n  baseUrl: baseUrl,\n  operation: operation,\n  requestId: requestId,\n  thresholds: requestData.thresholds,\n  timestamp: requestData.timestamp,\n  config: requestData\n};\n\nreturn [{ json: result }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "execute-monitoring-apis",
+      "name": "Execute Monitoring API Calls",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1050, 300],
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      }
+    },
+    {
+      "id": "make-api-call",
+      "name": "Make Individual API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 300],
+      "parameters": {
+        "url": "={{ $('Prepare Monitoring API Requests').first().json.requests[$json.index].url }}",
+        "method": "={{ $('Prepare Monitoring API Requests').first().json.requests[$json.index].method }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $('Prepare Monitoring API Requests').first().json.headers.Authorization }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "aggregate-api-results",
+      "name": "Aggregate API Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      }
+    },
+    {
+      "id": "process-ap-data",
+      "name": "Process Access Points Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "parameters": {
+        "jsCode": "// Process HPE Aruba Central Access Points monitoring data\nconst apiResults = items;\nconst configData = $('Prepare Monitoring API Requests').first().json;\nconst thresholds = configData.thresholds;\nconst operation = configData.operation;\nconst requestId = configData.requestId;\n\nlet processedData = {\n  requestId: requestId,\n  operation: operation,\n  timestamp: new Date().toISOString(),\n  status: 'success',\n  summary: {\n    total_aps: 0,\n    online_aps: 0,\n    offline_aps: 0,\n    warning_aps: 0,\n    critical_aps: 0,\n    total_clients: 0\n  },\n  access_points: [],\n  sites: [],\n  alerts: [],\n  performance_data: []\n};\n\ntry {\n  // Process each API result\n  for (const result of apiResults) {\n    const statusCode = result.statusCode || 0;\n    const isSuccess = statusCode >= 200 && statusCode < 300;\n    \n    if (!isSuccess) {\n      processedData.alerts.push({\n        type: 'error',\n        category: 'api_error',\n        message: `API call failed with status ${statusCode}`,\n        details: result,\n        timestamp: new Date().toISOString()\n      });\n      continue;\n    }\n    \n    const data = result.result || result.body || result;\n    \n    // Process APs data\n    if (data.aps && Array.isArray(data.aps)) {\n      processedData.summary.total_aps += data.aps.length;\n      \n      for (const ap of data.aps) {\n        const apData = {\n          serial: ap.serial,\n          name: ap.name || ap.hostname,\n          model: ap.model,\n          site: ap.site,\n          status: ap.status,\n          ip_address: ap.ip_address,\n          mac_address: ap.macaddr,\n          uptime: ap.uptime || 0,\n          client_count: ap.client_count || 0,\n          cpu_utilization: ap.cpu_utilization || 0,\n          memory_utilization: ap.memory_utilization || 0,\n          temperature: ap.temperature || 0,\n          firmware_version: ap.firmware_version,\n          last_modified: ap.last_modified,\n          health_score: 100,\n          alerts: []\n        };\n        \n        // Health analysis\n        if (ap.status === 'Up') {\n          processedData.summary.online_aps++;\n        } else {\n          processedData.summary.offline_aps++;\n          \n          const offlineAlert = {\n            type: 'critical',\n            category: 'ap_offline',\n            ap_serial: ap.serial,\n            ap_name: apData.name,\n            site: ap.site,\n            message: `Access Point ${apData.name} is offline`,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(offlineAlert);\n          apData.alerts.push(offlineAlert);\n          processedData.summary.critical_aps++;\n          apData.health_score = 0;\n        }\n        \n        // Performance threshold checks\n        if (ap.cpu_utilization > thresholds.cpu_usage) {\n          const cpuAlert = {\n            type: 'warning',\n            category: 'high_cpu',\n            ap_serial: ap.serial,\n            ap_name: apData.name,\n            site: ap.site,\n            message: `High CPU usage: ${ap.cpu_utilization}%`,\n            threshold: thresholds.cpu_usage,\n            actual: ap.cpu_utilization,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(cpuAlert);\n          apData.alerts.push(cpuAlert);\n          processedData.summary.warning_aps++;\n          apData.health_score -= 20;\n        }\n        \n        if (ap.memory_utilization > thresholds.memory_usage) {\n          const memoryAlert = {\n            type: 'warning',\n            category: 'high_memory',\n            ap_serial: ap.serial,\n            ap_name: apData.name,\n            site: ap.site,\n            message: `High memory usage: ${ap.memory_utilization}%`,\n            threshold: thresholds.memory_usage,\n            actual: ap.memory_utilization,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(memoryAlert);\n          apData.alerts.push(memoryAlert);\n          processedData.summary.warning_aps++;\n          apData.health_score -= 20;\n        }\n        \n        if (ap.client_count > thresholds.client_count_max) {\n          const clientAlert = {\n            type: 'warning',\n            category: 'high_client_count',\n            ap_serial: ap.serial,\n            ap_name: apData.name,\n            site: ap.site,\n            message: `High client count: ${ap.client_count} clients`,\n            threshold: thresholds.client_count_max,\n            actual: ap.client_count,\n            timestamp: new Date().toISOString()\n          };\n          \n          processedData.alerts.push(clientAlert);\n          apData.alerts.push(clientAlert);\n          processedData.summary.warning_aps++;\n          apData.health_score -= 15;\n        }\n        \n        // Ensure health score doesn't go below 0\n        apData.health_score = Math.max(0, apData.health_score);\n        \n        // Count total clients\n        processedData.summary.total_clients += ap.client_count || 0;\n        \n        processedData.access_points.push(apData);\n      }\n    }\n    \n    // Process sites data\n    if (data.sites && Array.isArray(data.sites)) {\n      processedData.sites = data.sites.map(site => ({\n        site_id: site.site_id,\n        site_name: site.site_name,\n        address: site.address,\n        country: site.country,\n        latitude: site.latitude,\n        longitude: site.longitude,\n        associated_device_count: site.associated_device_count || 0\n      }));\n    }\n    \n    // Process performance data\n    if (data.performance || data.metrics) {\n      processedData.performance_data.push({\n        type: 'performance_metrics',\n        data: data.performance || data.metrics,\n        collected_at: new Date().toISOString()\n      });\n    }\n  }\n  \n  // Calculate overall health\n  const totalHealthScore = processedData.access_points.reduce((sum, ap) => sum + ap.health_score, 0);\n  processedData.summary.overall_health = processedData.summary.total_aps > 0\n    ? Math.round(totalHealthScore / processedData.summary.total_aps)\n    : 100;\n  \n  // Set overall status\n  if (processedData.summary.critical_aps > 0) {\n    processedData.summary.overall_status = 'critical';\n  } else if (processedData.summary.warning_aps > 0) {\n    processedData.summary.overall_status = 'warning';\n  } else {\n    processedData.summary.overall_status = 'healthy';\n  }\n  \n  processedData.message = `Monitoring completed. ${processedData.summary.total_aps} APs processed, ${processedData.alerts.length} alerts generated.`;\n  \n} catch (error) {\n  processedData.status = 'error';\n  processedData.message = `Error processing monitoring data: ${error.message}`;\n  processedData.error = {\n    message: error.message,\n    stack: error.stack,\n    timestamp: new Date().toISOString()\n  };\n}\n\nreturn [{ json: processedData }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-alert-level",
+      "name": "Check Alert Level",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1850, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "warning",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "any": [
+                  {
+                    "leftValue": "={{ $json.summary.overall_status }}",
+                    "rightValue": "healthy",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "send-critical-alert",
+      "name": "Send Critical Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 150],
+      "parameters": {
+        "channel": "#hpe-aruba-critical",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "🚨 **HPE Aruba Central - CRITICAL Access Points Alert**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Overall Health:** {{ $json.summary.overall_health }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total APs: {{ $json.summary.total_aps }}\\n• Online: {{ $json.summary.online_aps }}\\n• Offline: {{ $json.summary.offline_aps }}\\n• Critical Issues: {{ $json.summary.critical_aps }}\\n• Warnings: {{ $json.summary.warning_aps }}\\n• Total Clients: {{ $json.summary.total_clients }}\\n\\n**Critical Alerts:**\\n{{ $json.alerts.filter(alert => alert.type === 'critical').map(alert => `❌ **${alert.category}**: ${alert.message} (AP: ${alert.ap_name})`).join('\\\\n') }}\\n\\n**🔧 IMMEDIATE ACTION REQUIRED**\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-warning-alert",
+      "name": "Send Warning Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 300],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "⚠️ **HPE Aruba Central - Access Points Warning**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Overall Health:** {{ $json.summary.overall_health }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total APs: {{ $json.summary.total_aps }}\\n• Online: {{ $json.summary.online_aps }}\\n• Warnings: {{ $json.summary.warning_aps }}\\n• Total Clients: {{ $json.summary.total_clients }}\\n\\n**Warning Alerts:**\\n{{ $json.alerts.filter(alert => alert.type === 'warning').map(alert => `⚠️ **${alert.category}**: ${alert.message} (AP: ${alert.ap_name})`).join('\\\\n') }}\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "send-healthy-report",
+      "name": "Send Healthy Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2100, 450],
+      "parameters": {
+        "channel": "#hpe-aruba-monitoring",
+        "username": "n8n-hpe-aruba-bot",
+        "text": "✅ **HPE Aruba Central - Access Points Health Report**\\n\\n**Overall Status:** {{ $json.summary.overall_status.toUpperCase() }}\\n**Overall Health:** {{ $json.summary.overall_health }}%\\n**Timestamp:** {{ $json.timestamp }}\\n\\n**Summary:**\\n• Total APs: {{ $json.summary.total_aps }}\\n• Online: {{ $json.summary.online_aps }}\\n• Total Clients: {{ $json.summary.total_clients }}\\n• All systems normal\\n\\n**Request ID:** {{ $json.requestId }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2300, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Access Points Monitoring Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Monitoring Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Monitoring Request": {
+      "main": [
+        [
+          {
+            "node": "Get Authentication Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Authentication Token": {
+      "main": [
+        [
+          {
+            "node": "Prepare Monitoring API Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Monitoring API Requests": {
+      "main": [
+        [
+          {
+            "node": "Execute Monitoring API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Monitoring API Calls": {
+      "main": [
+        [
+          {
+            "node": "Make Individual API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Individual API Call": {
+      "main": [
+        [
+          {
+            "node": "Aggregate API Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate API Results": {
+      "main": [
+        [
+          {
+            "node": "Process Access Points Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Access Points Data": {
+      "main": [
+        [
+          {
+            "node": "Check Alert Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Alert Level": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Warning Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Healthy Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Critical Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Warning Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Healthy Report": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

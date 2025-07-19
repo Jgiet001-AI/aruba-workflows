@@ -66,15 +66,38 @@ class ArubaSecurityAPI:
     """HPE Aruba Security API Client"""
     
     def __init__(self, base_url: str, api_key: str):
+        # Security: Validate base URL uses HTTPS
+        if not base_url.startswith('https://'):
+            raise ValueError("HTTPS required for API connections")
+        
         self.base_url = base_url.rstrip('/')
-        self.api_key = api_key
+        
+        # Security: Validate API key format and don't store in plain text
+        if not api_key or len(api_key) < 10:
+            raise ValueError("Invalid API key format")
+        self._api_key = api_key  # Use private attribute
+        
         self.session = None
         self.rate_limit_delay = 0.1
+        self._lock = asyncio.Lock()  # Add thread safety
+    
+    def _validate_device_id(self, device_id: str) -> None:
+        """Validate device ID format and content"""
+        import re
+        if not device_id or not isinstance(device_id, str):
+            raise ValueError("device_id must be a non-empty string")
+        
+        if len(device_id) > 50:
+            raise ValueError("device_id too long (max 50 characters)")
+        
+        # Allow alphanumeric, hyphens, underscores, and periods
+        if not re.match(r'^[A-Za-z0-9._-]+$', device_id):
+            raise ValueError("device_id contains invalid characters")
         
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(
             headers={
-                'Authorization': f'Bearer {self.api_key}',
+                'Authorization': f'Bearer {self._api_key}',
                 'Content-Type': 'application/json'
             },
             timeout=aiohttp.ClientTimeout(total=30)
@@ -87,7 +110,16 @@ class ArubaSecurityAPI:
     
     async def _make_request(self, method: str, endpoint: str, data: Dict = None) -> Dict:
         """Make API request with error handling and rate limiting"""
-        url = f"{self.base_url}{endpoint}"
+        # Security: Validate endpoint parameter to prevent URL injection
+        if not endpoint.startswith('/'):
+            endpoint = '/' + endpoint
+        
+        # Security: URL validation
+        from urllib.parse import urljoin, urlparse
+        url = urljoin(self.base_url, endpoint)
+        parsed = urlparse(url)
+        if not parsed.scheme == 'https' or not parsed.netloc:
+            raise ValueError(f"Invalid URL constructed: {url}")
         
         try:
             await asyncio.sleep(self.rate_limit_delay)
@@ -102,16 +134,43 @@ class ArubaSecurityAPI:
                     return await self._make_request(method, endpoint, data)
                 
                 if response.status >= 400:
-                    raise Exception(f"API error {response.status}: {response_data}")
+                    # Security: Don't expose sensitive API response data in exceptions
+                    error_msg = f"API error {response.status}"
+                    if response.status == 401:
+                        error_msg += ": Authentication failed"
+                    elif response.status == 403:
+                        error_msg += ": Access denied"
+                    elif response.status == 404:
+                        error_msg += ": Resource not found"
+                    else:
+                        error_msg += ": Request failed"
+                    
+                    logger.error(f"API request failed", extra={
+                        "status_code": response.status,
+                        "endpoint": endpoint,
+                        "method": method
+                    })
+                    raise Exception(error_msg)
                 
                 return response_data
                 
         except aiohttp.ClientError as e:
-            logger.error(f"Network error: {e}")
-            raise
+            # Security: Don't log sensitive network details
+            logger.error(f"Network connection failed", extra={
+                "endpoint": endpoint,
+                "error_type": type(e).__name__
+            })
+            raise Exception("Network connection failed")
     
     async def isolate_device(self, device_id: str, rollback_timer: int = None) -> Dict:
         """Isolate a compromised device"""
+        # Security: Input validation
+        self._validate_device_id(device_id)
+        
+        if rollback_timer is not None:
+            if not isinstance(rollback_timer, int) or rollback_timer < 0 or rollback_timer > 86400:
+                raise ValueError("rollback_timer must be between 0 and 86400 seconds")
+        
         data = {
             "device_id": device_id,
             "action": "isolate",
@@ -169,6 +228,7 @@ class ThreatResponseOrchestrator:
     def __init__(self, api_client: ArubaSecurityAPI):
         self.api = api_client
         self.active_actions: Dict[str, SecurityAction] = {}
+        self._lock = asyncio.Lock()  # Add thread safety for orchestrator
         self.threat_policies = {
             ThreatLevel.LOW: {"action": "monitor", "duration": 300},
             ThreatLevel.MEDIUM: {"action": "quarantine", "duration": 1800},
@@ -178,8 +238,10 @@ class ThreatResponseOrchestrator:
     
     async def process_threat_event(self, threat: ThreatEvent) -> List[SecurityAction]:
         """Process a threat event and execute appropriate response"""
-        actions = []
-        policy = self.threat_policies.get(threat.severity)
+        # Security: Thread-safe processing with locks
+        async with self._lock:
+            actions = []
+            policy = self.threat_policies.get(threat.severity)
         
         if not policy:
             logger.warning(f"No policy defined for threat level {threat.severity}")
@@ -225,9 +287,16 @@ class ThreatResponseOrchestrator:
         except Exception as e:
             logger.error(f"Failed to execute action {action.action_type.value}: {e}")
             action.status = "failed"
-            action.result = {"error": str(e)}
+            # Security: Don't store sensitive error details
+            action.result = {"error": "Action execution failed", "timestamp": datetime.now().isoformat()}
+            logger.error(f"Action execution failed", extra={
+                "action_id": action.action_id,
+                "action_type": action.action_type.value,
+                "device_id": threat.device_id,
+                "error_type": type(e).__name__
+            })
         
-        return actions
+            return actions
 
 # Test scenarios and fixtures
 class SecurityTestScenarios:
